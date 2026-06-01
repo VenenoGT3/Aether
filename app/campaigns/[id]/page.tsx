@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
-import { getIsStripeMockMode } from "@/lib/stripe/connect";
+
 import {
   ResponsiveContainer,
   AreaChart,

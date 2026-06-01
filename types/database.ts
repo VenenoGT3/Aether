@@ -53,7 +53,7 @@ export const UserSchema = z.object({
 });
 export type DbUser = z.infer<typeof UserSchema>;
 
-// Profiles Schema
+// Profiles Schema — PK is user_id (FK to public.users.id), not id
 export const ProfileSchema = z.object({
   user_id: z.string().uuid(),
   full_name: z.string(),
@@ -68,6 +68,13 @@ export const ProfileSchema = z.object({
   authenticity_score: z.number().min(0).max(1).default(1.00),
   availability: z.record(z.string(), z.any()).default({}),
   embedding: z.array(z.number()).length(1536).nullable().optional(), // Vector embedding representation
+  onboarded: z.boolean().default(false).optional(),
+  company_name: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
+  industry: z.string().nullable().optional(),
+  company_size: z.string().nullable().optional(),
+  stripe_connect_id: z.string().nullable().optional(),
+  stripe_onboarding_completed: z.boolean().default(false).optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });

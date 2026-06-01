@@ -1,3 +1,4 @@
+import { isMockMode } from "@/lib/env";
 import { stripeServer } from "./client";
 
 /**
@@ -14,21 +15,18 @@ export interface ConnectAccount {
   currency: string;
 }
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "";
-const isStripeMockMode = 
-  !stripeSecretKey || 
-  stripeSecretKey.includes("placeholder") ||
-  stripeSecretKey.includes("sk_test_...");
-
-export function getIsStripeMockMode() {
-  return isStripeMockMode;
+/** @deprecated Use `isMockMode` from `@/lib/env` — Stripe mock follows AETHER_MOCK_MODE only */
+export function getIsStripeMockMode(): boolean {
+  return isMockMode;
 }
 
 /**
  * Retrieves the details of a Connected Stripe Account
  */
-export async function getConnectAccount(accountId: string): Promise<ConnectAccount | null> {
-  if (isStripeMockMode || accountId.startsWith("acct_mock_")) {
+export async function getConnectAccount(
+  accountId: string
+): Promise<ConnectAccount | null> {
+  if (isMockMode || accountId.startsWith("acct_mock_")) {
     return {
       id: accountId,
       userId: "mock-user-id",
@@ -60,10 +58,14 @@ export async function getConnectAccount(accountId: string): Promise<ConnectAccou
 /**
  * Creates a Stripe Express account and generates an onboarding link
  */
-export async function createStripeExpressAccount(userId: string, role: "business" | "influencer", origin: string) {
-  if (isStripeMockMode) {
-    // Generate a callback URL that redirects to our mock callback page
-    const mockAccountId = "acct_mock_" + Math.random().toString(36).substring(2, 10);
+export async function createStripeExpressAccount(
+  userId: string,
+  role: "business" | "influencer",
+  origin: string
+) {
+  if (isMockMode) {
+    const mockAccountId =
+      "acct_mock_" + Math.random().toString(36).substring(2, 10);
     const url = `${origin}/stripe/callback?action=return&role=${role}&accountId=${mockAccountId}&mock=true`;
     return {
       url,
@@ -77,8 +79,8 @@ export async function createStripeExpressAccount(userId: string, role: "business
       metadata: { userId, role },
       capabilities: {
         transfers: { requested: true },
-        card_payments: { requested: true }
-      }
+        card_payments: { requested: true },
+      },
     });
 
     const accountLink = await stripeServer.accountLinks.create({
@@ -101,8 +103,11 @@ export async function createStripeExpressAccount(userId: string, role: "business
 /**
  * Creates a PaymentIntent for campaign escrow funding
  */
-export async function createEscrowPaymentIntent(amount: number, metadata: Record<string, string>) {
-  if (isStripeMockMode) {
+export async function createEscrowPaymentIntent(
+  amount: number,
+  metadata: Record<string, string>
+) {
+  if (isMockMode) {
     const mockIntentId = "pi_mock_" + Math.random().toString(36).substring(2, 11);
     return {
       clientSecret: `${mockIntentId}_secret_${Math.random().toString(36).substring(2, 6)}`,
@@ -112,7 +117,7 @@ export async function createEscrowPaymentIntent(amount: number, metadata: Record
 
   try {
     const paymentIntent = await stripeServer.paymentIntents.create({
-      amount: Math.round(amount * 100), // convert to cents
+      amount: Math.round(amount * 100),
       currency: "usd",
       metadata,
     });
@@ -130,9 +135,15 @@ export async function createEscrowPaymentIntent(amount: number, metadata: Record
 /**
  * Transfers funds from the platform Stripe balance to the Creator's Connected Account
  */
-export async function releaseEscrowPayment(amount: number, influencerStripeAccountId: string, campaignId: string) {
-  if (isStripeMockMode || influencerStripeAccountId.startsWith("acct_mock_")) {
-    console.log(`[MOCK] Releasing escrow payment of $${amount} to Connected Account ${influencerStripeAccountId} for Campaign ${campaignId}`);
+export async function releaseEscrowPayment(
+  amount: number,
+  influencerStripeAccountId: string,
+  campaignId: string
+) {
+  if (isMockMode || influencerStripeAccountId.startsWith("acct_mock_")) {
+    console.log(
+      `[MOCK] Releasing escrow payment of $${amount} to Connected Account ${influencerStripeAccountId} for Campaign ${campaignId}`
+    );
     return {
       success: true,
       transferId: "tr_mock_" + Math.random().toString(36).substring(2, 11),

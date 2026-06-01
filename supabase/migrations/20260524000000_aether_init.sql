@@ -174,7 +174,7 @@ BEGIN
     INSERT INTO public.users (id, email, role)
     VALUES (new.id, new.email, v_role);
 
-    -- Insert into public.profiles
+    -- Insert into public.profiles (user_id = auth user id; never use a separate id column)
     INSERT INTO public.profiles (user_id, full_name, avatar_url)
     VALUES (new.id, v_full_name, v_avatar_url);
 
@@ -221,7 +221,7 @@ CREATE POLICY "Allow public read access to users"
 CREATE POLICY "Allow users to update their own user record" 
     ON public.users FOR UPDATE TO authenticated USING (auth.uid() = id);
 
--- Profiles policies
+-- Profiles policies (owner key is user_id, not id)
 CREATE POLICY "Allow public read access to profiles" 
     ON public.profiles FOR SELECT TO authenticated USING (true);
 

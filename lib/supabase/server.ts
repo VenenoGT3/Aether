@@ -3,6 +3,7 @@ import { cookies as getCookies } from "next/headers";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
 import { MOCK_BUSINESS_USER, MOCK_INFLUENCER_USER } from "./client";
+import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export { isMockMode };
 
@@ -94,21 +95,17 @@ export async function getServerUser(): Promise<Profile | null> {
     if (!user) return null;
 
     const [{ data: profile }, { data: userRow }] = await Promise.all([
-      supabaseServer.from("profiles").select("*").eq("user_id", user.id).single(),
+      supabaseServer.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).single(),
       supabaseServer.from("users").select("role").eq("id", user.id).single(),
     ]);
 
     if (!profile) return null;
 
-    return {
-      ...profile,
-      user_id: profile.user_id,
-      role:
-        (userRow?.role as UserRole) ||
-        (user.app_metadata?.role as UserRole) ||
-        "influencer",
-      email: user.email,
-    } as Profile;
+    return mergeProfileWithUser(
+      profile,
+      userRow?.role ?? user.app_metadata?.role,
+      user.email
+    );
   } catch {
     return null;
   }
@@ -160,7 +157,7 @@ export async function isUserOnboarded(): Promise<boolean> {
       const { data: profile } = await supabaseServer
         .from("profiles")
         .select("onboarded")
-        .eq("user_id", user.id)
+        .eq(PROFILE_PK_COLUMN, user.id)
         .single();
 
       return profile?.onboarded ?? false;

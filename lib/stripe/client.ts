@@ -1,8 +1,7 @@
 import Stripe from "stripe";
+import { getStripeSecretKey } from "@/lib/env";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "sk_test_placeholder";
-
-export const stripeServer = new Stripe(stripeSecretKey, {
+export const stripeServer = new Stripe(getStripeSecretKey(), {
   apiVersion: "2023-10-16" as any, // fallback standard API version
   typescript: true,
 });

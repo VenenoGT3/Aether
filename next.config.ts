@@ -1,14 +1,8 @@
 import type { NextConfig } from "next";
 
-// Validate production env at build time (skipped when AETHER_MOCK_MODE=true)
-if (process.env.AETHER_MOCK_MODE !== "true") {
-  try {
-    const { validateEnv, isMockMode } = require("./lib/env") as typeof import("./lib/env");
-    if (!isMockMode) validateEnv();
-  } catch (e) {
-    if (process.env.NODE_ENV === "production") throw e;
-  }
-}
+// Fail the build early when production keys are missing (skipped if AETHER_MOCK_MODE=true)
+const { validateEnv } = require("./lib/env") as typeof import("./lib/env");
+validateEnv();
 
 const nextConfig: NextConfig = {
   typescript: {

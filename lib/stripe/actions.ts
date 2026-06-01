@@ -5,9 +5,9 @@ import {
   createStripeExpressAccount,
   createEscrowPaymentIntent,
   releaseEscrowPayment,
-  getIsStripeMockMode,
 } from "./connect";
 import { isMockMode } from "@/lib/env";
+import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 import {
   assertBusinessCanFundEscrow,
   assertBusinessCanReleaseEscrow,
@@ -22,7 +22,7 @@ export async function startStripeOnboardingAction(
   origin: string
 ) {
   try {
-    const isMock = isMockMode || getIsStripeMockMode();
+    const isMock = isMockMode;
 
     let userId = "mock-user-id";
     if (!isMock) {
@@ -45,7 +45,7 @@ export async function startStripeOnboardingAction(
           stripe_connect_id: accountId,
           stripe_onboarding_completed: false,
         })
-        .eq("user_id", userId);
+        .eq(PROFILE_PK_COLUMN, userId);
     }
 
     return { success: true, url, accountId };
@@ -65,7 +65,7 @@ export async function fundEscrowAction(
   amount: number
 ) {
   try {
-    const isMock = isMockMode || getIsStripeMockMode();
+    const isMock = isMockMode;
 
     if (isMock) {
       return { success: true, isMock: true };
@@ -127,7 +127,7 @@ export async function fundEscrowAction(
  */
 export async function releaseEscrowAction(participationId: string) {
   try {
-    const isMock = isMockMode || getIsStripeMockMode();
+    const isMock = isMockMode;
 
     if (isMock) {
       return { success: true, isMock: true };
@@ -157,7 +157,7 @@ export async function releaseEscrowAction(participationId: string) {
     const { data: influencerProfile, error: profError } = await supabase
       .from("profiles")
       .select("stripe_connect_id, stripe_onboarding_completed")
-      .eq("user_id", participation.influencer_id)
+      .eq(PROFILE_PK_COLUMN, participation.influencer_id)
       .single();
 
     if (profError || !influencerProfile?.stripe_connect_id) {
@@ -213,7 +213,7 @@ export async function releaseEscrowAction(participationId: string) {
  */
 export async function withdrawFundsAction(amount: number) {
   try {
-    const isMock = isMockMode || getIsStripeMockMode();
+    const isMock = isMockMode;
 
     if (isMock) {
       return { success: true, isMock: true };
@@ -254,7 +254,7 @@ export async function withdrawFundsAction(amount: number) {
  */
 export async function getTransactionLedgerAction() {
   try {
-    const isMock = isMockMode || getIsStripeMockMode();
+    const isMock = isMockMode;
 
     if (isMock) {
       return {

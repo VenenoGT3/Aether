@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
+import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -71,7 +72,7 @@ export async function middleware(request: NextRequest) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("onboarded")
-          .eq("user_id", user.id)
+          .eq(PROFILE_PK_COLUMN, user.id)
           .single();
         isOnboarded = profile?.onboarded ?? false;
 

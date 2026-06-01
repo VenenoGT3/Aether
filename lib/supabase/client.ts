@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
+import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export type { Profile };
 export { isMockMode };
@@ -220,7 +221,7 @@ export async function signInClient(email: string, password: string) {
     if (data?.user) {
       // Fetch user profile to set role and onboarded cookies
       const [{ data: profile }, { data: userRow }] = await Promise.all([
-        supabase.from("profiles").select("onboarded").eq("user_id", data.user.id).single(),
+        supabase.from("profiles").select("onboarded").eq(PROFILE_PK_COLUMN, data.user.id).single(),
         supabase.from("users").select("role").eq("id", data.user.id).single(),
       ]);
 
@@ -267,17 +268,12 @@ export async function getClientProfile(): Promise<Profile | null> {
   if (!user) return null;
   
   const [{ data: profile }, { data: userRow }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+    supabase.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).single(),
     supabase.from("users").select("role").eq("id", user.id).single(),
   ]);
 
   if (profile) {
-    return {
-      ...profile,
-      user_id: profile.user_id,
-      role: (userRow?.role as UserRole) || "influencer",
-      email: user.email,
-    } as Profile;
+    return mergeProfileWithUser(profile, userRow?.role, user.email);
   }
   return null;
 }
@@ -302,14 +298,23 @@ export async function updateClientProfile(data: Partial<Profile>): Promise<{ dat
     const { data: updated, error } = await supabase
       .from("profiles")
       .update(profileFields)
-      .eq("user_id", user.id)
+      .eq(PROFILE_PK_COLUMN, user.id)
       .select()
       .single();
       
     if (!error && updated) {
       document.cookie = `aether-onboarded=${updated.onboarded ? "true" : "false"}; path=/; max-age=31536000; SameSite=Lax`;
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      return {
+        data: mergeProfileWithUser(updated, userRow?.role, user.email),
+        error: null,
+      };
     }
-    
-    return { data: updated as Profile, error };
+
+    return { data: null, error };
   }
 }

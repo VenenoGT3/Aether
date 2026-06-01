@@ -184,7 +184,8 @@ All tables have RLS enabled by default. Secure policies govern access:
 
 ### 4.1 Users & Profiles
 *   **SELECT:** Any authenticated user can read profiles (necessary for search/matchmaking).
-*   **UPDATE:** Allowed only if `auth.uid() = id` (or `user_id` on profiles).
+*   **UPDATE (users):** Allowed only if `auth.uid() = id`.
+*   **UPDATE (profiles):** Allowed only if `auth.uid() = user_id`.
 
 ### 4.2 Campaigns
 *   **SELECT:** Allowed if campaign status is not `'draft'` OR if the user is the creator (`auth.uid() = business_id`).

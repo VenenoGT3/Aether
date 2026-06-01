@@ -1,3 +1,5 @@
+-- DEPRECATED: Legacy draft schema — do not run on new projects.
+-- Canonical migrations live in supabase/migrations/ (profiles.user_id, not profiles.id).
 -- Aether Auth Roles and Profiles Schema Setup
 -- Run this in your Supabase SQL Editor to set up roles, profiles and custom claims.
 

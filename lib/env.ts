@@ -1,32 +1,34 @@
 /**
  * Centralized environment configuration for Aether.
- * Set AETHER_MOCK_MODE=true for local demo without Supabase/Stripe.
+ *
+ * Why this matters:
+ * - Mock mode must be an explicit opt-in (`AETHER_MOCK_MODE=true`), not inferred from
+ *   missing or placeholder API keys. Silent inference hides misconfiguration and
+ *   lets broken production deploys appear to "work" in demo mode.
+ * - When mock mode is off, missing Supabase/Stripe/cron secrets must fail at startup
+ *   so payment and auth bugs surface before users hit them.
+ *
+ * Usage:
+ * - Local UI demo:  AETHER_MOCK_MODE=true  (see .env.example)
+ * - Production:     AETHER_MOCK_MODE=false or unset, with all required vars set
  */
 
-const EXPLICIT_MOCK = process.env.AETHER_MOCK_MODE === "true";
+const MOCK_FLAG = process.env.AETHER_MOCK_MODE?.trim().toLowerCase();
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+/**
+ * True only when `AETHER_MOCK_MODE=true` (case-insensitive).
+ * Any other value — including unset or `false` — means production configuration.
+ */
+export const isMockMode = MOCK_FLAG === "true";
 
-/** Legacy heuristic when AETHER_MOCK_MODE is not explicitly set to false */
-function hasPlaceholderCredentials(): boolean {
-  return (
-    !supabaseUrl ||
-    !supabaseAnonKey ||
-    supabaseUrl.includes("placeholder-url") ||
-    supabaseUrl.includes("your-project-id") ||
-    supabaseAnonKey.includes("placeholder-anon-key") ||
-    supabaseAnonKey.startsWith("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
-  );
-}
-
-export const isMockMode =
-  EXPLICIT_MOCK ||
-  (process.env.AETHER_MOCK_MODE !== "false" && hasPlaceholderCredentials());
-
+/** True when `NODE_ENV === "production"` (Next.js/Vercel production runtime). */
 export const isProduction = process.env.NODE_ENV === "production";
 
-const REQUIRED_PRODUCTION_VARS = [
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+
+/** Required when `isMockMode` is false. Validated by `validateEnv()`. */
+export const REQUIRED_PRODUCTION_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -37,9 +39,14 @@ const REQUIRED_PRODUCTION_VARS = [
   "CRON_SECRET",
 ] as const;
 
+export type RequiredProductionVar = (typeof REQUIRED_PRODUCTION_VARS)[number];
+
 /**
- * Validates required environment variables when not in mock mode.
- * Call from next.config.ts at build time and from server entry points as needed.
+ * Throws if any required production variable is missing or empty.
+ * No-op when `isMockMode` is true.
+ *
+ * Called from `next.config.ts` (build) and `instrumentation.ts` (server startup).
+ * Do not invoke from client bundles — server-only secrets are not available in the browser.
  */
 export function validateEnv(): void {
   if (isMockMode) return;
@@ -50,17 +57,34 @@ export function validateEnv(): void {
 
   if (missing.length > 0) {
     throw new Error(
-      `[Aether] Missing required environment variables for production mode:\n` +
-        missing.map((k) => `  - ${k}`).join("\n") +
-        `\n\nSet AETHER_MOCK_MODE=true for local demo, or provide all required keys.`
+      `[Aether] Production mode requires all environment variables.\n` +
+        `Set AETHER_MOCK_MODE=true for a local demo, or provide:\n` +
+        missing.map((k) => `  - ${k}`).join("\n")
     );
   }
 }
 
+/** Supabase URL for the active mode. Placeholders only when mock mode is explicit. */
 export function getSupabaseUrl(): string {
-  return supabaseUrl || "https://placeholder-url.supabase.co";
+  if (isMockMode) {
+    return supabaseUrl || "https://placeholder-url.supabase.co";
+  }
+  return supabaseUrl;
 }
 
+/** Supabase anon key for the active mode. Placeholders only when mock mode is explicit. */
 export function getSupabaseAnonKey(): string {
-  return supabaseAnonKey || "placeholder-anon-key";
+  if (isMockMode) {
+    return supabaseAnonKey || "placeholder-anon-key";
+  }
+  return supabaseAnonKey;
+}
+
+/** Stripe secret key; placeholder only in explicit mock mode. */
+export function getStripeSecretKey(): string {
+  const key = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
+  if (isMockMode) {
+    return key || "sk_test_placeholder";
+  }
+  return key;
 }
