@@ -244,6 +244,18 @@ export default function CampaignDetailPage() {
   const [estLikes, setEstLikes] = useState("950");
   const [estComments, setEstComments] = useState("70");
   const [estShares, setEstShares] = useState("30");
+  const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
+  const [fetchedPreview, setFetchedPreview] = useState<{
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    engagement_rate: number;
+    caption: string;
+    platform: "instagram" | "tiktok";
+    fetched_at: string;
+  } | null>(null);
   
   // AI safety and prediction states
   const [commentsTab, setCommentsTab] = useState<"pins" | "safety">("pins");
@@ -885,6 +897,57 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // INFLUENCER: Auto-Fetch Reels & TikTok Metrics
+  const handleAutoFetchMetrics = async () => {
+    if (!postUrl.trim()) {
+      toast.error("Please enter a post URL first.");
+      return;
+    }
+    setIsFetchingMetrics(true);
+    setFetchedPreview(null);
+    toast.loading("Analyzing video link and fetching metrics...", { id: "fetch-metrics" });
+
+    try {
+      const res = await fetch("/api/metrics/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_url: postUrl, participation_id: activeParticipantId })
+      });
+
+      const data = await res.json();
+      if (data.success && data.metrics) {
+        const m = data.metrics;
+        setFetchedPreview(m);
+        
+        // Auto-populate form inputs for manual adjustments/validation
+        setEstViews(m.views.toString());
+        setEstLikes(m.likes.toString());
+        setEstComments(m.comments.toString());
+        setEstShares(m.shares.toString());
+        if (m.caption) {
+          setPostCaption(m.caption);
+        }
+
+        toast.success(`Fetched metrics from ${m.platform === "instagram" ? "Instagram Reels" : "TikTok"}!`, {
+          id: "fetch-metrics",
+          description: `Views: ${m.views.toLocaleString()} | Likes: ${m.likes.toLocaleString()} | ER: ${m.engagement_rate}%`
+        });
+      } else {
+        toast.error(data.error || "Link is private or rate-limited — manual entry still available", {
+          id: "fetch-metrics",
+          duration: 4000
+        });
+      }
+    } catch (err: any) {
+      toast.error("Link is private or rate-limited — manual entry still available", {
+        id: "fetch-metrics",
+        duration: 4000
+      });
+    } finally {
+      setIsFetchingMetrics(false);
+    }
+  };
+
   // INFLUENCER: Submit Draft Deliverable
   const handleSubmitDraft = (e: React.FormEvent) => {
     e.preventDefault();
@@ -895,21 +958,28 @@ export default function CampaignDetailPage() {
 
     if (!selectedParticipant) return;
 
+    const viewsVal = parseInt(estViews) || (fetchedPreview?.views) || 12000;
+    const likesVal = parseInt(estLikes) || (fetchedPreview?.likes) || 800;
+    const commentsVal = parseInt(estComments) || (fetchedPreview?.comments) || 60;
+    const sharesVal = parseInt(estShares) || (fetchedPreview?.shares) || 20;
+    const savesVal = fetchedPreview?.saves || 0;
+    const erVal = fetchedPreview?.engagement_rate || parseFloat((((likesVal + commentsVal + sharesVal + savesVal) / (viewsVal || 1)) * 100).toFixed(2)) || 2.1;
+
     const newVersionNum = (selectedParticipant.submissions.length || 0) + 1;
     const newSubmission: Submission = {
       version: newVersionNum,
       submittedAt: new Date().toISOString(),
       postUrl,
       imageUrl: selectedPresetImage,
-      caption: postCaption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
+      caption: postCaption || fetchedPreview?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
       metrics: {
-        views: parseInt(estViews) || 12000,
-        likes: parseInt(estLikes) || 800,
-        comments: parseInt(estComments) || 60,
-        shares: parseInt(estShares) || 20,
-        clicks: Math.floor((parseInt(estViews) || 12000) * 0.05),
+        views: viewsVal,
+        likes: likesVal,
+        comments: commentsVal,
+        shares: sharesVal,
+        clicks: Math.round(viewsVal * 0.05), // 5% click baseline
         ctr: 5.0,
-        roi: 2.1
+        roi: parseFloat(((Math.round(viewsVal * 0.05 * 0.02) * 85) / (selectedParticipant.payout || campaign.budget || 1000)).toFixed(2)) || 2.1
       },
       annotations: []
     };
@@ -931,12 +1001,78 @@ export default function CampaignDetailPage() {
       status: "submitted" as const
     };
 
+    // If live database mode is active, sync post to Supabase
+    if (!isMockMode) {
+      supabase.from("posts").insert({
+        participation_id: selectedParticipant.id,
+        platform: fetchedPreview?.platform || (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
+        post_url: postUrl,
+        views: viewsVal,
+        likes: likesVal,
+        comments: commentsVal,
+        shares: sharesVal,
+        saves: savesVal,
+        engagement_rate: erVal,
+        fetched_at: new Date().toISOString(),
+        metrics: { views: viewsVal, likes: likesVal, comments: commentsVal, shares: sharesVal, engagement_rate: erVal }
+      }).then(({ error }) => {
+        if (error) console.error("Error inserting post to DB:", error);
+      });
+    }
+
+    // In mock mode, update campaign metrics in local storage
+    if (isMockMode) {
+      const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
+      const current = allMetrics[campaignId] || { clicks: 0, impressions: 0, conversions: 0, attributed_value: 0, budget_spent: 0 };
+      
+      const clicks = Math.round(viewsVal * 0.05);
+      const conversions = Math.round(clicks * 0.02);
+      const attributed_value = conversions * 85;
+
+      allMetrics[campaignId] = {
+        clicks: current.clicks + clicks,
+        impressions: current.impressions + viewsVal,
+        conversions: current.conversions + conversions,
+        attributed_value: current.attributed_value + attributed_value,
+        budget_spent: current.budget_spent || campaign.budget || 1000
+      };
+      localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
+
+      // Sync mock posts table in localStorage for usePosts hook compatibility
+      const storedPosts = localStorage.getItem("aether-mock-posts");
+      const postsList = storedPosts ? JSON.parse(storedPosts) : [];
+      const mockPostRecord = {
+        id: "post_mock_" + Math.random().toString(36).substring(7),
+        participation_id: selectedParticipant.id,
+        platform: fetchedPreview?.platform || (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
+        post_url: postUrl,
+        metrics: {
+          likes: likesVal,
+          reach: Math.round(viewsVal * 0.8),
+          shares: sharesVal,
+          comments: commentsVal,
+          impressions: viewsVal,
+          engagement_rate: erVal
+        },
+        submitted_at: new Date().toISOString(),
+        approved_at: null,
+        campaignTitle: campaign.title
+      };
+      localStorage.setItem("aether-mock-posts", JSON.stringify([mockPostRecord, ...postsList]));
+
+      window.dispatchEvent(new Event("aether-metrics-update"));
+      window.dispatchEvent(new Event("aether-posts-update"));
+      window.dispatchEvent(new Event("storage"));
+    }
+
     persistCampaignState(updated);
     setSelectedVersionNum(newVersionNum);
     
-    // Clear inputs
+    // Clear inputs and previews
     setPostUrl("");
     setPostCaption("");
+    setFetchedPreview(null);
+    
     toast.success(`Draft Version ${newVersionNum} submitted!`, {
       description: "Brand has been notified to review your deliverable."
     });
@@ -2461,15 +2597,99 @@ export default function CampaignDetailPage() {
 
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase">{t("Draft Content URL")}</label>
-                    <input
-                      type="text"
-                      placeholder="https://tiktok.com/@marcusv/draft/398234"
-                      value={postUrl}
-                      onChange={(e) => setPostUrl(e.target.value)}
-                      className="w-full px-3.5 py-2.5 text-xs bg-secondary/35 border border-border/20 rounded-xl focus:outline-none focus:border-primary/45"
-                      required
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="https://instagram.com/reel/C8P..."
+                        value={postUrl}
+                        onChange={(e) => {
+                          setPostUrl(e.target.value);
+                          setFetchedPreview(null);
+                        }}
+                        className="flex-1 px-3.5 py-2.5 text-xs bg-secondary/35 border border-border/20 rounded-xl focus:outline-none focus:border-primary/45"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleAutoFetchMetrics}
+                        disabled={isFetchingMetrics}
+                        className="rounded-xl px-4 py-2.5 text-xs bg-secondary/60 hover:bg-secondary border border-border/10 text-foreground cursor-pointer shrink-0 font-semibold gap-1.5 flex items-center justify-center min-w-[130px]"
+                      >
+                        {isFetchingMetrics ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+                            {t("Analyzing...")}
+                          </>
+                        ) : (
+                          t("Auto-Fetch")
+                        )}
+                      </Button>
+                    </div>
                   </div>
+
+                  {isFetchingMetrics && (
+                    <div className="p-4 rounded-2xl bg-secondary/15 border border-border/5 space-y-3 animate-pulse">
+                      <div className="flex justify-between items-center">
+                        <div className="h-4 w-24 bg-secondary/50 rounded apple-skeleton" />
+                        <div className="h-5 w-16 bg-secondary/50 rounded-full apple-skeleton" />
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 pt-2 text-center">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div key={i} className="space-y-1.5">
+                            <div className="h-3 w-10 bg-secondary/50 rounded mx-auto apple-skeleton" />
+                            <div className="h-4.5 w-14 bg-secondary/50 rounded mx-auto apple-skeleton" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {fetchedPreview && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.98, y: 5 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      className="p-4 rounded-2xl bg-secondary/30 border border-border/15 space-y-3.5"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t("Auto-Fetched Live Preview")}</span>
+                        <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1.5 border ${
+                          fetchedPreview.platform === "instagram"
+                            ? "bg-[#E1306C]/10 text-[#E1306C] border-[#E1306C]/20"
+                            : "bg-foreground/10 text-foreground border-foreground/20"
+                        }`}>
+                          {fetchedPreview.platform === "instagram" ? (
+                            <InstagramIcon size={10} className="shrink-0" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                          )}
+                          {fetchedPreview.platform === "instagram" ? "Instagram Reels" : "TikTok"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 pt-1 divide-x divide-border/10 text-center">
+                        <div>
+                          <p className="text-[9px] font-bold text-muted-foreground uppercase">{t("Views")}</p>
+                          <p className="text-sm font-extrabold text-foreground mt-0.5">{fetchedPreview.views.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-muted-foreground uppercase">{t("Likes")}</p>
+                          <p className="text-sm font-extrabold text-foreground mt-0.5">{fetchedPreview.likes.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-muted-foreground uppercase">{t("Comments")}</p>
+                          <p className="text-sm font-extrabold text-foreground mt-0.5">{fetchedPreview.comments.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold text-muted-foreground uppercase">{t("Engagement")}</p>
+                          <p className="text-sm font-extrabold text-[#34C759] mt-0.5">{fetchedPreview.engagement_rate}%</p>
+                        </div>
+                      </div>
+                      {fetchedPreview.caption && (
+                        <div className="text-[10px] text-muted-foreground italic line-clamp-2 bg-background/30 p-2.5 rounded-xl border border-border/5 leading-relaxed">
+                          "{fetchedPreview.caption}"
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
 
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground block mb-1 uppercase">{t("Post Caption / Description")}</label>

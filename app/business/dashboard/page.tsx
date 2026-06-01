@@ -23,13 +23,15 @@ import {
   Clock,
   CheckCircle2,
   HelpCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCampaignsAction, subscribeToCampaignChanges } from "@/lib/supabase/campaigns";
-import { getClientProfile, Profile } from "@/lib/supabase/client";
+import { getClientProfile, Profile, supabase, isMockMode } from "@/lib/supabase/client";
 import { useTransactions, getCampaignMetricsAction } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
+import { toast } from "sonner";
 
 export default function BusinessDashboard() {
   const { t } = useTranslation();
@@ -39,6 +41,116 @@ export default function BusinessDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [campaignMetrics, setCampaignMetrics] = useState<Record<string, any>>({});
   const { transactions, balances } = useTransactions();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshMetrics = async () => {
+    setIsRefreshing(true);
+    toast.loading(t("Syncing live social metrics..."), { id: "refresh-metrics" });
+
+    try {
+      if (isMockMode) {
+        // Simulate API syncing delay
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        // Slightly bump metrics in local storage
+        const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
+        Object.keys(allMetrics).forEach((campaignId) => {
+          const m = allMetrics[campaignId];
+          m.impressions += Math.round(Math.random() * 800 + 200);
+          m.clicks += Math.round(Math.random() * 40 + 10);
+          m.conversions += Math.round(Math.random() * 3 + 1);
+          m.attributed_value = m.conversions * 85;
+        });
+        localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
+
+        // Bump mock posts table
+        const storedPosts = localStorage.getItem("aether-mock-posts");
+        if (storedPosts) {
+          const postsList = JSON.parse(storedPosts);
+          postsList.forEach((p: any) => {
+            if (p.metrics) {
+              p.metrics.impressions += Math.round(Math.random() * 500 + 100);
+              p.metrics.likes += Math.round(Math.random() * 40 + 5);
+              p.metrics.comments += Math.round(Math.random() * 5 + 1);
+              if (p.metrics.impressions > 0) {
+                p.metrics.engagement_rate = parseFloat((((p.metrics.likes + p.metrics.comments + (p.metrics.shares || 0)) / p.metrics.impressions) * 100).toFixed(2));
+              }
+            }
+          });
+          localStorage.setItem("aether-mock-posts", JSON.stringify(postsList));
+        }
+
+        window.dispatchEvent(new Event("aether-metrics-update"));
+        window.dispatchEvent(new Event("aether-posts-update"));
+        window.dispatchEvent(new Event("storage"));
+        
+        toast.success(t("Metrics refreshed! Live campaign ROI recalculated."), { id: "refresh-metrics" });
+      } else {
+        // Live Mode: fetch all posts linked to campaigns created by this business
+        const campaignIds = campaigns.map(c => c.id);
+        if (campaignIds.length === 0) {
+          toast.success(t("No campaigns to refresh."), { id: "refresh-metrics" });
+          setIsRefreshing(false);
+          return;
+        }
+
+        // Fetch participations
+        const { data: parts } = await supabase
+          .from("participations")
+          .select("id")
+          .in("campaign_id", campaignIds);
+
+        const partIds = parts?.map(p => p.id) || [];
+        if (partIds.length === 0) {
+          toast.success(t("No active creators to refresh."), { id: "refresh-metrics" });
+          setIsRefreshing(false);
+          return;
+        }
+
+        // Fetch posts
+        const { data: posts } = await supabase
+          .from("posts")
+          .select("post_url, platform, participation_id")
+          .in("participation_id", partIds);
+
+        if (!posts || posts.length === 0) {
+          toast.success(t("No live content URLs submitted yet."), { id: "refresh-metrics" });
+          setIsRefreshing(false);
+          return;
+        }
+
+        // Call the fetch endpoint for each post
+        let successCount = 0;
+        for (const post of posts) {
+          try {
+            const res = await fetch("/api/metrics/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                post_url: post.post_url,
+                platform: post.platform,
+                participation_id: post.participation_id
+              })
+            });
+            const data = await res.json();
+            if (data.success) successCount++;
+          } catch (e) {
+            console.error("Failed to refresh post:", post.post_url, e);
+          }
+        }
+
+        toast.success(`${t("Refreshed metrics for")} ${successCount}/${posts.length} ${t("live posts successfully!")}`, { id: "refresh-metrics" });
+      }
+      
+      // Reload UI data
+      await loadData();
+
+    } catch (err: any) {
+      toast.error(t("Failed to refresh metrics: ") + err.message, { id: "refresh-metrics" });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -191,11 +303,22 @@ export default function BusinessDashboard() {
             {profile?.company_name ? `${profile.company_name} ${t("Workspace")}` : `Sarah's ${t("Workspace")}`}
           </h1>
         </div>
-        <Link href="/business/campaigns/new">
-          <Button className="rounded-full px-6 py-6 font-semibold shadow-md bg-primary hover:scale-[1.02] active:scale-[0.98] transition-transform cursor-pointer gap-2 text-white">
-            <Plus size={16} /> {t("New Campaign")}
+        <div className="flex items-center gap-3.5 w-full sm:w-auto">
+          <Button
+            onClick={handleRefreshMetrics}
+            disabled={isRefreshing}
+            variant="outline"
+            className="rounded-full px-5 py-6 font-semibold border-border bg-card hover:bg-secondary/45 active:scale-[0.98] transition-transform cursor-pointer gap-2 text-foreground"
+          >
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+            {t("Refresh Metrics")}
           </Button>
-        </Link>
+          <Link href="/business/campaigns/new">
+            <Button className="rounded-full px-6 py-6 font-semibold shadow-md bg-primary hover:scale-[1.02] active:scale-[0.98] transition-transform cursor-pointer gap-2 text-white border-0">
+              <Plus size={16} /> {t("New Campaign")}
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {loading ? (

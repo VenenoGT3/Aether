@@ -615,7 +615,14 @@ export function usePosts() {
             participation_id: p.participation_id,
             platform: p.platform,
             post_url: p.post_url,
-            metrics: p.metrics || {},
+            metrics: {
+              impressions: p.views ?? p.metrics?.impressions ?? 0,
+              likes: p.likes ?? p.metrics?.likes ?? 0,
+              comments: p.comments ?? p.metrics?.comments ?? 0,
+              shares: p.shares ?? p.metrics?.shares ?? 0,
+              reach: p.views ? Math.round(p.views * 0.8) : p.metrics?.reach ?? 0,
+              engagement_rate: p.engagement_rate ?? p.metrics?.engagement_rate ?? 0
+            },
             submitted_at: p.submitted_at,
             approved_at: p.approved_at,
             campaignTitle: p.participation?.campaign?.title || "Campaign Collab"

@@ -37,12 +37,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getClientProfile } from "@/lib/supabase/client";
+import { getClientProfile, supabase, isMockMode } from "@/lib/supabase/client";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import WalletUI from "@/components/wallet-ui";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
+import { RefreshCw } from "lucide-react";
 
 const mockInvites = [
   {
@@ -71,6 +72,95 @@ export default function InfluencerDashboard() {
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const { transactions, balances, refresh: refreshTransactions } = useTransactions();
   const { posts, aggregateMetrics, refresh: refreshPosts } = usePosts();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshMetrics = async () => {
+    if (!user) return;
+    setIsRefreshing(true);
+    toast.loading(t("Syncing live creator metrics..."), { id: "refresh-metrics" });
+
+    try {
+      if (isMockMode) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        // Bump mock posts in local storage
+        const storedPosts = localStorage.getItem("aether-mock-posts");
+        if (storedPosts) {
+          const postsList = JSON.parse(storedPosts);
+          postsList.forEach((p: any) => {
+            if (p.metrics) {
+              p.metrics.impressions += Math.round(Math.random() * 600 + 150);
+              p.metrics.likes += Math.round(Math.random() * 45 + 5);
+              p.metrics.comments += Math.round(Math.random() * 6 + 1);
+              if (p.metrics.impressions > 0) {
+                p.metrics.engagement_rate = parseFloat((((p.metrics.likes + p.metrics.comments + (p.metrics.shares || 0)) / p.metrics.impressions) * 100).toFixed(2));
+              }
+            }
+          });
+          localStorage.setItem("aether-mock-posts", JSON.stringify(postsList));
+        }
+
+        // Slightly bump campaign metrics in local storage
+        const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
+        Object.keys(allMetrics).forEach((campaignId) => {
+          const m = allMetrics[campaignId];
+          m.impressions += Math.round(Math.random() * 900 + 100);
+          m.clicks += Math.round(Math.random() * 50 + 5);
+          m.conversions += Math.round(Math.random() * 4 + 1);
+          m.attributed_value = m.conversions * 85;
+        });
+        localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
+
+        window.dispatchEvent(new Event("aether-metrics-update"));
+        window.dispatchEvent(new Event("aether-posts-update"));
+        window.dispatchEvent(new Event("storage"));
+
+        toast.success(t("Engagement metrics and estimated wallet balances updated!"), { id: "refresh-metrics" });
+      } else {
+        // Live Mode: query influencer posts and sync
+        const { data: postsData, error } = await supabase
+          .from("posts")
+          .select("post_url, platform, participation_id, participations!inner(influencer_id)")
+          .eq("participations.influencer_id", user.id);
+
+        if (!postsData || postsData.length === 0) {
+          toast.success(t("No live content URLs submitted yet."), { id: "refresh-metrics" });
+          setIsRefreshing(false);
+          return;
+        }
+
+        let successCount = 0;
+        for (const post of postsData) {
+          try {
+            const res = await fetch("/api/metrics/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                post_url: post.post_url,
+                platform: post.platform,
+                participation_id: post.participation_id
+              })
+            });
+            const data = await res.json();
+            if (data.success) successCount++;
+          } catch (e) {
+            console.error("Failed to refresh influencer post:", post.post_url, e);
+          }
+        }
+
+        toast.success(`${t("Refreshed metrics for")} ${successCount}/${postsData.length} ${t("live posts successfully!")}`, { id: "refresh-metrics" });
+      }
+
+      // Reload UI data
+      refreshPosts();
+      refreshTransactions();
+
+    } catch (err: any) {
+      toast.error(t("Failed to refresh metrics: ") + err.message, { id: "refresh-metrics" });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // --- SOCIAL VERIFICATION AND MOCK MAILBOX STATES ---
   const [platformVerifying, setPlatformVerifying] = useState<string | null>(null);
@@ -301,20 +391,31 @@ export default function InfluencerDashboard() {
             {user?.full_name ? `${user.full_name.split(" ")[0]}'s ${t("Creator Hub")}` : `Marcus's ${t("Work Center")}`}
           </h1>
         </div>
-        
-        {isStripeConnected ? (
-          <div className="bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/30 rounded-full px-5 py-2.5 flex items-center gap-2 text-xs font-bold select-none">
-            <CheckCircle2 size={14} /> Stripe Connect Verified
-          </div>
-        ) : (
-          <Button 
-            onClick={handleOnboardStripe}
-            disabled={onboardingLoading}
-            className="rounded-full px-6 py-6 font-semibold bg-[#34C759] hover:bg-[#30b551] text-white hover:scale-[1.02] active:scale-[0.98] transition-transform cursor-pointer gap-2 border-0 shadow-md"
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <Button
+            onClick={handleRefreshMetrics}
+            disabled={isRefreshing}
+            variant="outline"
+            className="rounded-full px-5 py-6 font-semibold border-border bg-card hover:bg-secondary/45 active:scale-[0.98] transition-transform cursor-pointer gap-2 text-foreground h-auto"
           >
-            <Lock size={16} /> {t("Setup Stripe Payouts")}
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+            {t("Refresh Metrics")}
           </Button>
-        )}
+
+          {isStripeConnected ? (
+            <div className="bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/30 rounded-full px-5 py-3 flex items-center gap-2 text-xs font-bold select-none h-auto">
+              <CheckCircle2 size={14} /> Stripe Connect Verified
+            </div>
+          ) : (
+            <Button 
+              onClick={handleOnboardStripe}
+              disabled={onboardingLoading}
+              className="rounded-full px-6 py-6 font-semibold bg-[#34C759] hover:bg-[#30b551] text-white hover:scale-[1.02] active:scale-[0.98] transition-transform cursor-pointer gap-2 border-0 shadow-md h-auto"
+            >
+              <Lock size={16} /> {t("Setup Stripe Payouts")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Segmented Control / Apple Pill Tabs */}
