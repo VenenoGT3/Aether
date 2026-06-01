@@ -6,11 +6,16 @@ import {
   canReadParticipation,
   canInsertParticipation,
   canReadTransaction,
-  canInsertEscrowTransaction,
+  canInsertBusinessTransaction,
   canInsertPayoutTransaction,
   canApprovePost,
   canInsertPost,
   canReadOwnNotification,
+  canReadProfile,
+  canInsertNotification,
+  canReadRating,
+  canReadMessage,
+  canInsertMessage,
 } from "@/lib/rls-policies";
 
 function randomUuid(): string {
@@ -20,6 +25,8 @@ function randomUuid(): string {
     return v.toString(16);
   });
 }
+
+const ROLES = ["business", "influencer", "admin"] as const;
 
 describe("RLS property invariants", () => {
   it("profile update: only self (100 random pairs)", () => {
@@ -75,9 +82,13 @@ describe("RLS property invariants", () => {
     for (let i = 0; i < 50; i++) {
       const business = randomUuid();
       const influencer = randomUuid();
-      expect(canInsertEscrowTransaction(business, business)).toBe(true);
+      expect(canInsertBusinessTransaction(business, business, null)).toBe(
+        true
+      );
       if (business !== influencer) {
-        expect(canInsertEscrowTransaction(influencer, business)).toBe(false);
+        expect(
+          canInsertBusinessTransaction(influencer, business, null)
+        ).toBe(false);
       }
     }
   });
@@ -85,7 +96,9 @@ describe("RLS property invariants", () => {
   it("payout: only owner on self with payout type", () => {
     const uid = randomUuid();
     expect(canInsertPayoutTransaction(uid, uid, "payout")).toBe(true);
-    expect(canInsertPayoutTransaction(uid, randomUuid(), "payout")).toBe(false);
+    expect(canInsertPayoutTransaction(uid, randomUuid(), "payout")).toBe(
+      false
+    );
     expect(canInsertPayoutTransaction(uid, uid, "escrow")).toBe(false);
   });
 
@@ -111,12 +124,77 @@ describe("RLS property invariants", () => {
     expect(canInsertPost(randomUuid(), inf)).toBe(false);
   });
 
-  it("notifications: strictly owner-scoped", () => {
+  it("notifications: strictly owner-scoped for read", () => {
     for (let i = 0; i < 50; i++) {
       const a = randomUuid();
       const b = randomUuid();
       expect(canReadOwnNotification(a, a)).toBe(true);
       if (a !== b) expect(canReadOwnNotification(a, b)).toBe(false);
     }
+  });
+
+  it("notifications insert: never allows unrelated sender/recipient", () => {
+    for (let i = 0; i < 50; i++) {
+      const sender = randomUuid();
+      const recipient = randomUuid();
+      const biz = randomUuid();
+      const inf = randomUuid();
+      if (
+        sender !== recipient &&
+        sender !== biz &&
+        sender !== inf &&
+        recipient !== biz &&
+        recipient !== inf
+      ) {
+        expect(
+          canInsertNotification(sender, recipient, biz, inf)
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("business profiles: hidden without shared participation", () => {
+    for (let i = 0; i < 30; i++) {
+      const viewer = randomUuid();
+      const business = randomUuid();
+      if (viewer !== business) {
+        expect(
+          canReadProfile(viewer, business, "business", false)
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("influencer profiles: discoverable", () => {
+    for (let i = 0; i < 30; i++) {
+      const viewer = randomUuid();
+      const influencer = randomUuid();
+      expect(
+        canReadProfile(viewer, influencer, "influencer", false)
+      ).toBe(true);
+    }
+  });
+
+  it("ratings: non-participants cannot read", () => {
+    for (let i = 0; i < 30; i++) {
+      const stranger = randomUuid();
+      const reviewer = randomUuid();
+      const reviewee = randomUuid();
+      if (stranger !== reviewer && stranger !== reviewee) {
+        expect(canReadRating(stranger, reviewer, reviewee, false)).toBe(
+          false
+        );
+      }
+    }
+  });
+
+  it("messages: sender or participant only", () => {
+    const biz = randomUuid();
+    const inf = randomUuid();
+    const stranger = randomUuid();
+    expect(canReadMessage(biz, inf, inf, biz)).toBe(true);
+    expect(canReadMessage(stranger, inf, inf, biz)).toBe(false);
+    expect(canInsertMessage(inf, inf, inf, biz)).toBe(true);
+    expect(canInsertMessage(inf, biz, inf, biz)).toBe(false);
   });
 });

@@ -3,8 +3,10 @@ import {
   canUpdateProfile,
   canReadParticipation,
   canReadTransaction,
-  canInsertEscrowTransaction,
+  canInsertBusinessTransaction,
   canReadOwnNotification,
+  canReadProfile,
+  canInsertNotification,
 } from "@/lib/rls-policies";
 
 describe("RLS policy mirrors", () => {
@@ -15,6 +17,13 @@ describe("RLS policy mirrors", () => {
   it("profiles: only owner can update", () => {
     expect(canUpdateProfile(uid, uid)).toBe(true);
     expect(canUpdateProfile(uid, influencerId)).toBe(false);
+  });
+
+  it("profiles: business profiles hidden from unrelated viewers", () => {
+    expect(canReadProfile(uid, businessId, "business", false)).toBe(false);
+    expect(canReadProfile(uid, influencerId, "influencer", false)).toBe(
+      true
+    );
   });
 
   it("participations: business and influencer can read", () => {
@@ -30,15 +39,25 @@ describe("RLS policy mirrors", () => {
   });
 
   it("transactions: escrow insert restricted to campaign owner", () => {
-    expect(canInsertEscrowTransaction(businessId, businessId)).toBe(true);
-    expect(canInsertEscrowTransaction(influencerId, businessId)).toBe(false);
+    expect(canInsertBusinessTransaction(businessId, businessId, null)).toBe(
+      true
+    );
+    expect(canInsertBusinessTransaction(influencerId, businessId, null)).toBe(
+      false
+    );
     expect(
       canReadTransaction(businessId, influencerId, businessId, businessId)
     ).toBe(true);
   });
 
-  it("notifications: owner-only access", () => {
+  it("notifications: owner-only read; counterparty insert", () => {
     expect(canReadOwnNotification(uid, uid)).toBe(true);
     expect(canReadOwnNotification(uid, businessId)).toBe(false);
+    expect(
+      canInsertNotification(businessId, influencerId, businessId, influencerId)
+    ).toBe(true);
+    expect(
+      canInsertNotification(uid, influencerId, businessId, influencerId)
+    ).toBe(false);
   });
 });

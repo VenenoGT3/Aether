@@ -53,7 +53,9 @@ Canonical policies live in `supabase/migrations/`. Highlights:
 - **`posts`:** Trigger `check_post_update` blocks self-approval
 - **`transactions`:** Read via participation or `user_id`; payout insert owner-only
 
-**Tests:** `lib/__tests__/rls-policies.test.ts`, `lib/__tests__/rls-properties.test.ts`
+**Tests:** `lib/__tests__/rls-policies.test.ts`, `lib/__tests__/rls-properties.test.ts`, `lib/__tests__/rls-violations.test.ts`
+
+**Full permission matrix:** [PERMISSIONS.md](./PERMISSIONS.md)
 
 ---
 
