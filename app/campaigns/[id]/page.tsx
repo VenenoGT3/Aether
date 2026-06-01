@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
+import { apiPost } from "@/lib/api/client";
 
 import {
   ResponsiveContainer,
@@ -800,7 +801,7 @@ export default function CampaignDetailPage() {
     setIsApplying(true);
   };
 
-  const submitApplyForm = (e: React.FormEvent) => {
+  const submitApplyForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pitchText.trim()) {
       toast.error("Please add a short pitch.");
@@ -808,7 +809,22 @@ export default function CampaignDetailPage() {
     }
 
     const proposedPayout = parseFloat(pitchRate) || campaign.budget;
-    
+
+    if (!isMockMode) {
+      try {
+        await apiPost(`/api/campaigns/${campaignId}/apply`, {
+          proposed_payout: proposedPayout,
+          pitch: pitchText.trim(),
+          _hp: "",
+        });
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : "Failed to submit application.";
+        toast.error(message);
+        return;
+      }
+    }
+
     // Add Marcus Vance as participant in applied state
     const marcusParticipant: Participant = {
       id: user.user_id,
@@ -949,7 +965,7 @@ export default function CampaignDetailPage() {
   };
 
   // INFLUENCER: Submit Draft Deliverable
-  const handleSubmitDraft = (e: React.FormEvent) => {
+  const handleSubmitDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postUrl.trim()) {
       toast.error("Please enter your draft post link.");
@@ -1001,23 +1017,30 @@ export default function CampaignDetailPage() {
       status: "submitted" as const
     };
 
-    // If live database mode is active, sync post to Supabase
     if (!isMockMode) {
-      supabase.from("posts").insert({
-        participation_id: selectedParticipant.id,
-        platform: fetchedPreview?.platform || (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
-        post_url: postUrl,
-        views: viewsVal,
-        likes: likesVal,
-        comments: commentsVal,
-        shares: sharesVal,
-        saves: savesVal,
-        engagement_rate: erVal,
-        fetched_at: new Date().toISOString(),
-        metrics: { views: viewsVal, likes: likesVal, comments: commentsVal, shares: sharesVal, engagement_rate: erVal }
-      }).then(({ error }) => {
-        if (error) console.error("Error inserting post to DB:", error);
-      });
+      try {
+        await apiPost(`/api/participations/${selectedParticipant.id}/posts`, {
+          post_url: postUrl,
+          platform:
+            fetchedPreview?.platform ||
+            (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
+          caption: postCaption || undefined,
+          metrics: {
+            views: viewsVal,
+            likes: likesVal,
+            comments: commentsVal,
+            shares: sharesVal,
+            saves: savesVal,
+            engagement_rate: erVal,
+          },
+          _hp: "",
+        });
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : "Failed to submit post.";
+        toast.error(message);
+        return;
+      }
     }
 
     // In mock mode, update campaign metrics in local storage

@@ -1,10 +1,23 @@
 import "server-only";
-import { isMockMode } from "@/lib/env";
+import { isMockMode, canUseServiceRoleInNextRuntime } from "@/lib/env";
 
 /**
- * Server-only secrets. Never import this module from Client Components or
- * files that may be bundled for the browser.
+ * Server-only secrets for the Next.js runtime (Vercel).
+ * Never import from Client Components.
+ *
+ * Supabase service role lives in Supabase Edge Function secrets by default —
+ * not in the Vercel app unless STRIPE_WEBHOOK_HANDLER=vercel.
  */
+
+export const SERVER_SECRET_NAMES = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "CRON_SECRET",
+  "GEMINI_API_KEY",
+  "SOCIAVAULT_API_KEY",
+  "RESEND_API_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+] as const;
 
 function requireServerSecret(name: string): string {
   const value = process.env[name]?.trim();
@@ -16,6 +29,13 @@ function requireServerSecret(name: string): string {
 }
 
 export function getServiceRoleKey(): string {
+  if (!canUseServiceRoleInNextRuntime()) {
+    throw new Error(
+      "[Aether] SUPABASE_SERVICE_ROLE_KEY is not available in the Next.js runtime. " +
+        "Use STRIPE_WEBHOOK_HANDLER=supabase (default) and deploy supabase/functions/stripe-webhook. " +
+        "Set STRIPE_WEBHOOK_HANDLER=vercel only for local legacy testing."
+    );
+  }
   return requireServerSecret("SUPABASE_SERVICE_ROLE_KEY");
 }
 

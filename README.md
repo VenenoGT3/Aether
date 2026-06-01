@@ -11,6 +11,7 @@
 - [What is production-ready](#what-is-production-ready)
 - [Mock mode](#mock-mode)
 - [Environment variables](#environment-variables)
+- [Secret handling](#secret-handling)
 - [Supabase setup](#supabase-setup)
 - [Stripe setup](#stripe-setup)
 - [Development commands](#development-commands)
@@ -125,16 +126,18 @@ cp .env.example .env.local
 
 ### Required in production (`AETHER_MOCK_MODE=false`)
 
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key (client + SSR) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for webhooks and system writes |
-| `STRIPE_SECRET_KEY` | Stripe API (server) |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe.js (client) |
-| `STRIPE_WEBHOOK_SECRET` | Verifies webhook signatures |
-| `NEXT_PUBLIC_APP_URL` | Public app URL (cron callbacks, redirects) |
-| `CRON_SECRET` | Bearer token for `/api/cron/metrics` |
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Vercel | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel | Public anon key (client + SSR) |
+| `STRIPE_SECRET_KEY` | Vercel | Stripe API (server actions) |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Vercel | Stripe.js (client) |
+| `STRIPE_WEBHOOK_SECRET` | Vercel + Supabase Edge | Webhook signature verification |
+| `NEXT_PUBLIC_APP_URL` | Vercel | Cron callbacks, redirects |
+| `CRON_SECRET` | Vercel | Bearer for `/api/cron/metrics` |
+| `STRIPE_WEBHOOK_HANDLER` | Vercel | `supabase` (default) or `vercel` (legacy) |
+
+`SUPABASE_SERVICE_ROLE_KEY` is **not** required on Vercel when `STRIPE_WEBHOOK_HANDLER=supabase` (default). It stays in the Supabase Edge Function runtime only.
 
 ### Optional (demo / polish)
 
@@ -165,7 +168,46 @@ RESEND_API_KEY=re_...
 SOCIAVAULT_API_KEY=sv_your_sociavault_api_key_here
 ```
 
-Configuration is centralized in `lib/env.ts`. Production builds call `validateEnv()` from `next.config.ts` when mock mode is off.
+Configuration is centralized in `lib/env.ts` (client-safe) and `lib/env.server.ts` (server-only). Production builds call `validateEnv()` from `next.config.ts` when mock mode is off.
+
+Full matrix: [docs/SECRETS.md](docs/SECRETS.md).
+
+---
+
+## Secret handling
+
+**Never commit** `.env.local` or paste service-role keys into client code, `NEXT_PUBLIC_*` vars, or GitHub issues.
+
+### Where secrets live
+
+| Secret | Vercel | Supabase Edge | Browser |
+|--------|--------|---------------|---------|
+| Anon key | `NEXT_PUBLIC_*` | — | Yes (by design) |
+| Service role | Only if `STRIPE_WEBHOOK_HANDLER=vercel` | `stripe-webhook` function (auto) | **Never** |
+| Stripe server / webhook | Yes | Yes (webhook fn) | Never |
+| Cron secret | Yes | — | Never |
+
+### Production defaults
+
+1. Set `AETHER_MOCK_MODE=false` on Vercel Production.
+2. Set `STRIPE_WEBHOOK_HANDLER=supabase` (or leave unset).
+3. Deploy `supabase/functions/stripe-webhook` and point Stripe to:
+   `https://<project-ref>.supabase.co/functions/v1/stripe-webhook`
+4. Do **not** add `SUPABASE_SERVICE_ROLE_KEY` to Vercel Production.
+
+### Vercel checklist
+
+- Mark `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CRON_SECRET` as **Sensitive**.
+- Use separate values per environment (Production vs Preview).
+- Preview deployments: use Stripe **test** keys only.
+
+### Local development
+
+- Demo UI: `AETHER_MOCK_MODE=true` — no real secrets needed.
+- Full stack: `AETHER_MOCK_MODE=false` + `.env.local` from `.env.example`.
+- Legacy webhook on Next.js: `STRIPE_WEBHOOK_HANDLER=vercel` + `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` only.
+
+Mock mode is **never** inferred from missing or placeholder keys — only `AETHER_MOCK_MODE=true` enables it.
 
 ---
 
@@ -177,7 +219,7 @@ Configuration is centralized in `lib/env.ts`. Production builds call `validateEn
 2. Under **Project Settings → API**, copy:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (never expose to the client)
+   - `service_role` key → Supabase Edge Function secrets only (not Vercel Production; see [Secret handling](#secret-handling))
 
 ### 2. Run migrations
 

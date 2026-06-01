@@ -35,9 +35,9 @@ export async function POST(request: Request) {
   try {
     const guarded = await guardApiPost(request, {
       schema: AiDiscoverBodySchema,
-      rateLimit: "apply",
+      rateLimit: "discover",
       routeKey: "ai/discover",
-      auth: true,
+      auth: "influencer",
     });
     if (!guarded.ok) return guarded.response;
 

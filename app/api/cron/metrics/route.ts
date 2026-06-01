@@ -2,13 +2,20 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
 import { verifyCronAuth } from "@/lib/campaign-lifecycle";
+import { getCronSecret } from "@/lib/env.server";
+import { guardRateLimitOnly } from "@/lib/api/guard";
 
 const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
 
 export async function GET(request: Request) {
+  const rateLimited = guardRateLimitOnly(request, "cron/metrics", "cron");
+  if (rateLimited) return rateLimited;
+
   try {
     const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
+    const cronSecret = isMockMode
+      ? process.env.CRON_SECRET
+      : getCronSecret();
     const auth = verifyCronAuth(authHeader, cronSecret, isMockMode);
 
     if (!auth.authorized) {

@@ -30,6 +30,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { getClientProfile, isMockMode, supabase } from "@/lib/supabase/client";
+import { apiPost, apiGet } from "@/lib/api/client";
 import { Profile } from "@/types";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
@@ -213,16 +214,11 @@ export default function DiscoverPage() {
 
         setAppliedCampaignIds(appliedIds);
       } else {
-        // Supabase Live Mode
-        const { data: camps, error } = await supabase
-          .from("campaigns")
-          .select("*")
-          .eq("status", "open");
-        
-        if (error) throw error;
-        
-        // Format database schema to fit our frontend Campaign structure
-        rawCamps = (camps || []).map((c: any) => ({
+        const searchData = await apiGet<{
+          campaigns: Array<Record<string, unknown>>;
+        }>("/api/campaigns/search?page=1&limit=50");
+
+        rawCamps = (searchData.campaigns || []).map((c: any) => ({
           id: c.id,
           title: c.title,
           description: c.description || "",
@@ -354,17 +350,10 @@ export default function DiscoverPage() {
         // Trigger custom storage sync event
         window.dispatchEvent(new Event("storage"));
       } else {
-        // Supabase Live insert
-        const { error } = await supabase
-          .from("participations")
-          .insert({
-            campaign_id: campaign.id,
-            influencer_id: influencerId,
-            status: "applied",
-            proposed_payout: proposed
-          });
-        
-        if (error) throw error;
+        await apiPost(`/api/campaigns/${campaign.id}/apply`, {
+          proposed_payout: proposed,
+          _hp: "",
+        });
       }
 
       setAppliedCampaignIds(prev => new Set([...prev, campaign.id]));
@@ -495,18 +484,11 @@ export default function DiscoverPage() {
 
         window.dispatchEvent(new Event("storage"));
       } else {
-        // Supabase Live insert
-        const { error } = await supabase
-          .from("participations")
-          .insert({
-            campaign_id: selectedCampaign.id,
-            influencer_id: influencerId,
-            status: "applied",
-            proposed_payout: proposedPayout
-            // Note: If you need pitch in db, you can store it inside a jsonb details column or extend schema
-          });
-        
-        if (error) throw error;
+        await apiPost(`/api/campaigns/${selectedCampaign.id}/apply`, {
+          proposed_payout: proposedPayout,
+          pitch: pitchText.trim() || undefined,
+          _hp: "",
+        });
       }
 
       setAppliedCampaignIds(prev => new Set([...prev, selectedCampaign.id]));

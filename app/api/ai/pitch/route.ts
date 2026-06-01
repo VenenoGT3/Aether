@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       schema: AiPitchBodySchema,
       rateLimit: "ai",
       routeKey: "ai/pitch",
-      auth: true,
+      auth: "influencer",
     });
     if (!guarded.ok) return guarded.response;
 

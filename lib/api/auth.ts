@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isMockMode } from "@/lib/env";
+import { getCronSecret } from "@/lib/env.server";
 import { unauthorizedError, forbiddenError } from "@/lib/api/response";
 import type { UserRole } from "@/types";
 
@@ -67,7 +68,7 @@ export async function requireApiAuth(
 /** Cron / internal service calls bypass user auth when bearer matches CRON_SECRET */
 export function isInternalCronCall(request: Request): boolean {
   const auth = request.headers.get("authorization");
-  const secret = process.env.CRON_SECRET?.trim();
+  const secret = getCronSecret() || process.env.CRON_SECRET?.trim();
   if (!secret) return false;
   return auth === `Bearer ${secret}`;
 }

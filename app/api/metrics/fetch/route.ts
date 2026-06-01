@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       schema: MetricsFetchBodySchema,
       rateLimit: "metrics",
       routeKey: "metrics/fetch",
-      auth: false,
+      auth: true,
     });
     if (!guarded.ok) return guarded.response;
 

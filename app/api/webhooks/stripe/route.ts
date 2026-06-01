@@ -1,21 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripeServer } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isMockMode } from "@/lib/env";
+import {
+  isMockMode,
+  getStripeWebhookHandler,
+  getSupabaseStripeWebhookUrl,
+} from "@/lib/env";
 import { getStripeWebhookSecret } from "@/lib/env.server";
 import { verifyStripeWebhookSignature } from "@/lib/campaign-lifecycle";
-import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/api/rate-limit";
-import { rateLimitError } from "@/lib/api/response";
+import { handleStripeWebhookEvent } from "@/lib/stripe/webhook-handler";
+import { guardRateLimitOnly } from "@/lib/api/guard";
 
 export async function POST(req: NextRequest) {
-  const ip = getClientIp(req);
-  const rl = checkRateLimit(
-    `webhook:stripe:${ip}`,
-    RATE_LIMITS.webhook.limit,
-    RATE_LIMITS.webhook.windowMs
-  );
-  if (!rl.allowed) {
-    return rateLimitError(rl.retryAfterSec ?? 60);
+  const rateLimited = guardRateLimitOnly(req, "webhooks/stripe", "webhook");
+  if (rateLimited) return rateLimited;
+
+  if (!isMockMode && getStripeWebhookHandler() === "supabase") {
+    const edgeUrl = getSupabaseStripeWebhookUrl();
+    return NextResponse.json(
+      {
+        error:
+          "Stripe webhooks are handled by the Supabase Edge Function, not this Vercel route.",
+        handler: "supabase",
+        configure_stripe_endpoint: edgeUrl,
+        hint: "Set STRIPE_WEBHOOK_HANDLER=vercel only for legacy local testing.",
+      },
+      { status: 410 }
+    );
   }
 
   const body = await req.text();
@@ -59,91 +70,8 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
 
   try {
-    switch (event.type) {
-      case "payment_intent.succeeded": {
-        const paymentIntent = event.data.object as {
-          id: string;
-          metadata?: { participationId?: string; transactionId?: string };
-        };
-        const participationId = paymentIntent.metadata?.participationId;
-        const transactionId = paymentIntent.metadata?.transactionId;
-
-        let txQuery = supabase
-          .from("transactions")
-          .update({ status: "succeeded" });
-
-        if (transactionId) {
-          txQuery = txQuery.eq("id", transactionId);
-        } else {
-          txQuery = txQuery.eq("stripe_payment_intent_id", paymentIntent.id);
-        }
-
-        const { data: txData, error: txError } = await txQuery.select().single();
-
-        if (txError) {
-          console.error(
-            `Error updating transaction for PaymentIntent ${paymentIntent.id}:`,
-            txError.message
-          );
-        }
-
-        const targetPartId = participationId || txData?.participation_id;
-        if (targetPartId) {
-          const { error: partError } = await supabase
-            .from("participations")
-            .update({ status: "in_progress" })
-            .eq("id", targetPartId);
-
-          if (partError) {
-            console.error(
-              `Error updating participation ${targetPartId}:`,
-              partError.message
-            );
-          }
-        }
-        break;
-      }
-
-      case "account.updated": {
-        const account = event.data.object as {
-          id: string;
-          details_submitted?: boolean;
-        };
-
-        if (account.details_submitted) {
-          const { error: profileError } = await supabase
-            .from("profiles")
-            .update({ stripe_onboarding_completed: true })
-            .eq("stripe_connect_id", account.id);
-
-          if (profileError) {
-            console.error(
-              `Error updating profile for Stripe Account ${account.id}:`,
-              profileError.message
-            );
-          }
-        }
-        break;
-      }
-
-      case "transfer.created": {
-        const transfer = event.data.object as { id: string };
-        const { error: txError } = await supabase
-          .from("transactions")
-          .update({ status: "succeeded" })
-          .eq("stripe_payment_intent_id", transfer.id);
-
-        if (txError) {
-          console.error(`Error marking transfer succeeded:`, txError.message);
-        }
-        break;
-      }
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
-
-    return NextResponse.json({ received: true });
+    await handleStripeWebhookEvent(supabase, event);
+    return NextResponse.json({ received: true, handler: "vercel" });
   } catch (error: unknown) {
     console.error("Error processing Stripe webhook event:", error);
     return NextResponse.json(

@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import type { ZodError } from "zod";
+import { formatZodErrors } from "@/lib/api/zod-errors";
+
+export function jsonSuccess<T extends Record<string, unknown>>(
+  data: T,
+  status = 200
+): NextResponse {
+  return NextResponse.json({ success: true, ...data }, { status });
+}
 
 export function jsonError(
   message: string,
@@ -17,14 +25,26 @@ export function jsonError(
 }
 
 export function validationError(error: ZodError): NextResponse {
-  return jsonError("Validation failed", 400, error.flatten());
+  const formatted = formatZodErrors(error);
+  return NextResponse.json(
+    {
+      success: false,
+      error: formatted.message,
+      fields: formatted.fields,
+    },
+    { status: 400 }
+  );
 }
 
-export function unauthorizedError(message = "Unauthorized"): NextResponse {
+export function unauthorizedError(
+  message = "Please sign in to continue."
+): NextResponse {
   return jsonError(message, 401);
 }
 
-export function forbiddenError(message = "Forbidden"): NextResponse {
+export function forbiddenError(
+  message = "You don't have permission to do that."
+): NextResponse {
   return jsonError(message, 403);
 }
 
@@ -32,7 +52,7 @@ export function rateLimitError(retryAfterSec: number): NextResponse {
   return NextResponse.json(
     {
       success: false,
-      error: "Too many requests",
+      error: `Too many requests. Please wait ${retryAfterSec} seconds and try again.`,
       retryAfter: retryAfterSec,
     },
     {
@@ -40,4 +60,8 @@ export function rateLimitError(retryAfterSec: number): NextResponse {
       headers: { "Retry-After": String(retryAfterSec) },
     }
   );
+}
+
+export function conflictError(message: string): NextResponse {
+  return jsonError(message, 409);
 }

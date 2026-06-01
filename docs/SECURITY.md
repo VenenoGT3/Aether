@@ -61,35 +61,33 @@ Canonical policies live in `supabase/migrations/`. Highlights:
 
 ## Secrets management
 
+See **[SECRETS.md](./SECRETS.md)** for the full Vercel + Supabase matrix.
+
 | Secret | Location | Exposure |
 |--------|----------|----------|
 | `NEXT_PUBLIC_*` | Client bundle | Public by design |
-| `SUPABASE_SERVICE_ROLE_KEY` | `lib/env.server.ts` only | Server-only import |
-| `STRIPE_WEBHOOK_SECRET` | `lib/env.server.ts` | Webhook handler |
-| `CRON_SECRET` | Server env | Cron + internal metrics |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function (default) | Never on Vercel Production |
+| `STRIPE_WEBHOOK_SECRET` | Supabase Edge + Vercel | Webhook verification |
+| `CRON_SECRET` | Vercel server | Cron + internal metrics |
 | `GEMINI_API_KEY`, `SOCIAVAULT_API_KEY` | `lib/env.server.ts` | API routes |
 
 **Do not** import `lib/env.server.ts` from Client Components.
-
-Production: set secrets in your host's secret manager (Vercel, etc.), never commit `.env.local`.
 
 ---
 
 ## API hardening
 
-All POST API routes use `guardApiPost()`:
-
-- **Zod** body validation with `400` + field errors
-- **Rate limits** per route (see `lib/api/rate-limit.ts`)
-- **Auth** via Supabase session (`requireApiAuth`) except mock mode demo bypass
+See `lib/api/README.md`. All routes use Zod + rate limits + friendly `400` errors (`error`, `fields`).
 
 | Route | Auth | Rate limit |
 |-------|------|------------|
-| `/api/ai/*` | Required (non-mock) | 20/min |
-| `/api/ai/discover` | Required | 10/min (apply) |
-| `/api/metrics/fetch` | Required + participation | 30/min |
+| `POST /api/campaigns/[id]/apply` | Influencer | 5/min |
+| `POST /api/participations/[id]/posts` | Influencer | 8/min |
+| `GET /api/campaigns/search` | Signed-in | 60/min |
+| `POST /api/ai/*` | Role-specific | 15–20/min |
+| `POST /api/metrics/fetch` | Signed-in + participation | 25/min |
 | `/api/webhooks/stripe` | Stripe signature | 200/min |
-| `/api/cron/metrics` | CRON_SECRET | N/A (GET) |
+| `/api/cron/metrics` | CRON_SECRET | 10/min |
 
 ---
 
