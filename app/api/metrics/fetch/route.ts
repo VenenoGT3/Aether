@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
-
-const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
+import { isMockMode } from "@/lib/env";
+import { getSociavaultApiKey } from "@/lib/env.server";
+import { guardApiPost } from "@/lib/api/guard";
+import { MetricsFetchBodySchema } from "@/lib/api/schemas";
+import { isInternalCronCall, requireApiAuth } from "@/lib/api/auth";
+import { assertParticipationAccess } from "@/lib/api/participation-access";
+import { createClient } from "@/lib/supabase/server";
+import { forbiddenError } from "@/lib/api/response";
 
 /**
  * Detect social platform from post URL
@@ -56,33 +60,53 @@ function generateSimulatedMetrics(url: string, platform: "instagram" | "tiktok")
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { post_url, participation_id } = body;
-    let { platform } = body;
+    const guarded = await guardApiPost(request, {
+      schema: MetricsFetchBodySchema,
+      rateLimit: "metrics",
+      routeKey: "metrics/fetch",
+      auth: false,
+    });
+    if (!guarded.ok) return guarded.response;
 
-    if (!post_url) {
-      return NextResponse.json(
-        { success: false, error: "Missing required parameter: post_url" },
-        { status: 400 }
-      );
+    const { post_url, participation_id } = guarded.ctx.data;
+    let platform = guarded.ctx.data.platform;
+
+    const internalCron = isInternalCronCall(request);
+    let actorUserId: string | null = null;
+
+    if (!internalCron) {
+      const auth = await requireApiAuth();
+      if (!auth.ok) return auth.response;
+      actorUserId = auth.auth.userId;
+
+      if (participation_id) {
+        const access = await assertParticipationAccess(
+          actorUserId,
+          participation_id,
+          "submit_post"
+        );
+        if (!access.ok) return access.response;
+      } else if (!isMockMode) {
+        return forbiddenError("participation_id is required");
+      }
     }
 
-    // Automatically detect platform if not specified
     if (!platform) {
-      platform = detectPlatform(post_url);
-    } else {
-      platform = platform.toLowerCase();
+      platform = detectPlatform(post_url) ?? undefined;
     }
 
     if (platform !== "instagram" && platform !== "tiktok") {
       return NextResponse.json(
-        { success: false, error: "Unable to detect platform. Must be Instagram or TikTok URL." },
+        {
+          success: false,
+          error: "Unable to detect platform. Must be Instagram or TikTok URL.",
+        },
         { status: 400 }
       );
     }
 
-    const apiKey = process.env.SOCIAVAULT_API_KEY;
-    const isMockKey = !apiKey || apiKey === "placeholder-sociavault-key" || apiKey.includes("your_sociavault");
+    const apiKey = getSociavaultApiKey();
+    const isMockKey = !apiKey || apiKey.includes("your_sociavault");
 
     let metricsData;
 
@@ -195,8 +219,9 @@ export async function POST(request: Request) {
     // Save/update to Database if in Live Database mode (not mock mode)
     if (!isMockMode && metricsData) {
       try {
+        const supabase = await createClient();
         const { views, likes, comments, shares, saves, engagement_rate, fetched_at } = metricsData;
-        
+
         // 1. Look up existing post by URL
         const { data: existingPost } = await supabase
           .from("posts")

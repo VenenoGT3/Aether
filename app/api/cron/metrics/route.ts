@@ -61,7 +61,12 @@ export async function GET(request: Request) {
         try {
           const fetchRes = await fetch(`${appUrl}/api/metrics/fetch`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(cronSecret
+                ? { Authorization: `Bearer ${cronSecret}` }
+                : {}),
+            },
             body: JSON.stringify({
               post_url: post.post_url,
               platform: post.platform,

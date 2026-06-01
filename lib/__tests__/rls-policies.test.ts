@@ -32,9 +32,9 @@ describe("RLS policy mirrors", () => {
   it("transactions: escrow insert restricted to campaign owner", () => {
     expect(canInsertEscrowTransaction(businessId, businessId)).toBe(true);
     expect(canInsertEscrowTransaction(influencerId, businessId)).toBe(false);
-    expect(canReadTransaction(businessId, influencerId, businessId)).toBe(
-      true
-    );
+    expect(
+      canReadTransaction(businessId, influencerId, businessId, businessId)
+    ).toBe(true);
   });
 
   it("notifications: owner-only access", () => {

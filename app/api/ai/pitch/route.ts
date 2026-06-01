@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
+import { guardApiPost } from "@/lib/api/guard";
+import { AiPitchBodySchema } from "@/lib/api/schemas";
+import { getGeminiApiKey } from "@/lib/env.server";
 
 export async function POST(request: Request) {
   try {
-    const { campaign, creator, tone = "professional" } = await request.json();
+    const guarded = await guardApiPost(request, {
+      schema: AiPitchBodySchema,
+      rateLimit: "ai",
+      routeKey: "ai/pitch",
+      auth: true,
+    });
+    if (!guarded.ok) return guarded.response;
 
-    if (!campaign || !creator) {
-      return NextResponse.json(
-        { error: "Campaign and Creator profiles are required" },
-        { status: 400 }
-      );
-    }
+    const { campaign, creator, tone = "professional" } = guarded.ctx.data;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
 
     // Check if API key exists and is not a placeholder
     const isApiKeyValid = apiKey && !apiKey.startsWith("AIzaSyPlaceholder") && apiKey !== "AIzaSy...";

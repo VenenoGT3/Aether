@@ -79,7 +79,10 @@ export function verifyCronAuth(
 ): { authorized: boolean; error?: string } {
   if (mock) return { authorized: true };
   if (!cronSecret?.trim()) {
-    return { authorized: false, error: "CRON_SECRET is not configured" };
+    return {
+      authorized: false,
+      error: "CRON_SECRET is required when AETHER_MOCK_MODE is not true",
+    };
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
     return { authorized: false, error: "Unauthorized" };
@@ -97,7 +100,7 @@ export function verifyStripeWebhookSignature(
     return {
       valid: false,
       error:
-        "Stripe webhook signature verification required in production. Provide STRIPE_WEBHOOK_SECRET and stripe-signature header.",
+        "Stripe webhook signature verification required. Set STRIPE_WEBHOOK_SECRET and send stripe-signature header.",
     };
   }
   return { valid: true };

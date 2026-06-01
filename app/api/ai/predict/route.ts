@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { guardApiPost } from "@/lib/api/guard";
+import { AiPredictBodySchema } from "@/lib/api/schemas";
+import { getGeminiApiKey } from "@/lib/env.server";
 
 interface PredictRequest {
   campaign: {
@@ -39,17 +42,18 @@ interface PredictResponse {
 
 export async function POST(request: Request) {
   try {
-    const { campaign, metrics, creator }: PredictRequest = await request.json();
+    const guarded = await guardApiPost(request, {
+      schema: AiPredictBodySchema,
+      rateLimit: "ai",
+      routeKey: "ai/predict",
+      auth: true,
+    });
+    if (!guarded.ok) return guarded.response;
 
-    if (!campaign || !metrics) {
-      return NextResponse.json(
-        { error: "Campaign and Metrics data are required" },
-        { status: 400 }
-      );
-    }
+    const { campaign, metrics, creator } = guarded.ctx.data;
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isMock = !apiKey || apiKey.startsWith("AIzaSyPlaceholder") || apiKey === "AIzaSy...";
+    const apiKey = getGeminiApiKey();
+    const isMock = !apiKey;
 
     if (!isMock) {
       try {

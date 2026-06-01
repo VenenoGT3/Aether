@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { guardApiPost } from "@/lib/api/guard";
+import { AiDiscoverBodySchema } from "@/lib/api/schemas";
+import { getGeminiApiKey } from "@/lib/env.server";
 
 interface CampaignItem {
   id: string;
@@ -30,17 +33,18 @@ interface MatchResponse {
 
 export async function POST(request: Request) {
   try {
-    const { creator, campaigns }: { creator: CreatorProfile; campaigns: CampaignItem[] } = await request.json();
+    const guarded = await guardApiPost(request, {
+      schema: AiDiscoverBodySchema,
+      rateLimit: "apply",
+      routeKey: "ai/discover",
+      auth: true,
+    });
+    if (!guarded.ok) return guarded.response;
 
-    if (!creator || !campaigns || !Array.isArray(campaigns)) {
-      return NextResponse.json(
-        { error: "Creator profile and campaigns list are required" },
-        { status: 400 }
-      );
-    }
+    const { creator, campaigns } = guarded.ctx.data;
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isMock = !apiKey || apiKey.startsWith("AIzaSyPlaceholder") || apiKey === "AIzaSy...";
+    const apiKey = getGeminiApiKey();
+    const isMock = !apiKey;
 
     if (!isMock) {
       try {

@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { guardApiPost } from "@/lib/api/guard";
+import { AiSafetyBodySchema } from "@/lib/api/schemas";
+import { getGeminiApiKey } from "@/lib/env.server";
 
 interface SafetyRequest {
   text: string;
@@ -23,14 +26,18 @@ interface SafetyResponse {
 
 export async function POST(request: Request) {
   try {
-    const { text, platform, guidelines }: SafetyRequest = await request.json();
+    const guarded = await guardApiPost(request, {
+      schema: AiSafetyBodySchema,
+      rateLimit: "ai",
+      routeKey: "ai/safety",
+      auth: true,
+    });
+    if (!guarded.ok) return guarded.response;
 
-    if (text === undefined) {
-      return NextResponse.json({ error: "Text content is required" }, { status: 400 });
-    }
+    const { text, platform, guidelines } = guarded.ctx.data;
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isMock = !apiKey || apiKey.startsWith("AIzaSyPlaceholder") || apiKey === "AIzaSy...";
+    const apiKey = getGeminiApiKey();
+    const isMock = !apiKey;
 
     if (!isMock) {
       try {

@@ -2,12 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripeServer } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isMockMode } from "@/lib/env";
+import { getStripeWebhookSecret } from "@/lib/env.server";
 import { verifyStripeWebhookSignature } from "@/lib/campaign-lifecycle";
+import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/api/rate-limit";
+import { rateLimitError } from "@/lib/api/response";
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(
+    `webhook:stripe:${ip}`,
+    RATE_LIMITS.webhook.limit,
+    RATE_LIMITS.webhook.windowMs
+  );
+  if (!rl.allowed) {
+    return rateLimitError(rl.retryAfterSec ?? 60);
+  }
+
   const body = await req.text();
   const sig = req.headers.get("stripe-signature") || "";
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = isMockMode
+    ? process.env.STRIPE_WEBHOOK_SECRET?.trim()
+    : getStripeWebhookSecret();
 
   const sigCheck = verifyStripeWebhookSignature(
     !!webhookSecret,
