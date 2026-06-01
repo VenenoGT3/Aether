@@ -1,0 +1,244 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --font-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;  /* 12px */
+  --radius-lg: 1rem;    /* 16px */
+  --radius-xl: 1.25rem;  /* 20px */
+  --radius-2xl: 1.5rem;  /* 24px */
+  --radius-3xl: 2rem;    /* 32px */
+  --radius-4xl: 2.5rem;  /* 40px */
+}
+
+:root {
+  --background: oklch(0.985 0.002 240);
+  --foreground: oklch(0.14 0.006 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.14 0.006 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.14 0.006 240);
+  
+  /* Apple Blue Accent (#007AFF) */
+  --primary: oklch(0.56 0.21 254);
+  --primary-foreground: oklch(0.99 0 0);
+  
+  --secondary: oklch(0.94 0.008 240);
+  --secondary-foreground: oklch(0.2 0.01 240);
+  --muted: oklch(0.95 0.005 240);
+  --muted-foreground: oklch(0.5 0.01 240);
+  --accent: oklch(0.94 0.008 240);
+  --accent-foreground: oklch(0.2 0.01 240);
+  --destructive: oklch(0.58 0.22 24);
+  --border: oklch(0.92 0.005 240);
+  --input: oklch(0.92 0.005 240);
+  --ring: oklch(0.56 0.21 254 / 50%);
+  
+  --chart-1: oklch(0.56 0.21 254); /* Blue */
+  --chart-2: oklch(0.65 0.24 145); /* Green */
+  --chart-3: oklch(0.62 0.22 45);  /* Orange */
+  --chart-4: oklch(0.55 0.23 300); /* Purple */
+  --chart-5: oklch(0.58 0.21 15);  /* Red */
+  
+  --radius: 1.25rem; /* 20px Apple Card curve default */
+  
+  --shadow-apple-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-apple-md: 0 4px 12px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --shadow-apple-lg: 0 12px 24px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
+  
+  --sidebar: oklch(0.97 0.004 240);
+  --sidebar-foreground: oklch(0.2 0.01 240);
+  --sidebar-primary: oklch(0.56 0.21 254);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.008 240);
+  --sidebar-accent-foreground: oklch(0.2 0.01 240);
+  --sidebar-border: oklch(0.9 0.005 240);
+  --sidebar-ring: oklch(0.56 0.21 254 / 30%);
+
+  color-scheme: light dark;
+}
+
+.dark {
+  --background: oklch(0.08 0.005 240); /* Rich Dark Apple Canvas */
+  --foreground: oklch(0.98 0.003 240);
+  --card: oklch(0.14 0.007 240); /* Subtle greyish-black card */
+  --card-foreground: oklch(0.98 0.003 240);
+  --popover: oklch(0.14 0.007 240);
+  --popover-foreground: oklch(0.98 0.003 240);
+  
+  /* Accent stays Apple Blue (slightly brighter in dark mode) */
+  --primary: oklch(0.62 0.19 254);
+  --primary-foreground: oklch(0.08 0.005 240);
+  
+  --secondary: oklch(0.18 0.008 240);
+  --secondary-foreground: oklch(0.95 0.003 240);
+  --muted: oklch(0.18 0.008 240);
+  --muted-foreground: oklch(0.65 0.005 240);
+  --accent: oklch(0.18 0.008 240);
+  --accent-foreground: oklch(0.95 0.003 240);
+  --destructive: oklch(0.62 0.19 24);
+  --border: oklch(0.18 0.008 240);
+  --input: oklch(0.18 0.008 240);
+  --ring: oklch(0.62 0.19 254 / 50%);
+  
+  --chart-1: oklch(0.62 0.19 254);
+  --chart-2: oklch(0.7 0.2 145);
+  --chart-3: oklch(0.68 0.18 45);
+  --chart-4: oklch(0.62 0.19 300);
+  --chart-5: oklch(0.64 0.18 15);
+  
+  --shadow-apple-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-apple-md: 0 4px 12px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-apple-lg: 0 12px 24px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  --sidebar: oklch(0.11 0.006 240);
+  --sidebar-foreground: oklch(0.95 0.003 240);
+  --sidebar-primary: oklch(0.62 0.19 254);
+  --sidebar-primary-foreground: oklch(0.08 0.005 240);
+  --sidebar-accent: oklch(0.18 0.008 240);
+  --sidebar-accent-foreground: oklch(0.95 0.003 240);
+  --sidebar-border: oklch(0.16 0.007 240);
+  --sidebar-ring: oklch(0.62 0.19 254 / 30%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50 transition-colors duration-150;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-foreground;
+  }
+  html {
+    @apply font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  /* Premium minimalist scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: light-dark(oklch(0.8 0.005 240), oklch(0.25 0.008 240));
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: light-dark(oklch(0.7 0.005 240), oklch(0.3 0.008 240));
+  }
+}
+
+/* Glassmorphism effects */
+.glass-panel {
+  background: light-dark(rgba(255, 255, 255, 0.55), rgba(20, 20, 28, 0.55));
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.075));
+  box-shadow: var(--shadow-apple-md);
+}
+
+.glass-nav {
+  background: light-dark(rgba(255, 255, 255, 0.7), rgba(12, 12, 16, 0.65));
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-bottom: 1px solid light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+}
+
+/* Premium Apple card with subtle inner glow in dark mode */
+.apple-card {
+  border-radius: var(--radius-2xl); /* 24px */
+  background: light-dark(var(--card), var(--card));
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.035));
+  box-shadow: var(--shadow-apple-md);
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.apple-card:hover {
+  box-shadow: var(--shadow-apple-lg);
+  border-color: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
+}
+
+.dark .apple-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Premium Apple-style loading shimmer skeleton */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.apple-skeleton {
+  background: linear-gradient(
+    90deg,
+    light-dark(oklch(0.92 0.005 240), oklch(0.18 0.008 240)) 25%,
+    light-dark(oklch(0.95 0.005 240), oklch(0.23 0.008 240)) 37%,
+    light-dark(oklch(0.92 0.005 240), oklch(0.18 0.008 240)) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Utility to hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,194 @@
+import { NextResponse } from "next/server";
+
+interface SafetyRequest {
+  text: string;
+  platform: string;
+  guidelines: string[];
+}
+
+interface SafetyResponse {
+  isDisclosed: boolean;
+  hasProhibitedClaims: boolean;
+  guidelinesCompliant: boolean;
+  score: number;
+  disclosureFeedback: string;
+  prohibitedClaimsFeedback: string;
+  guidelinesFeedback: string;
+  flaggedIssues: Array<{
+    type: "warning" | "error" | "info";
+    message: string;
+    fix: string;
+  }>;
+}
+
+export async function POST(request: Request) {
+  try {
+    const { text, platform, guidelines }: SafetyRequest = await request.json();
+
+    if (text === undefined) {
+      return NextResponse.json({ error: "Text content is required" }, { status: 400 });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    const isMock = !apiKey || apiKey.startsWith("AIzaSyPlaceholder") || apiKey === "AIzaSy...";
+
+    if (!isMock) {
+      try {
+        const prompt = `You are the Content Safety, Compliance & Moderation Officer for Aether, a premium Apple-designed influencer marketing platform.
+You need to audit a creator's draft social media post caption or description for compliance (FTC disclosures, prohibited claims, FDA restrictions, and brand guidelines).
+
+Draft Content Text to Audit:
+"${text}"
+
+Platform: "${platform || "unknown"}"
+
+Campaign Guidelines to Check Against:
+${guidelines && guidelines.length > 0 ? guidelines.map((g, i) => `- ${g}`).join("\n") : "- None specified"}
+
+Please evaluate the content for:
+1. Sponsorship Disclosure: Does it contain clear FTC disclosure (e.g., #ad, #sponsored, #brandpartner, or "paid partnership")? (On platforms like Instagram/TikTok, #ad is standard).
+2. Prohibited/Restricted Claims: Does it claim the product can cure, prevent, or treat any medical condition or health disease (which is FDA prohibited)? Does it make extreme, unsubstantiated performance claims?
+3. Guideline Compliance: Does it follow the campaign guidelines?
+
+Please respond with a raw JSON object (and nothing else! Do not wrap in markdown \`\`\`json blocks, do not write any introductory or concluding text) that strictly complies with the following TypeScript interface:
+interface SafetyResponse {
+  isDisclosed: boolean;
+  hasProhibitedClaims: boolean;
+  guidelinesCompliant: boolean;
+  score: number; // 0 to 100 general safety/compliance score
+  disclosureFeedback: string; // short summary of disclosure check
+  prohibitedClaimsFeedback: string; // short summary of prohibited claims check
+  guidelinesFeedback: string; // short summary of guidelines compliance
+  flaggedIssues: Array<{
+    type: "warning" | "error" | "info";
+    message: string; // issue description
+    fix: string; // how to resolve
+  }>;
+}`;
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: prompt,
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.2,
+              },
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const resData = await response.json();
+          const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          
+          let cleanText = rawText.trim();
+          if (cleanText.startsWith("```json")) {
+            cleanText = cleanText.substring(7);
+          }
+          if (cleanText.endsWith("```")) {
+            cleanText = cleanText.substring(0, cleanText.length - 3);
+          }
+          cleanText = cleanText.trim();
+
+          const parsedReport: SafetyResponse = JSON.parse(cleanText);
+          return NextResponse.json({ success: true, report: parsedReport, generatedBy: "gemini" });
+        }
+        console.warn("Gemini Safety Audit returned error status, falling back to local verification.");
+      } catch (geminiError) {
+        console.error("Gemini Safety API call failed:", geminiError);
+      }
+    }
+
+    // High quality local fallback heuristic checker
+    const lowerText = text.toLowerCase();
+    
+    // 1. Disclosure Check
+    const hasDisclosure = lowerText.includes("#ad") || 
+                          lowerText.includes("#sponsored") || 
+                          lowerText.includes("paid partnership") ||
+                          lowerText.includes("#brandpartner") ||
+                          lowerText.includes("sponsored by");
+    
+    // 2. Prohibited Claims Check (e.g. cures, health, medicine, treats, prevents, disease, insomnia, etc.)
+    const prohibitedWords = ["cure", "cures", "prevent", "prevents", "treat", "treats", "disease", "diseases", "insomnia", "cancer", "clinical proof", "fda approved", "heal", "heals"];
+    const flaggedWords = prohibitedWords.filter(w => new RegExp(`\\b${w}\\b`).test(lowerText));
+    const hasProhibitedClaims = flaggedWords.length > 0;
+
+    // 3. Guideline Check
+    // Check if the caption includes brand mentions or typical guideline items
+    const hasBrandMention = lowerText.includes("aether");
+    const guidelinesCompliant = hasBrandMention;
+
+    const flaggedIssues: Array<{ type: "warning" | "error" | "info"; message: string; fix: string }> = [];
+
+    if (!hasDisclosure) {
+      flaggedIssues.push({
+        type: "error",
+        message: "No sponsorship disclosure detected.",
+        fix: "Add #ad or #sponsored to the beginning or end of your post caption to comply with FTC guidelines."
+      });
+    }
+
+    if (hasProhibitedClaims) {
+      flaggedIssues.push({
+        type: "error",
+        message: `Prohibited health claim detected: use of word "${flaggedWords.join(", ")}".`,
+        fix: "Content creators cannot claim a product cures or treats a health condition. Rephrase to describe general comfort or lifestyle benefits."
+      });
+    }
+
+    if (!hasBrandMention) {
+      flaggedIssues.push({
+        type: "warning",
+        message: "Brand tag or mention '@Aether' is missing.",
+        fix: "Include a tag or direct mention of the Aether brand to satisfy primary visual guidelines."
+      });
+    }
+
+    // Score calculations
+    let score = 100;
+    if (!hasDisclosure) score -= 35;
+    if (hasProhibitedClaims) score -= 45;
+    if (!hasBrandMention) score -= 15;
+    if (score < 10) score = 10;
+
+    const report: SafetyResponse = {
+      isDisclosed: hasDisclosure,
+      hasProhibitedClaims,
+      guidelinesCompliant,
+      score,
+      disclosureFeedback: hasDisclosure 
+        ? "Clear sponsorship disclosure found." 
+        : "FTC violation: missing sponsorship disclosure.",
+      prohibitedClaimsFeedback: hasProhibitedClaims
+        ? `FDA violation: text makes prohibited claims using: "${flaggedWords.join(", ")}".`
+        : "Safe: no prohibited medical or health claims detected.",
+      guidelinesFeedback: guidelinesCompliant
+        ? "Basic guideline checks passed."
+        : "Brand guidelines are partially ignored (missing tag).",
+      flaggedIssues
+    };
+
+    return NextResponse.json({ success: true, report, generatedBy: "fallback_heuristics" });
+
+  } catch (error: any) {
+    console.error("Error in safety route:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}

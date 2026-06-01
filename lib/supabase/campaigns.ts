@@ -1,0 +1,291 @@
+import { supabase, isMockMode, getMockUser } from "./client";
+import { DbCampaign, CampaignStatus } from "@/types/database";
+
+const LOCAL_STORAGE_KEY = "aether-campaigns";
+
+// Pre-seeded mock campaigns for initial development
+const DEFAULT_MOCK_CAMPAIGNS = [
+  {
+    id: "camp_1",
+    business_id: "mock-business-uuid",
+    title: "Summer Tech Capsule",
+    description: "Looking for minimal design and aesthetic creators to review the Aether mechanical keyboard and desk mat capsule collection.",
+    budget_total: 2500,
+    budget_allocated: 2500,
+    target_niches: ["Tech", "Design", "Minimal"],
+    target_audience: {
+      location: "United States",
+      ageRange: "18-34",
+      gender: "All",
+      minimumFollowers: 15000
+    },
+    deliverables: [
+      { type: "post", quantity: 1, details: "Instagram carousel showing desk setup aesthetics" },
+      { type: "video", quantity: 1, details: "15s TikTok showcasing keyboard sound profile" }
+    ],
+    timeline: {
+      startDate: "2026-06-01",
+      endDate: "2026-06-15",
+      draftDueDate: "2026-06-08"
+    },
+    status: "in_progress" as CampaignStatus,
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    influencer: {
+      name: "Marcus Vance",
+      handle: "@marcusv",
+      avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
+    }
+  },
+  {
+    id: "camp_2",
+    business_id: "mock-business-uuid",
+    title: "Aether Lifestyle Launch",
+    description: "Launch campaign for the new Aether workspace organization application. Emphasize digital productivity and mindfulness.",
+    budget_total: 4500,
+    budget_allocated: 0,
+    target_niches: ["Lifestyle", "Design", "Wellness"],
+    target_audience: {
+      location: "Global",
+      ageRange: "21-45",
+      gender: "All",
+      minimumFollowers: 30000
+    },
+    deliverables: [
+      { type: "video", quantity: 1, details: "YouTube integration (60s dedicated review section)" },
+      { type: "story", quantity: 3, details: "Instagram stories with links to sign up page" }
+    ],
+    timeline: {
+      startDate: "2026-06-15",
+      endDate: "2026-06-30",
+      draftDueDate: "2026-06-22"
+    },
+    status: "open" as CampaignStatus,
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
+  },
+  {
+    id: "camp_3",
+    business_id: "mock-business-uuid",
+    title: "Minimalist Workspace Review",
+    description: "Review of aesthetic workspace desk setups and recommendations for minimalist organizer trays.",
+    budget_total: 1200,
+    budget_allocated: 1200,
+    target_niches: ["Minimal", "Design"],
+    target_audience: {
+      location: "Europe",
+      ageRange: "18-30",
+      gender: "All",
+      minimumFollowers: 8000
+    },
+    deliverables: [
+      { type: "post", quantity: 2, details: "High-resolution photos showcasing organizer tray placement" }
+    ],
+    timeline: {
+      startDate: "2026-05-10",
+      endDate: "2026-05-25",
+      draftDueDate: "2026-05-18"
+    },
+    status: "completed" as CampaignStatus,
+    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    influencer: {
+      name: "Dave Miller",
+      handle: "@davem",
+      avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
+    }
+  }
+];
+
+// Helper to load mock campaigns from localStorage
+function getMockCampaigns(): any[] {
+  if (typeof window === "undefined") return DEFAULT_MOCK_CAMPAIGNS;
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (!stored) {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_MOCK_CAMPAIGNS));
+    return DEFAULT_MOCK_CAMPAIGNS;
+  }
+  try {
+    return JSON.parse(stored);
+  } catch (e) {
+    return DEFAULT_MOCK_CAMPAIGNS;
+  }
+}
+
+// Helper to save mock campaigns to localStorage
+function saveMockCampaigns(campaigns: any[]) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(campaigns));
+    window.dispatchEvent(new Event("campaigns-update"));
+  }
+}
+
+/**
+ * Fetch all campaigns for the current business
+ */
+export async function getCampaignsAction() {
+  if (isMockMode) {
+    const campaigns = getMockCampaigns();
+    return { success: true, campaigns };
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    // Fetch campaigns created by this business
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("business_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return { success: true, campaigns: data };
+  } catch (error: any) {
+    console.error("Error in getCampaignsAction:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get campaign by ID
+ */
+export async function getCampaignByIdAction(id: string) {
+  if (isMockMode) {
+    const campaigns = getMockCampaigns();
+    const campaign = campaigns.find((c) => c.id === id);
+    if (!campaign) return { success: false, error: "Campaign not found" };
+    return { success: true, campaign };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return { success: true, campaign: data };
+  } catch (error: any) {
+    console.error("Error in getCampaignByIdAction:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Create a new campaign
+ */
+export async function createCampaignAction(campaignData: any) {
+  const mockUser = getMockUser();
+  
+  if (isMockMode) {
+    const campaigns = getMockCampaigns();
+    const newCampaign = {
+      ...campaignData,
+      id: "camp_" + Math.random().toString(36).substring(2, 9),
+      business_id: mockUser.id,
+      budget_allocated: 0,
+      status: campaignData.status || "draft",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    campaigns.unshift(newCampaign);
+    saveMockCampaigns(campaigns);
+    return { success: true, campaign: newCampaign };
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data, error } = await supabase
+      .from("campaigns")
+      .insert({
+        business_id: user.id,
+        title: campaignData.title,
+        description: campaignData.description,
+        budget_total: campaignData.budget_total,
+        target_niches: campaignData.target_niches || [],
+        target_audience: campaignData.target_audience || {},
+        deliverables: campaignData.deliverables || [],
+        timeline: campaignData.timeline || {},
+        status: campaignData.status || "draft"
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, campaign: data };
+  } catch (error: any) {
+    console.error("Error in createCampaignAction:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update campaign status
+ */
+export async function updateCampaignStatusAction(id: string, status: CampaignStatus) {
+  if (isMockMode) {
+    const campaigns = getMockCampaigns();
+    const index = campaigns.findIndex((c) => c.id === id);
+    if (index === -1) return { success: false, error: "Campaign not found" };
+    
+    campaigns[index] = {
+      ...campaigns[index],
+      status,
+      updated_at: new Date().toISOString()
+    };
+    
+    saveMockCampaigns(campaigns);
+    return { success: true, campaign: campaigns[index] };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .update({ status })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, campaign: data };
+  } catch (error: any) {
+    console.error("Error in updateCampaignStatusAction:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Helper to subscribe to campaign changes (Realtime)
+ */
+export function subscribeToCampaignChanges(callback: (payload: any) => void) {
+  if (isMockMode) {
+    // Client-side local storage event triggers
+    const handleUpdate = () => {
+      const campaigns = getMockCampaigns();
+      callback({ new: campaigns });
+    };
+    window.addEventListener("campaigns-update", handleUpdate);
+    return () => window.removeEventListener("campaigns-update", handleUpdate);
+  }
+
+  const channel = supabase
+    .channel("custom-campaigns-channel")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "campaigns" },
+      (payload) => {
+        callback(payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
