@@ -44,7 +44,7 @@ function CallbackContent() {
             stripe_onboarding_completed: true,
             onboarded: true
           };
-          localStorage.setItem(`aether-profile-${profile.id}`, JSON.stringify(updated));
+          localStorage.setItem(`aether-profile-${profile.user_id}`, JSON.stringify(updated));
           document.cookie = `aether-onboarded=true; path=/; max-age=31536000; SameSite=Lax`;
           window.dispatchEvent(new Event("role-change"));
         } else {

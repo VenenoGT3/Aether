@@ -185,7 +185,7 @@ export async function createCampaignAction(campaignData: any) {
     const newCampaign = {
       ...campaignData,
       id: "camp_" + Math.random().toString(36).substring(2, 9),
-      business_id: mockUser.id,
+      business_id: mockUser.user_id,
       budget_allocated: 0,
       status: campaignData.status || "draft",
       created_at: new Date().toISOString(),

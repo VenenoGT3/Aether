@@ -72,7 +72,7 @@ export default function InfluencerCampaignsPage() {
       setLoading(true);
       const profile = await getClientProfile();
       setUser(profile);
-      const influencerId = profile?.id || "mock-influencer-uuid";
+      const influencerId = profile?.user_id || "mock-influencer-uuid";
 
       if (isMockMode) {
         // Seed default mock participations if not in LocalStorage

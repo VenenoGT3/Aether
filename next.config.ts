@@ -1,11 +1,19 @@
 import type { NextConfig } from "next";
 
-const nextConfig: any = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+// Validate production env at build time (skipped when AETHER_MOCK_MODE=true)
+if (process.env.AETHER_MOCK_MODE !== "true") {
+  try {
+    const { validateEnv, isMockMode } = require("./lib/env") as typeof import("./lib/env");
+    if (!isMockMode) validateEnv();
+  } catch (e) {
+    if (process.env.NODE_ENV === "production") throw e;
+  }
+}
+
+const nextConfig: NextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // Enforce type safety in production builds
+    ignoreBuildErrors: false,
   },
 };
 

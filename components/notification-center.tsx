@@ -48,7 +48,7 @@ export function NotificationCenter() {
   // Load notifications
   const loadNotifications = async () => {
     if (!user) return;
-    const { data } = await getNotifications(user.id);
+    const { data } = await getNotifications(user.user_id);
     setNotifications(data);
   };
 
@@ -67,14 +67,14 @@ export function NotificationCenter() {
     let channel: any = null;
     if (!isMockMode && user) {
       channel = supabase
-        .channel(`realtime-notifications-${user.id}`)
+        .channel(`realtime-notifications-${user.user_id}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: "notifications",
-            filter: `user_id=eq.${user.id}`
+            filter: `user_id=eq.${user.user_id}`
           },
           () => {
             loadNotifications();
@@ -91,7 +91,7 @@ export function NotificationCenter() {
         supabase.removeChannel(channel);
       }
     };
-  }, [user?.id]);
+  }, [user?.user_id]);
 
   // Click outside listener
   useEffect(() => {
@@ -187,7 +187,7 @@ export function NotificationCenter() {
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await markAllNotificationsRead(user.id);
+    await markAllNotificationsRead(user.user_id);
     loadNotifications();
     toast.success("All notifications marked as read.");
   };

@@ -19,7 +19,8 @@ export interface PortfolioItem {
 }
 
 export interface Profile {
-  id: string;
+  /** FK to auth.users.id — matches profiles.user_id in the database */
+  user_id: string;
   role: UserRole;
   full_name: string;
   avatar_url: string;

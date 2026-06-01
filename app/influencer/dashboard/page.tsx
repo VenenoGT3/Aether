@@ -121,7 +121,7 @@ export default function InfluencerDashboard() {
         const { data: postsData, error } = await supabase
           .from("posts")
           .select("post_url, platform, participation_id, participations!inner(influencer_id)")
-          .eq("participations.influencer_id", user.id);
+          .eq("participations.influencer_id", user.user_id);
 
         if (!postsData || postsData.length === 0) {
           toast.success(t("No live content URLs submitted yet."), { id: "refresh-metrics" });
@@ -234,7 +234,7 @@ export default function InfluencerDashboard() {
         engagement_rate: Math.min(8.5, (user.engagement_rate || 4.8) + 0.35)
       };
       
-      localStorage.setItem(`aether-profile-${user.id}`, JSON.stringify(updatedUser));
+      localStorage.setItem(`aether-profile-${user.user_id}`, JSON.stringify(updatedUser));
       window.dispatchEvent(new Event("storage"));
     }
 

@@ -188,7 +188,7 @@ export default function DiscoverPage() {
         // 2. Fetch participations to flag already applied
         const storedParts = localStorage.getItem("aether-mock-participations");
         const partsList = storedParts ? JSON.parse(storedParts) : [];
-        const influencerId = profile?.id || "mock-influencer-uuid";
+        const influencerId = profile?.user_id || "mock-influencer-uuid";
         
         // Find campaigns already applied
         const appliedIds = new Set<string>();
@@ -244,7 +244,7 @@ export default function DiscoverPage() {
           const { data: parts } = await supabase
             .from("participations")
             .select("campaign_id")
-            .eq("influencer_id", profile.id);
+            .eq("influencer_id", profile.user_id);
           
           const appliedIds = new Set<string>((parts || []).map(p => p.campaign_id));
           setAppliedCampaignIds(appliedIds);
@@ -322,7 +322,7 @@ export default function DiscoverPage() {
   const handleExpressInterest = async (campaign: Campaign) => {
     toast.loading(t("Sending quick application..."), { id: "express-interest" });
     try {
-      const influencerId = user?.id || "mock-influencer-uuid";
+      const influencerId = user?.user_id || "mock-influencer-uuid";
       const proposed = campaign.budget_total;
 
       if (isMockMode) {
@@ -443,7 +443,7 @@ export default function DiscoverPage() {
 
     toast.loading(t("Submitting application..."), { id: "apply" });
     try {
-      const influencerId = user?.id || "mock-influencer-uuid";
+      const influencerId = user?.user_id || "mock-influencer-uuid";
 
       if (isMockMode) {
         // Create participation

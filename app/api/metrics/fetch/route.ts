@@ -1,19 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
 
-// Initialize Server-side Supabase client for DB operations in API routes
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const isMockMode = 
-  !supabaseUrl || 
-  !supabaseAnonKey || 
-  supabaseUrl.includes("placeholder-url") || 
-  supabaseUrl.includes("your-project-id");
-
-const supabase = createClient(
-  supabaseUrl || "https://placeholder-url.supabase.co",
-  supabaseAnonKey || "placeholder-anon-key"
-);
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
 
 /**
  * Detect social platform from post URL

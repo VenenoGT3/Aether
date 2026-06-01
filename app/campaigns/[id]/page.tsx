@@ -489,7 +489,7 @@ export default function CampaignDetailPage() {
 
     const myMsg = {
       id: messageId,
-      sender_id: user.id,
+      sender_id: user.user_id,
       sender_name: user.role === "business" ? brandName : creatorName,
       sender_avatar: user.avatar_url,
       role: user.role,
@@ -554,7 +554,7 @@ export default function CampaignDetailPage() {
         // Create notification & mock email
         import("@/lib/supabase/notifications").then(n => {
           n.createNotification(
-            user.id,
+            user.user_id,
             `New message on ${campaign?.title || "Campaign"}`,
             replyContent,
             "message"
@@ -583,7 +583,7 @@ export default function CampaignDetailPage() {
           .from("messages")
           .insert({
             participation_id: activeParticipantId,
-            sender_id: user.id,
+            sender_id: user.user_id,
             content: text
           });
         if (error) throw error;
@@ -622,7 +622,7 @@ export default function CampaignDetailPage() {
       }
     } else {
       // Influencer logs in: select their own profile participant details
-      selectedPartId = activeUser.id;
+      selectedPartId = activeUser.user_id;
     }
 
     setCampaign(currentCampaign);
@@ -811,7 +811,7 @@ export default function CampaignDetailPage() {
     
     // Add Marcus Vance as participant in applied state
     const marcusParticipant: Participant = {
-      id: user.id,
+      id: user.user_id,
       fullName: user.full_name,
       handle: user.social_handle || `@${user.full_name.toLowerCase().replace(/\s+/g, "")}`,
       avatarUrl: user.avatar_url,
@@ -822,11 +822,11 @@ export default function CampaignDetailPage() {
 
     const updated = {
       ...campaign,
-      participants: [...campaign.participants.filter(p => p.id !== user.id), marcusParticipant]
+      participants: [...campaign.participants.filter(p => p.id !== user.user_id), marcusParticipant]
     };
 
     persistCampaignState(updated);
-    setActiveParticipantId(user.id);
+    setActiveParticipantId(user.user_id);
     setIsApplying(false);
     
     toast.success("Application submitted successfully!", {
@@ -2036,7 +2036,7 @@ export default function CampaignDetailPage() {
           {/* Messages list */}
           <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 mb-4 flex flex-col min-h-[100px]">
             {chatMessages.map((msg, index) => {
-              const isMe = msg.sender_id === user.id || msg.role === user.role;
+              const isMe = msg.sender_id === user.user_id || msg.role === user.role;
               const isSystem = msg.role === "system";
 
               if (isSystem) {

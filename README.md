@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Aether
 
-## Getting Started
+Aether is an influencer marketing platform that connects **businesses** with **micro-influencers** for sponsored campaigns. Brands create briefs, creators apply, both parties negotiate in-app, funds sit in Stripe escrow, and payouts release when deliverables are approved.
 
-First, run the development server:
+## Scope: Campaign Lifecycle First
+
+We are deliberately making the central campaign lifecycle **boringly reliable** before adding more features:
+
+**Create → Apply → Approve → Fund → Pay → Measure**
+
+| Stage | Status |
+|-------|--------|
+| Campaign creation & management | Production-ready |
+| Creator discovery & applications | Production-ready |
+| Pitch review & approval | Production-ready |
+| Stripe escrow funding & payout release | Production-ready |
+| Post submission & brand approval | Production-ready |
+| AI brief/pitch generation | Demo / polish |
+| Live metrics scraping (SociaVault) | Demo / polish |
+| Automated cron metrics refresh | Production-ready (with `CRON_SECRET`) |
+
+## Mock Mode
+
+Run the full UI locally without Supabase or Stripe credentials:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+AETHER_MOCK_MODE=true npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+When `AETHER_MOCK_MODE=true`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Auth uses browser cookies (`aether-session`, `aether-role`, `aether-onboarded`)
+- Campaigns, participations, and transactions persist in `localStorage`
+- Stripe actions return simulated success
+- Webhooks and cron endpoints accept requests without secrets
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+When `AETHER_MOCK_MODE=false` (production), the app **hard-fails at startup** if any required environment variable is missing.
 
-## Learn More
+## Environment Variables
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Required (production) | Description |
+|----------|----------------------|-------------|
+| `AETHER_MOCK_MODE` | — | `true` for local demo; `false` or unset with real credentials for production |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key (webhooks, system updates) |
+| `STRIPE_SECRET_KEY` | Yes | Stripe secret key |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Yes | Stripe publishable key |
+| `STRIPE_WEBHOOK_SECRET` | Yes | Webhook signing secret |
+| `NEXT_PUBLIC_APP_URL` | Yes | Public app URL (cron callbacks) |
+| `CRON_SECRET` | Yes | Bearer token for `/api/cron/metrics` |
+| `GEMINI_API_KEY` | No | AI brief/pitch generation |
+| `RESEND_API_KEY` | No | Transactional email |
+| `SOCIAVAULT_API_KEY` | No | Social metrics scraping |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Copy `.env.example` to `.env.local` and fill in values.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Supabase Setup
 
-## Deploy on Vercel
+1. Create a project at [supabase.com](https://supabase.com).
+2. Run migrations in order from `supabase/migrations/`:
+   ```bash
+   supabase db push
+   # or apply each SQL file in the Supabase SQL editor
+   ```
+3. Optional: run `supabase/seed.sql` for demo data.
+4. Copy **Project URL**, **anon key**, and **service_role key** into `.env.local`.
+5. Enable email auth and configure redirect URLs for your app domain.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Schema note
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The `profiles` table uses `user_id` as its primary key (FK to `auth.users.id`). **Do not query `profiles.id`** — it does not exist.
+
+## Stripe Setup
+
+1. Create a [Stripe](https://stripe.com) account and enable **Connect**.
+2. Add keys to `.env.local` (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`).
+3. Configure a webhook endpoint pointing to `/api/webhooks/stripe` for:
+   - `payment_intent.succeeded`
+   - `account.updated`
+   - `transfer.created`
+4. Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
+5. Local testing:
+   ```bash
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   ```
+
+## Development
+
+```bash
+npm install
+cp .env.example .env.local   # set AETHER_MOCK_MODE=true for quick start
+npm run dev                  # http://localhost:3000
+npm test                     # unit tests (campaign lifecycle, RLS, auth)
+npm run build                # production build (enforces TypeScript + ESLint)
+```
+
+## Production vs Demo Features
+
+| Feature | Production | Demo-only |
+|---------|------------|-----------|
+| Auth (Supabase) | Yes | Mock cookies |
+| Campaign CRUD | Yes | localStorage in mock |
+| Participations & applications | Yes | localStorage in mock |
+| Escrow fund / release | Yes (Stripe) | Simulated |
+| Stripe Connect onboarding | Yes | Simulated |
+| Post approval workflow | Yes | Yes |
+| AI pitch/brief (`/api/ai/*`) | Needs `GEMINI_API_KEY` | Mock responses without key |
+| Metrics cron | Yes + `CRON_SECRET` | Skipped in mock |
+| Email notifications | Needs `RESEND_API_KEY` | Logged only |
+
+## Tech Stack
+
+- **Next.js 16** (App Router, React Server Components)
+- **Supabase** (Auth, Postgres, RLS, Realtime)
+- **Stripe Connect** (escrow, payouts)
+- **Tailwind CSS v4** + shadcn/ui
+- **Vitest** (unit tests)
+
+## License
+
+Private — see repository owner for terms.

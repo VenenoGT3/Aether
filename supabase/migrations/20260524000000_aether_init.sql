@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 -- public.profiles
+-- profiles.user_id is the FK to auth.users.id — do not use .id
 CREATE TABLE IF NOT EXISTS public.profiles (
     user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL DEFAULT '',

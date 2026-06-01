@@ -1,29 +1,18 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { Profile, UserRole } from "@/types";
+import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
+
 export type { Profile };
+export { isMockMode };
 
-// Safe loading of environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-// Detect if we are running in mock mode
-export const isMockMode = 
-  !supabaseUrl || 
-  !supabaseAnonKey || 
-  supabaseUrl.includes("placeholder-url") || 
-  supabaseUrl.includes("your-project-id") ||
-  supabaseAnonKey.includes("placeholder-anon-key") ||
-  supabaseAnonKey.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
-
-// Real client instantiation (will fail gracefully if variables are placeholders/missing)
 export const supabase = createSupabaseClient(
-  supabaseUrl || "https://placeholder-url.supabase.co", 
-  supabaseAnonKey || "placeholder-anon-key"
+  getSupabaseUrl(),
+  getSupabaseAnonKey()
 );
 
 // Active mock user templates
 export const MOCK_BUSINESS_USER: Profile = {
-  id: "mock-business-uuid",
+  user_id: "mock-business-uuid",
   role: "business",
   full_name: "Sarah Jenkins",
   avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
@@ -39,7 +28,7 @@ export const MOCK_BUSINESS_USER: Profile = {
 };
 
 export const MOCK_INFLUENCER_USER: Profile = {
-  id: "mock-influencer-uuid",
+  user_id: "mock-influencer-uuid",
   role: "influencer",
   full_name: "Marcus Vance",
   avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
@@ -93,12 +82,12 @@ export function setMockUserRole(role: UserRole) {
   if (typeof window !== "undefined") {
     localStorage.setItem("aether-mock-role", role);
     const mockUser = role === "influencer" ? MOCK_INFLUENCER_USER : MOCK_BUSINESS_USER;
-    localStorage.setItem("aether-active-uid", mockUser.id);
-    localStorage.setItem(`aether-profile-${mockUser.id}`, JSON.stringify(mockUser));
+    localStorage.setItem("aether-active-uid", mockUser.user_id);
+    localStorage.setItem(`aether-profile-${mockUser.user_id}`, JSON.stringify(mockUser));
     
     // Force cookies for server-side middleware and actions
     document.cookie = `aether-role=${role}; path=/; max-age=31536000; SameSite=Lax`;
-    document.cookie = `aether-session=mock-token-${mockUser.id}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = `aether-session=mock-token-${mockUser.user_id}; path=/; max-age=31536000; SameSite=Lax`;
     document.cookie = `aether-onboarded=true; path=/; max-age=31536000; SameSite=Lax`;
     
     window.dispatchEvent(new Event("role-change"));
@@ -116,13 +105,13 @@ export async function signUpClient(email: string, password: string, fullName: st
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 800));
     
-    const id = `mock-user-${Math.random().toString(36).substr(2, 9)}`;
+    const user_id = `mock-user-${Math.random().toString(36).substr(2, 9)}`;
     const avatar_url = role === "business" 
       ? "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
       : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80";
       
     const newProfile: Profile = {
-      id,
+      user_id,
       role,
       full_name: fullName,
       avatar_url,
@@ -131,18 +120,18 @@ export async function signUpClient(email: string, password: string, fullName: st
     };
     
     if (typeof window !== "undefined") {
-      localStorage.setItem("aether-active-uid", id);
+      localStorage.setItem("aether-active-uid", user_id);
       localStorage.setItem("aether-mock-role", role);
-      localStorage.setItem(`aether-profile-${id}`, JSON.stringify(newProfile));
+      localStorage.setItem(`aether-profile-${user_id}`, JSON.stringify(newProfile));
       
       document.cookie = `aether-role=${role}; path=/; max-age=31536000; SameSite=Lax`;
-      document.cookie = `aether-session=mock-token-${id}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `aether-session=mock-token-${user_id}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `aether-onboarded=false; path=/; max-age=31536000; SameSite=Lax`;
       
       window.dispatchEvent(new Event("role-change"));
     }
     
-    return { data: { user: { id, email, user_metadata: { role, full_name: fullName } } }, error: null };
+    return { data: { user: { id: user_id, email, user_metadata: { role, full_name: fullName } } }, error: null };
   } else {
     // Real Supabase Auth
     const { data, error } = await supabase.auth.signUp({
@@ -187,7 +176,7 @@ export async function signInClient(email: string, password: string) {
               const parsed = JSON.parse(val);
               // Since we don't store passwords, we simulate matching by email if name contains part of email
               const emailPrefix = email.split("@")[0].toLowerCase();
-              if (parsed.full_name?.toLowerCase().includes(emailPrefix) || parsed.id.includes(emailPrefix)) {
+              if (parsed.full_name?.toLowerCase().includes(emailPrefix) || parsed.user_id.includes(emailPrefix)) {
                 foundUser = parsed;
                 break;
               }
@@ -197,14 +186,14 @@ export async function signInClient(email: string, password: string) {
       }
       
       if (foundUser) {
-        activeId = foundUser.id;
+        activeId = foundUser.user_id;
         role = foundUser.role;
       } else {
         // Fallback based on email domain or string contains
         const isInfluencerEmail = email.toLowerCase().includes("creator") || email.toLowerCase().includes("influencer");
         role = isInfluencerEmail ? "influencer" : "business";
         const defaultUser = role === "influencer" ? MOCK_INFLUENCER_USER : MOCK_BUSINESS_USER;
-        activeId = defaultUser.id;
+        activeId = defaultUser.user_id;
         localStorage.setItem(`aether-profile-${activeId}`, JSON.stringify(defaultUser));
       }
       
@@ -230,13 +219,15 @@ export async function signInClient(email: string, password: string) {
     
     if (data?.user) {
       // Fetch user profile to set role and onboarded cookies
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role, onboarded")
-        .eq("id", data.user.id)
-        .single();
-        
-      const userRole = profile?.role || data.user.app_metadata?.role || "influencer";
+      const [{ data: profile }, { data: userRow }] = await Promise.all([
+        supabase.from("profiles").select("onboarded").eq("user_id", data.user.id).single(),
+        supabase.from("users").select("role").eq("id", data.user.id).single(),
+      ]);
+
+      const userRole =
+        (userRow?.role as UserRole) ||
+        (data.user.app_metadata?.role as UserRole) ||
+        "influencer";
       const isOnboarded = profile?.onboarded ?? false;
       
       document.cookie = `aether-role=${userRole}; path=/; max-age=31536000; SameSite=Lax`;
@@ -275,16 +266,17 @@ export async function getClientProfile(): Promise<Profile | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-    
-  if (data) {
+  const [{ data: profile }, { data: userRow }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+    supabase.from("users").select("role").eq("id", user.id).single(),
+  ]);
+
+  if (profile) {
     return {
-      ...data,
-      email: user.email
+      ...profile,
+      user_id: profile.user_id,
+      role: (userRow?.role as UserRole) || "influencer",
+      email: user.email,
     } as Profile;
   }
   return null;
@@ -296,7 +288,7 @@ export async function updateClientProfile(data: Partial<Profile>): Promise<{ dat
     const updated = { ...profile, ...data };
     
     if (typeof window !== "undefined") {
-      localStorage.setItem(`aether-profile-${profile.id}`, JSON.stringify(updated));
+      localStorage.setItem(`aether-profile-${profile.user_id}`, JSON.stringify(updated));
       document.cookie = `aether-onboarded=${updated.onboarded ? "true" : "false"}; path=/; max-age=31536000; SameSite=Lax`;
       window.dispatchEvent(new Event("role-change"));
     }
@@ -306,10 +298,11 @@ export async function updateClientProfile(data: Partial<Profile>): Promise<{ dat
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { data: null, error: new Error("User not authenticated") };
     
+    const { role: _role, user_id: _uid, email: _email, ...profileFields } = data;
     const { data: updated, error } = await supabase
       .from("profiles")
-      .update(data)
-      .eq("id", user.id)
+      .update(profileFields)
+      .eq("user_id", user.id)
       .select()
       .single();
       
