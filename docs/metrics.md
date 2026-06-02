@@ -1,3 +1,7 @@
+> ⚠️ **Outdated — describes the original fixed-fee metrics/scraping approach.** View
+> tracking is now handled by the worker's provider abstraction (Ayrshare / simulated)
+> feeding the earnings pipeline. See [HANDOFF.md](../HANDOFF.md).
+
 # Aether Social Metrics Monitoring System
 
 This document outlines how Aether automatically tracks and monitors social media deliverables (Instagram Reels + TikTok videos) to drive real-time Live ROI metrics, campaign payouts, and brand dashboards.

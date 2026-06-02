@@ -1,3 +1,7 @@
+> ⚠️ **Outdated — predates the performance migration and the worker.** For current
+> setup (migrations, worker, Redis, Stripe pool funding) see [SETUP.md](../SETUP.md);
+> for state and risks see [HANDOFF.md](../HANDOFF.md).
+
 # How to Launch Aether Today: Live Deployment Guide
 
 This guide details the end-to-end operational blueprint to deploy and launch Aether in a live production environment. 

@@ -1,3 +1,7 @@
+> ⚠️ **Outdated — describes the original fixed-fee escrow model.** Aether has since
+> migrated to a performance-based UGC + clipping platform (pay-per-view / CPM).
+> See [HANDOFF.md](../HANDOFF.md) and [README.md](../README.md) for the current state.
+
 # Aether Platform Specification & Architecture Plan
 
 Aether is a premium, Apple-designed influencer marketing platform tailored for microinfluencers and businesses. This document details the visual style guide, technical architecture, folder structure, database schema, and payment flows.

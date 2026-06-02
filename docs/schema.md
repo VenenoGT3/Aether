@@ -1,3 +1,9 @@
+> ⚠️ **Outdated — describes the original fixed-fee escrow schema.** The performance
+> migration added `clips`, `view_snapshots`, `earnings`, `payouts` and performance
+> columns on `campaigns`/`participations`. The authoritative schema is the ordered
+> set in `supabase/migrations/` (see [SETUP.md](../SETUP.md)); overview in
+> [HANDOFF.md](../HANDOFF.md).
+
 # Aether Database Schema Specification v1.0
 
 This document defines the PostgreSQL schema designed for Aether, built on Supabase. It includes table structures, Row-Level Security (RLS) policies, database triggers, index optimizations, and future AI matchmaking stubs.
