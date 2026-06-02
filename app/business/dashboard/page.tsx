@@ -660,7 +660,7 @@ export default function BusinessDashboard() {
           review queue, billing). Labeled so the two models are distinct. */}
       <div className="flex items-center gap-3 mb-6 relative z-10">
         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          {t("Fixed-fee escrow campaigns")}
+          {t("Fixed-fee Escrow Activity")}
         </span>
         <span className="h-px flex-1 bg-border/20" />
       </div>

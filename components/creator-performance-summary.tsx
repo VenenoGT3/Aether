@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Film,
+  Info,
 } from "lucide-react";
 import { useTranslation } from "@/lib/translations";
 import {
@@ -65,10 +66,38 @@ export function CreatorPerformanceSummary() {
   }
 
   const cards = [
-    { label: t("Total earnings"), value: `$${totalAllTime.toLocaleString()}`, sub: t("All time"), icon: DollarSign, color: "#34C759" },
-    { label: t("Ready for payout"), value: `$${breakdown.readyForPayout.toLocaleString()}`, sub: t("Cleared holdback"), icon: Wallet, color: "#007AFF" },
-    { label: t("In holdback"), value: `$${breakdown.inHoldback.toLocaleString()}`, sub: t("Pending settle"), icon: Clock, color: "#FF9500" },
-    { label: t("Paid out"), value: `$${breakdown.paid.toLocaleString()}`, sub: t("Lifetime"), icon: CheckCircle2, color: "#5856D6" },
+    {
+      label: t("Total earnings"),
+      value: `$${totalAllTime.toLocaleString()}`,
+      sub: t("All time"),
+      hint: t("Everything you've earned across all clips (paid + pending)."),
+      icon: DollarSign,
+      color: "#34C759",
+    },
+    {
+      label: t("Ready for payout"),
+      value: `$${breakdown.readyForPayout.toLocaleString()}`,
+      sub: t("Cleared holdback"),
+      hint: t("Cleared the holdback window — included in your next automatic payout."),
+      icon: Wallet,
+      color: "#007AFF",
+    },
+    {
+      label: t("In holdback"),
+      value: `$${breakdown.inHoldback.toLocaleString()}`,
+      sub: t("Settling"),
+      hint: t("Recently earned; held briefly to verify views before it becomes payable."),
+      icon: Clock,
+      color: "#FF9500",
+    },
+    {
+      label: t("Paid out"),
+      value: `$${breakdown.paid.toLocaleString()}`,
+      sub: t("Lifetime"),
+      hint: t("Already transferred to your connected Stripe account."),
+      icon: CheckCircle2,
+      color: "#5856D6",
+    },
   ];
 
   return (
@@ -92,7 +121,7 @@ export function CreatorPerformanceSummary() {
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <div key={c.label} className="p-5 apple-card">
+            <div key={c.label} title={c.hint} className="p-5 apple-card cursor-default">
               <div className="flex justify-between items-start text-muted-foreground">
                 <span className="text-[10px] font-bold uppercase tracking-wider">{c.label}</span>
                 <span className="p-1.5 rounded-xl" style={{ backgroundColor: `${c.color}1a`, color: c.color }}>
@@ -106,10 +135,23 @@ export function CreatorPerformanceSummary() {
         })}
       </div>
 
+      {/* How automatic payouts work */}
+      <div className="flex items-start gap-2 mb-6 px-1 text-[11px] text-muted-foreground leading-relaxed">
+        <Info size={13} className="shrink-0 mt-0.5 text-primary" />
+        <span>
+          {t(
+            "Earnings clear the holdback window automatically, then pay out to your connected Stripe account once you pass the minimum threshold — no manual withdrawal needed."
+          )}
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Active clips */}
         <div className="lg:col-span-2 p-6 apple-card">
-          <h3 className="text-sm font-bold mb-4">{t("Active clips")}</h3>
+          <h3 className="text-sm font-bold mb-4">
+            {t("Active clips")}{" "}
+            <span className="text-muted-foreground font-normal">({activeClips.length})</span>
+          </h3>
           {activeClips.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t("No active clips. Submit one from Clips & Earnings.")}</p>
           ) : (
@@ -169,6 +211,14 @@ export function CreatorPerformanceSummary() {
           )}
         </div>
       </div>
+
+      <Link
+        href="/creator/clips"
+        className="mt-6 flex items-center justify-center gap-1.5 w-full p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold hover:bg-primary/15 transition-colors group"
+      >
+        {t("Open Clips & Earnings")}
+        <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+      </Link>
     </div>
   );
 }

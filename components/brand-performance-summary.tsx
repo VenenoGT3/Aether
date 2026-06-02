@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Eye, Layers, DollarSign, Zap, ArrowRight, Megaphone } from "lucide-react";
+import { Eye, Layers, Zap, ArrowRight, Megaphone, Clock } from "lucide-react";
 import { isMockMode, supabase } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useTranslation } from "@/lib/translations";
@@ -21,6 +21,7 @@ interface BrandClipLite {
   campaign_id: string;
   status: string;
   current_views: number;
+  creator_id?: string;
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
@@ -54,7 +55,7 @@ export function BrandPerformanceSummary() {
         .from("campaigns")
         .select("id, title, status, budget_pool, budget_reserved, budget_paid")
         .eq("campaign_type", "performance"),
-      supabase.from("clips").select("campaign_id, status, current_views"),
+      supabase.from("clips").select("campaign_id, status, current_views, creator_id"),
     ]);
     setCampaigns((camps ?? []) as PerfCampaign[]);
     setClips((clipRows ?? []) as BrandClipLite[]);
@@ -99,16 +100,20 @@ export function BrandPerformanceSummary() {
   }
 
   const trackingClips = clips.filter((c) => c.status === "tracking");
+  const pendingClips = clips.filter((c) => c.status === "pending");
   const totalViews = trackingClips.reduce((s, c) => s + Number(c.current_views || 0), 0);
   const totalPool = campaigns.reduce((s, c) => s + Number(c.budget_pool || 0), 0);
-  const totalSpent = campaigns.reduce(
-    (s, c) => s + Number(c.budget_reserved || 0) + Number(c.budget_paid || 0),
-    0
-  );
-  const totalRemaining = Math.max(totalPool - totalSpent, 0);
+  const totalReserved = campaigns.reduce((s, c) => s + Number(c.budget_reserved || 0), 0);
+  const totalPaid = campaigns.reduce((s, c) => s + Number(c.budget_paid || 0), 0);
+  const totalRemaining = Math.max(totalPool - totalReserved - totalPaid, 0);
+  const poolPct = (v: number) => (totalPool > 0 ? Math.min((v / totalPool) * 100, 100) : 0);
   const activeCount = campaigns.filter(
     (c) => c.status === "open" || c.status === "in_progress"
   ).length;
+  // Distinct creators with a tracking clip (creator_id only present in real mode).
+  const activeCreators = new Set(
+    trackingClips.map((c) => c.creator_id).filter(Boolean)
+  ).size;
 
   const viewsByCampaign = (id: string) =>
     trackingClips
@@ -117,10 +122,16 @@ export function BrandPerformanceSummary() {
 
   const cards = [
     { label: t("Active campaigns"), value: activeCount.toLocaleString(), icon: Megaphone, color: "#007AFF" },
-    { label: t("Pool remaining"), value: money(totalRemaining), sub: `${money(totalSpent)} ${t("spent")}`, icon: DollarSign, color: "#34C759" },
     { label: t("Total views"), value: totalViews.toLocaleString(), icon: Eye, color: "#FF9500" },
-    { label: t("Active clips"), value: trackingClips.length.toLocaleString(), icon: Layers, color: "#5856D6" },
-  ];
+    {
+      label: t("Active clips"),
+      value: trackingClips.length.toLocaleString(),
+      sub: activeCreators > 0 ? `${activeCreators} ${t("creators")}` : undefined,
+      icon: Layers,
+      color: "#5856D6",
+    },
+    { label: t("Pending review"), value: pendingClips.length.toLocaleString(), icon: Clock, color: "#FF9500" },
+  ] as { label: string; value: string; sub?: string; icon: typeof Eye; color: string }[];
 
   return (
     <div className="mb-12 relative z-10">
@@ -138,6 +149,55 @@ export function BrandPerformanceSummary() {
           {t("Moderation")} <ArrowRight size={13} />
         </Link>
       </div>
+
+      {/* Headline budget burn-down across all performance campaigns */}
+      <div className="p-5 apple-card mb-4">
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+            {t("Budget burn-down")}
+          </span>
+          <span className="text-xs font-semibold text-foreground">
+            {money(totalRemaining)} {t("remaining")}{" "}
+            <span className="text-muted-foreground font-medium">/ {money(totalPool)} {t("pool")}</span>
+          </span>
+        </div>
+        <div className="h-3 rounded-full bg-secondary/40 overflow-hidden flex">
+          <motion.div
+            className="h-full bg-[#007AFF]"
+            initial={{ width: 0 }}
+            animate={{ width: `${poolPct(totalPaid)}%` }}
+            transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          />
+          <motion.div
+            className="h-full bg-[#FF9500]"
+            initial={{ width: 0 }}
+            animate={{ width: `${poolPct(totalReserved)}%` }}
+            transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          />
+        </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5 text-[10px] font-semibold text-muted-foreground">
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#007AFF]" /> {t("Paid")} {money(totalPaid)}</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FF9500]" /> {t("Reserved")} {money(totalReserved)}</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-secondary border border-border/40" /> {t("Remaining")} {money(totalRemaining)}</span>
+        </div>
+      </div>
+
+      {/* Action CTA: clips awaiting moderation */}
+      {pendingClips.length > 0 && (
+        <Link
+          href="/business/moderation"
+          className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-[#FF9500]/10 border border-[#FF9500]/25 hover:bg-[#FF9500]/15 transition-colors mb-4 group"
+        >
+          <span className="text-xs font-bold text-foreground flex items-center gap-2">
+            <Clock size={14} className="text-[#FF9500]" />
+            {pendingClips.length} {t("clip(s) waiting for your review")}
+          </span>
+          <span className="text-xs font-bold text-[#FF9500] flex items-center gap-1">
+            {t("Review now")}{" "}
+            <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map((c) => {
