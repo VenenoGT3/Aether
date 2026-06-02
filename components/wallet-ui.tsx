@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   DollarSign, 
@@ -27,9 +28,18 @@ interface Transaction {
   type: "escrow" | "release" | "bonus" | "refund" | "payout";
   status: "pending" | "succeeded" | "failed" | "refunded";
   stripe_payment_intent_id?: string;
+  /** Set for performance-clipping payouts (worker mark_payout_paid). */
+  payout_id?: string;
   created_at: string;
   campaignTitle?: string;
 }
+
+/**
+ * Legacy fixed-fee escrow wallet. It shows escrow funding, contract releases,
+ * and manual withdrawals. Performance-clipping earnings & payouts (which carry a
+ * payout_id) live on the creator's "Clips & Earnings" page and are surfaced here
+ * as positive "earnings payout" history rather than withdrawals.
+ */
 
 export default function WalletUI() {
   const [loading, setLoading] = useState(false);
@@ -272,6 +282,17 @@ export default function WalletUI() {
 
   return (
     <div className="space-y-6">
+      {/* Clarify scope: this wallet is the legacy fixed-fee escrow view. */}
+      <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-secondary/20 border border-border/10 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <Lock size={12} className="text-[#FF9500] shrink-0" />
+          {"This wallet covers fixed-fee escrow campaigns. Pay-per-view earnings & payouts live on Clips & Earnings."}
+        </span>
+        <Link href="/creator/clips" className="font-semibold text-primary hover:underline whitespace-nowrap flex items-center gap-1">
+          Clips & Earnings <ArrowRight size={12} />
+        </Link>
+      </div>
+
       {/* Balances Display Card */}
       <motion.div 
         initial={{ opacity: 0, y: 15 }}
@@ -429,10 +450,10 @@ export default function WalletUI() {
                     variants={itemVariants}
                     className="hover:bg-secondary/15 transition-colors"
                   >
-                    {/* Title */}
+                    {/* Title — performance payouts (payout_id) are earnings, not withdrawals */}
                     <td className="py-4 pr-4 font-semibold text-foreground">
                       {tx.type === "payout" ? (
-                        <span>Bank Withdrawal Transfer</span>
+                        <span>{tx.payout_id ? "Clipping earnings payout" : "Bank Withdrawal Transfer"}</span>
                       ) : (
                         <span>{tx.campaignTitle || "Campaign Contract Payout"}</span>
                       )}
@@ -474,11 +495,12 @@ export default function WalletUI() {
                       {formatDate(tx.created_at)}
                     </td>
 
-                    {/* Amount */}
+                    {/* Amount — a clipping earnings payout (payout_id) is money IN (+),
+                        a legacy bank withdrawal is money OUT (-). */}
                     <td className={`py-4 pl-4 text-right font-bold text-sm ${
-                      tx.type === "payout" ? "text-destructive/80" : "text-foreground"
+                      tx.type === "payout" && !tx.payout_id ? "text-destructive/80" : "text-foreground"
                     }`}>
-                      {tx.type === "payout" ? "-" : "+"}
+                      {tx.type === "payout" && !tx.payout_id ? "-" : "+"}
                       {formatCurrency(tx.amount)}
                     </td>
                   </motion.tr>

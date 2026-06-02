@@ -366,6 +366,13 @@ export async function getTransactionLedgerAction() {
       const amt = Number(tx.amount);
       if (tx.status !== "succeeded") return;
 
+      // LEGACY (fixed-fee) wallet. Performance-clipping payouts are written by
+      // the worker (mark_payout_paid) and carry a payout_id; they represent
+      // earnings already paid out and are surfaced on the creator's
+      // "Clips & Earnings" page. Exclude them here so they don't get counted as
+      // fixed-fee wallet withdrawals (which would drive the balance negative).
+      if ((tx as { payout_id?: string | null }).payout_id) return;
+
       if (user.role === "influencer") {
         if (tx.type === "release" || tx.type === "bonus") {
           availableBalance += amt;

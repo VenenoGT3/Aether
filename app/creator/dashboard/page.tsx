@@ -470,6 +470,14 @@ export default function InfluencerDashboard() {
       {/* Performance clipping earnings + clips (new model) */}
       <CreatorPerformanceSummary />
 
+      {/* Below: profile overview + legacy fixed-fee wallet/activity. */}
+      <div className="flex items-center gap-3 mb-6">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+          {t("Profile & fixed-fee activity")}
+        </span>
+        <span className="h-px flex-1 bg-border/20" />
+      </div>
+
       <AnimatePresence mode="wait">
         {activeTab === "overview" ? (
           <motion.div

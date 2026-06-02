@@ -12,6 +12,8 @@ export interface CampaignMetrics {
 export interface TransactionRecord {
   id: string;
   participation_id?: string;
+  /** Set for performance-clipping payouts (worker mark_payout_paid). */
+  payout_id?: string;
   amount: number;
   type: "escrow" | "release" | "bonus" | "refund" | "payout";
   status: "pending" | "succeeded" | "failed" | "refunded";
@@ -466,6 +468,7 @@ export function useTransactions() {
             const formatted: TransactionRecord[] = (data || []).map((t: any) => ({
               id: t.id,
               participation_id: t.participation_id,
+              payout_id: t.payout_id,
               amount: Number(t.amount),
               type: t.type,
               status: t.status,
@@ -476,13 +479,16 @@ export function useTransactions() {
 
             setTransactions(formatted);
 
-            // Compute balances
+            // Compute balances (LEGACY fixed-fee model). Performance-clipping
+            // payouts carry a payout_id and are shown on Clips & Earnings — skip
+            // them here so they aren't counted as fixed-fee withdrawals.
             let available = 0;
             let pending = 0;
             const isInfluencer = user.app_metadata?.role === "influencer" || user.user_metadata?.role === "influencer";
 
             formatted.forEach((tx) => {
               if (tx.status !== "succeeded") return;
+              if (tx.payout_id) return;
               const amt = tx.amount;
 
               if (isInfluencer) {
