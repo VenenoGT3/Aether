@@ -27,6 +27,7 @@ import {
 } from "@/lib/supabase/clips";
 import { approvalCountdownLabel } from "@/lib/approval";
 import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder";
+import { CreatorWallet } from "@/components/creator-wallet";
 import { ShieldCheck } from "lucide-react";
 
 interface PerfCampaign {
@@ -173,6 +174,11 @@ export default function CreatorClipsPage() {
           </div>
         </div>
       )}
+
+      {/* Wallet — balances + withdraw */}
+      <div className="mb-8">
+        <CreatorWallet />
+      </div>
 
       {/* Earnings summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">

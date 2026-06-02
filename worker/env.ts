@@ -125,6 +125,16 @@ export function getPayoutBatchIntervalMinutes(): number {
 }
 
 /**
+ * Whether the worker AUTO-PAYS approved earnings. Default false: payouts are
+ * creator-initiated (manual withdrawals with a fee). The batch still PROMOTES
+ * accrued→approved past holdback so balances become withdrawable. Set true to
+ * restore fully-automated payouts.
+ */
+export function autoPayoutsEnabled(): boolean {
+  return (process.env.WORKER_AUTO_PAYOUTS ?? "").trim().toLowerCase() === "true";
+}
+
+/**
  * How often the pool-funding reconciliation job runs (minutes) — the safety net
  * for performance campaigns stuck in 'draft' after a missed/delayed
  * payment_intent.succeeded webhook. Default 15m.

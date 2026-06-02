@@ -41,6 +41,7 @@ import { getClientProfile, supabase, isMockMode } from "@/lib/supabase/client";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import WalletUI from "@/components/wallet-ui";
 import { CreatorPerformanceSummary } from "@/components/creator-performance-summary";
+import { CreatorWallet } from "@/components/creator-wallet";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
@@ -413,6 +414,11 @@ export default function InfluencerDashboard() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Creator wallet — balances + withdraw (most prominent) */}
+      <div className="mb-8">
+        <CreatorWallet />
       </div>
 
       {/* Performance clipping earnings + clips (new model) — primary content */}

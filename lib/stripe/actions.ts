@@ -8,6 +8,7 @@ import {
 } from "./connect";
 import { isMockMode } from "@/lib/env";
 import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
+import { WITHDRAWAL_MIN, WITHDRAWAL_FEE_PCT } from "@/lib/withdrawal";
 import {
   assertBusinessCanFundEscrow,
   assertBusinessCanReleaseEscrow,
@@ -318,6 +319,93 @@ export async function withdrawFundsAction(amount: number) {
     const message =
       error instanceof Error ? error.message : "Failed to withdraw funds";
     console.error("Error in withdrawFundsAction:", error);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Server Action: creator withdraws their available (approved, cleared-holdback)
+ * performance earnings. Atomically claims them into a payout (net = gross - 7%
+ * fee), transfers the net to the creator's connected Stripe account, then
+ * settles. On transfer failure the claim is released so the balance returns.
+ *
+ * Safety: request_withdrawal()/settle_withdrawal()/fail_withdrawal() are
+ * auth.uid()-scoped, so this only ever touches the caller's own earnings, and
+ * the earnings.payout_id claim makes double-withdrawal impossible.
+ */
+export async function requestWithdrawalAction() {
+  // Mock mode is handled client-side (balances live in localStorage).
+  if (isMockMode) {
+    return { success: true, isMock: true } as const;
+  }
+
+  try {
+    const user = await getServerUser();
+    if (!user || user.role !== "influencer") {
+      return { success: false, error: "Only creator accounts can withdraw." };
+    }
+
+    const supabase = await createClient();
+
+    // Must have a connected, onboarded payout account.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_connect_id, stripe_onboarding_completed")
+      .eq(PROFILE_PK_COLUMN, user.user_id)
+      .maybeSingle();
+
+    const account = (profile as { stripe_connect_id?: string | null } | null)?.stripe_connect_id;
+    const onboarded = (profile as { stripe_onboarding_completed?: boolean } | null)
+      ?.stripe_onboarding_completed;
+    if (!account || !onboarded) {
+      return {
+        success: false,
+        error: "Connect your payout account with Stripe before withdrawing.",
+      };
+    }
+
+    // 1) Atomically claim approved+unclaimed earnings into a payout.
+    const { data: claimData, error: claimErr } = await supabase.rpc("request_withdrawal", {
+      p_min_threshold: WITHDRAWAL_MIN,
+      p_fee_pct: WITHDRAWAL_FEE_PCT,
+    });
+    if (claimErr) {
+      return { success: false, error: claimErr.message || "Could not start the withdrawal." };
+    }
+    const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as
+      | { out_payout_id: string; out_gross: number | string; out_net: number | string; out_fee: number | string }
+      | undefined;
+    if (!claim?.out_payout_id) {
+      return {
+        success: false,
+        error: `You need at least $${WITHDRAWAL_MIN} available to withdraw.`,
+      };
+    }
+
+    const payoutId = claim.out_payout_id;
+    const gross = Number(claim.out_gross);
+    const net = Number(claim.out_net);
+    const fee = Number(claim.out_fee);
+
+    // 2) Transfer the NET to the creator, then settle (or release on failure).
+    try {
+      const transfer = await releaseEscrowPayment(net, account, `withdrawal_${payoutId}`);
+      await supabase.rpc("settle_withdrawal", {
+        p_payout_id: payoutId,
+        p_transfer_id: transfer.transferId,
+      });
+      return { success: true, isMock: false, gross, net, fee };
+    } catch (transferErr) {
+      await supabase.rpc("fail_withdrawal", { p_payout_id: payoutId });
+      console.error("Withdrawal transfer failed:", transferErr);
+      return {
+        success: false,
+        error: "The payout failed and your balance was released — please try again.",
+      };
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to withdraw funds";
+    console.error("Error in requestWithdrawalAction:", error);
     return { success: false, error: message };
   }
 }

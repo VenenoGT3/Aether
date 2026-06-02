@@ -3,7 +3,17 @@ import { supabase, isMockMode, getMockUser } from "./client";
 import { apiPost } from "@/lib/api/client";
 import { addBusinessDays, APPROVAL_WINDOW_BUSINESS_DAYS } from "@/lib/approval";
 import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
+import { WITHDRAWAL_MIN, withdrawalBreakdown } from "@/lib/withdrawal";
 import { getCampaignsAction } from "./campaigns";
+import { requestWithdrawalAction } from "@/lib/stripe/actions";
+
+export interface WithdrawResult {
+  ok: boolean;
+  gross?: number;
+  net?: number;
+  fee?: number;
+  error?: string;
+}
 
 /**
  * Data layer for the performance-clipping UI (Phase 6).
@@ -528,7 +538,52 @@ export function useCreatorEarnings() {
     };
   }, [load]);
 
-  return { breakdown, payouts, loading, refresh: load };
+  /**
+   * Withdraw the available (approved, cleared-holdback) balance. Mock moves it
+   * to 'paid' minus the fee locally; real mode runs the atomic claim → transfer
+   * → settle server action. Returns the gross/net/fee breakdown.
+   */
+  const withdraw = useCallback(async (): Promise<WithdrawResult> => {
+    if (isMockMode) {
+      const b = readLs<EarningsBreakdown>(EARNINGS_LS_KEY, SEED_EARNINGS);
+      const available = b.readyForPayout;
+      if (available < WITHDRAWAL_MIN) {
+        return { ok: false, error: `You need at least $${WITHDRAWAL_MIN} available to withdraw.` };
+      }
+      const split = withdrawalBreakdown(available);
+      const nextBreakdown: EarningsBreakdown = {
+        ...b,
+        readyForPayout: 0,
+        paid: Math.round((b.paid + split.net) * 100) / 100,
+      };
+      writeLs(EARNINGS_LS_KEY, nextBreakdown);
+      const list = readLs<PayoutRecord[]>(PAYOUTS_LS_KEY, SEED_PAYOUTS);
+      list.unshift({
+        id: "payout_" + Math.random().toString(36).substring(2, 9),
+        amount: split.net,
+        status: "paid",
+        created_at: new Date().toISOString(),
+        stripe_transfer_id: "tr_mock_" + Math.random().toString(36).substring(2, 9),
+      });
+      writeLs(PAYOUTS_LS_KEY, list);
+      setBreakdown(nextBreakdown);
+      setPayouts(list);
+      return { ok: true, gross: split.gross, net: split.net, fee: split.fee };
+    }
+
+    const res = await requestWithdrawalAction();
+    if (res.success) {
+      await load();
+      const r = res as { gross?: number; net?: number; fee?: number };
+      return { ok: true, gross: r.gross, net: r.net, fee: r.fee };
+    }
+    return {
+      ok: false,
+      error: (res as { error?: string }).error || "Withdrawal failed.",
+    };
+  }, [load]);
+
+  return { breakdown, payouts, loading, refresh: load, withdraw };
 }
 
 /** Brand: pending clips to moderate + approve/reject. */

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { transferToCreator } from "./stripe";
 import {
+  autoPayoutsEnabled,
   getMinPayoutThreshold,
   getViewHoldbackHours,
   simulatedEarningsBlocked,
@@ -74,6 +75,17 @@ export async function runPayoutBatch(
     throw new Error(`[payout] promote_due_earnings failed: ${promoteErr.message}`);
   }
   summary.promoted = Number(promoted ?? 0);
+
+  // Payouts are creator-initiated by default (manual withdrawals). The batch
+  // still promotes accrued→approved above so balances become withdrawable, but
+  // it only auto-pays when explicitly enabled.
+  if (!autoPayoutsEnabled()) {
+    log.info("payout.auto_disabled", {
+      promoted: summary.promoted,
+      note: "manual withdrawals enabled (set WORKER_AUTO_PAYOUTS=true to auto-pay)",
+    });
+    return summary;
+  }
 
   // 2. Candidate creators with unclaimed approved earnings.
   const { data: rows, error: rowsErr } = await supabase
