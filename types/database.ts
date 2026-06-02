@@ -134,6 +134,8 @@ export const ParticipationSchema = z.object({
   total_views: z.number().int().nonnegative().default(0).optional(),
   total_earned: z.number().nonnegative().default(0).optional(),
   total_paid: z.number().nonnegative().default(0).optional(),
+  // Creator's chosen $ per 1,000 views (NULL => campaign base CPM).
+  creator_cpm_rate: z.number().nonnegative().nullable().optional(),
   joined_at: z.union([z.date(), z.string()]).optional(),
   applied_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),

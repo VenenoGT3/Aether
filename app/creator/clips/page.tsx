@@ -30,6 +30,7 @@ import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder"
 interface PerfCampaign {
   id: string;
   title: string;
+  cpm_rate?: number | null;
 }
 
 const STATUS_STYLES: Record<ClipStatus, { label: string; cls: string }> = {
@@ -51,8 +52,11 @@ export default function CreatorClipsPage() {
   const [postUrl, setPostUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [joinCpm, setJoinCpm] = useState(2.5);
 
   const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
+  const selectedOfferedCpm =
+    campaigns.find((c) => c.id === selectedCampaign)?.cpm_rate ?? null;
 
   const loadCampaigns = useCallback(async () => {
     if (isMockMode) {
@@ -66,7 +70,7 @@ export default function CreatorClipsPage() {
     }
     const { data } = await supabase
       .from("campaigns")
-      .select("id, title")
+      .select("id, title, cpm_rate")
       .eq("campaign_type", "performance")
       .in("status", ["open", "in_progress"]);
     const list = (data ?? []) as PerfCampaign[];
@@ -79,13 +83,21 @@ export default function CreatorClipsPage() {
     loadCampaigns();
   }, [loadCampaigns]);
 
+  // Default the join CPM to the selected campaign's offered rate.
+  useEffect(() => {
+    if (selectedOfferedCpm != null && selectedOfferedCpm > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- derive default from selection
+      setJoinCpm(Number(selectedOfferedCpm));
+    }
+  }, [selectedOfferedCpm]);
+
   const handleJoin = async () => {
     if (!selectedCampaign) {
       toast.error(t("Pick a campaign to join."));
       return;
     }
     setJoining(true);
-    const res = await join(selectedCampaign);
+    const res = await join(selectedCampaign, joinCpm > 0 ? joinCpm : undefined);
     setJoining(false);
     if (res.ok) {
       toast.success(
@@ -236,6 +248,11 @@ export default function CreatorClipsPage() {
                       <p className="text-sm font-bold mt-0.5 text-[#34C759]">
                         ${clip.estimated_earnings.toLocaleString()}
                       </p>
+                      {clip.creator_cpm != null && (
+                        <span className="text-[9px] text-muted-foreground block mt-0.5">
+                          @ ${Number(clip.creator_cpm).toFixed(2)} {t("CPM")}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -267,6 +284,33 @@ export default function CreatorClipsPage() {
             </div>
             {!isJoined ? (
               <div className="space-y-3 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                    {t("Your CPM ($ / 1,000 views)")}
+                  </label>
+                  <div className="relative">
+                    <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max={selectedOfferedCpm ?? undefined}
+                      value={joinCpm}
+                      onChange={(e) => setJoinCpm(Number(e.target.value))}
+                      className="w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-normal">
+                    {selectedOfferedCpm
+                      ? t("Brand offers up to ${rate}. Earn ${per100k} per 100k views.")
+                          .replace("{rate}", Number(selectedOfferedCpm).toFixed(2))
+                          .replace("{per100k}", Math.round(Math.max(joinCpm, 0) * 100).toLocaleString())
+                      : t("You earn ${per100k} per 100k views.").replace(
+                          "{per100k}",
+                          Math.round(Math.max(joinCpm, 0) * 100).toLocaleString()
+                        )}
+                  </p>
+                </div>
                 <Button
                   onClick={handleJoin}
                   disabled={joining || !selectedCampaign}

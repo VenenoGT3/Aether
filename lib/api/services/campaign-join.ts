@@ -19,7 +19,8 @@ export type JoinResult =
  */
 export async function joinCampaign(
   campaignId: string,
-  userId: string
+  userId: string,
+  creatorCpmRate?: number | null
 ): Promise<JoinResult> {
   const supabase = await createClient();
 
@@ -41,7 +42,7 @@ export async function joinCampaign(
   // Campaign must exist, be a performance campaign, and be accepting creators.
   const { data: campaign, error: campErr } = await supabase
     .from("campaigns")
-    .select("id, status, campaign_type")
+    .select("id, status, campaign_type, cpm_rate")
     .eq("id", campaignId)
     .single();
 
@@ -77,6 +78,16 @@ export async function joinCampaign(
     return { ok: true, alreadyJoined: true, participation: existing };
   }
 
+  // Clamp the creator's proposed CPM to the brand's offered ceiling (they may
+  // bid down to be competitive, never above the campaign's rate). NULL => the
+  // earnings function falls back to the campaign base CPM.
+  let creatorCpm: number | null = null;
+  if (creatorCpmRate != null && Number.isFinite(creatorCpmRate) && creatorCpmRate >= 0) {
+    const campCpm =
+      campaign.cpm_rate != null ? Number(campaign.cpm_rate) : null;
+    creatorCpm = campCpm != null ? Math.min(creatorCpmRate, campCpm) : creatorCpmRate;
+  }
+
   // Insert. enforce_open_join pins status='active' for performance campaigns.
   const { data: participation, error: insertErr } = await supabase
     .from("participations")
@@ -85,6 +96,7 @@ export async function joinCampaign(
       influencer_id: userId,
       status: "active",
       proposed_payout: 0,
+      creator_cpm_rate: creatorCpm,
     })
     .select("id, campaign_id, influencer_id, status")
     .single();

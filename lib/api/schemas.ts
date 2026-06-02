@@ -177,8 +177,13 @@ export const PostSubmitBodySchema = z.object({
 
 // --- Performance clipping: open join + clip submission (Phase 2) ---
 
-/** Joining a performance campaign needs no pitch/fee — just a clean request. */
+/**
+ * Joining a performance campaign needs no pitch/fee. The creator may optionally
+ * propose their own CPM (pay per 1,000 views); the service clamps it to the
+ * campaign's offered rate. Omitted => the campaign's base CPM is used.
+ */
 export const CampaignJoinBodySchema = z.object({
+  creator_cpm_rate: z.number().nonnegative().max(100_000).optional(),
   _hp: honeypot,
 });
 

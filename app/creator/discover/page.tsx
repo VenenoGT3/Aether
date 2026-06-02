@@ -19,7 +19,8 @@ import {
   Briefcase,
   X,
   FileText,
-  Scissors
+  Scissors,
+  Eye
 } from "lucide-react";
 import { CAMPAIGN_CATEGORY_LABELS } from "@/lib/campaign-category";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ interface Campaign {
   matchingReason?: string;
   campaign_type?: "fixed" | "performance";
   campaign_category?: "ugc" | "clipping" | null;
+  cpm_rate?: number | null;
 }
 
 const initialMockCampaigns: Campaign[] = [
@@ -71,7 +73,8 @@ const initialMockCampaigns: Campaign[] = [
     days_left: 28,
     image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
     campaign_type: "performance",
-    campaign_category: "clipping"
+    campaign_category: "clipping",
+    cpm_rate: 2.5
   },
   {
     id: "camp_perf_ugc",
@@ -86,7 +89,8 @@ const initialMockCampaigns: Campaign[] = [
     days_left: 26,
     image_url: "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=800&q=80",
     campaign_type: "performance",
-    campaign_category: "ugc"
+    campaign_category: "ugc",
+    cpm_rate: 3.0
   },
   {
     id: "camp_2",
@@ -179,6 +183,9 @@ export default function DiscoverPage() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const { joinedIds, join } = useJoinedCampaigns();
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  // Performance join modal (creator sets their CPM before joining).
+  const [joinModalCampaign, setJoinModalCampaign] = useState<Campaign | null>(null);
+  const [joinCpm, setJoinCpm] = useState<number>(2.5);
   
   // Application Form State
   const [proposedPayout, setProposedPayout] = useState<number>(0);
@@ -264,6 +271,7 @@ export default function DiscoverPage() {
           // Drives the Join (performance) vs Apply (fixed) branch on the card.
           campaign_type: c.campaign_type,
           campaign_category: c.campaign_category,
+          cpm_rate: c.cpm_rate != null ? Number(c.cpm_rate) : null,
         }));
 
         if (profile) {
@@ -391,12 +399,15 @@ export default function DiscoverPage() {
     }
   };
 
-  // PERFORMANCE: open-join (no pitch / approval)
-  const handleJoinCampaign = async (campaign: Campaign) => {
+  // PERFORMANCE: open the join modal so the creator can set their CPM first.
+  const confirmJoin = async () => {
+    if (!joinModalCampaign) return;
+    const campaign = joinModalCampaign;
     setJoiningId(campaign.id);
-    const res = await join(campaign.id);
+    const res = await join(campaign.id, joinCpm > 0 ? joinCpm : undefined);
     setJoiningId(null);
     if (res.ok) {
+      setJoinModalCampaign(null);
       toast.success(
         res.alreadyJoined
           ? t("You've already joined this campaign.")
@@ -408,10 +419,12 @@ export default function DiscoverPage() {
     }
   };
 
-  // OPEN DETAILED APPLY MODAL (or open-join for performance campaigns)
+  // OPEN DETAILED APPLY MODAL (or the open-join modal for performance campaigns)
   const openApplyModal = (campaign: Campaign) => {
     if (campaign.campaign_type === "performance") {
-      void handleJoinCampaign(campaign);
+      const offered = campaign.cpm_rate && campaign.cpm_rate > 0 ? campaign.cpm_rate : 2.5;
+      setJoinCpm(offered);
+      setJoinModalCampaign(campaign);
       return;
     }
     setSelectedCampaign(campaign);
@@ -975,7 +988,12 @@ export default function DiscoverPage() {
                           <div className="flex items-center justify-between text-xs pt-1">
                             <div className="flex items-center gap-1.5 text-muted-foreground">
                               <Zap size={14} className={camp.payout_speed === "Instant Escrow" ? "text-[#34C759]" : "text-muted-foreground"} />
-                              <span className="font-semibold text-[11px]">{t(camp.payout_speed)}</span>
+                              <span className="font-semibold text-[11px]">
+                                {t(camp.payout_speed)}
+                                {camp.campaign_type === "performance" && camp.cpm_rate
+                                  ? ` · $${Number(camp.cpm_rate).toFixed(2)} CPM`
+                                  : ""}
+                              </span>
                             </div>
                             <div className="flex items-center gap-1 text-[#FF9500] font-semibold">
                               <Clock size={13} />
@@ -1157,6 +1175,76 @@ export default function DiscoverPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Performance Join Modal — creator sets their CPM (≤ the brand's offer) */}
+      <Dialog open={!!joinModalCampaign} onOpenChange={(o) => !o && setJoinModalCampaign(null)}>
+        <DialogContent className="max-w-md w-full rounded-3xl p-6 gap-5 glass-panel border border-border/40 text-foreground">
+          <DialogHeader>
+            <span className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider block mb-1 flex items-center gap-1">
+              <Zap size={11} /> {t("Join performance campaign")}
+            </span>
+            <DialogTitle className="text-xl font-bold tracking-tight">
+              {joinModalCampaign?.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+              {t("Set your pay-per-view rate, then join to start submitting clips.")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
+              {t("Your CPM — $ per 1,000 views")}
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max={joinModalCampaign?.cpm_rate ?? undefined}
+                value={joinCpm}
+                onChange={(e) => setJoinCpm(Number(e.target.value))}
+                className="w-full pl-9 pr-4 py-3 rounded-2xl bg-secondary/35 border border-border/25 text-sm font-bold focus:outline-none focus:border-primary/45 transition-colors"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-medium">
+              {joinModalCampaign?.cpm_rate
+                ? t("The brand offers up to ${rate} per 1,000 views. Bid at or below to be competitive.").replace(
+                    "{rate}",
+                    Number(joinModalCampaign.cpm_rate).toFixed(2)
+                  )
+                : t("Pay per 1,000 views.")}
+            </p>
+          </div>
+
+          {/* Estimated earnings preview */}
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-[#34C759]/5 border border-[#34C759]/15 text-xs">
+            <span className="text-muted-foreground font-semibold flex items-center gap-1.5">
+              <Eye size={13} /> {t("Est. per 100k views")}
+            </span>
+            <span className="font-extrabold text-[#34C759]">
+              ${Math.round(Math.max(joinCpm, 0) * 100).toLocaleString()}
+            </span>
+          </div>
+
+          <DialogFooter className="flex justify-end gap-2.5 border-t border-border/10 pt-4">
+            <button
+              type="button"
+              onClick={() => setJoinModalCampaign(null)}
+              className="px-4 py-3 rounded-2xl border border-border/20 text-muted-foreground hover:text-foreground text-xs font-semibold cursor-pointer transition-all"
+            >
+              {t("Cancel")}
+            </button>
+            <Button
+              onClick={confirmJoin}
+              disabled={joiningId === joinModalCampaign?.id || joinCpm <= 0}
+              className="rounded-2xl text-xs px-5 py-3 cursor-pointer shadow-sm bg-[#34C759] hover:bg-[#2fb350] text-white border-0"
+            >
+              {joiningId === joinModalCampaign?.id ? t("Joining...") : t("Join Campaign")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -170,11 +170,16 @@ export default function BrandModerationPage() {
                 className="p-5 apple-card flex flex-col sm:flex-row sm:items-center gap-4"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20 uppercase tracking-wide">
                       {t("Pending")}
                     </span>
                     <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
+                    {clip.creatorCpm != null && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20 flex items-center gap-0.5">
+                        ${Number(clip.creatorCpm).toFixed(2)} {t("CPM")}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm font-semibold truncate">{clip.creatorName} · {clip.campaignTitle}</p>
                   <a
