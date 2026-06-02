@@ -15,6 +15,7 @@ export const SERVER_SECRET_NAMES = [
   "CRON_SECRET",
   "GEMINI_API_KEY",
   "SOCIAVAULT_API_KEY",
+  "AYRSHARE_API_KEY",
   "RESEND_API_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
@@ -79,6 +80,10 @@ export function getGeminiApiKey(): string | undefined {
 
 export function getSociavaultApiKey(): string | undefined {
   return process.env.SOCIAVAULT_API_KEY?.trim() || undefined;
+}
+
+export function getAyrshareApiKey(): string | undefined {
+  return process.env.AYRSHARE_API_KEY?.trim() || undefined;
 }
 
 export function getResendApiKey(): string | undefined {

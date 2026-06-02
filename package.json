@@ -8,6 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
+    "worker": "tsx worker/index.ts",
+    "worker:once": "tsx worker/run-once.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts"
@@ -17,6 +19,7 @@
     "@stripe/stripe-js": "^9.6.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.1",
+    "bullmq": "^5.78.0",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -43,6 +46,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^3.2.6"
   }
