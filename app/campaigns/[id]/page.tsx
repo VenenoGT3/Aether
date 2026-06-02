@@ -284,16 +284,17 @@ export default function CampaignDetailPage() {
     
     setSafetyLoading(true);
     try {
-      const res = await fetch("/api/ai/safety", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: sub.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
-          platform: campaign.deliverables[0]?.platform || "Instagram",
-          guidelines: campaign.brief.guidelines || []
-        })
+      const data = await apiPost<{
+        success: boolean;
+        report?: unknown;
+        error?: string;
+      }>("/api/ai/safety", {
+        text:
+          sub.caption ||
+          "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
+        platform: campaign.deliverables[0]?.platform || "Instagram",
+        guidelines: campaign.brief.guidelines || [],
       });
-      const data = await res.json();
       if (data.success) {
         setSafetyReport(data.report);
         setLastAuditedVersion(selectedVersionNum);
@@ -314,36 +315,37 @@ export default function CampaignDetailPage() {
     setPredictLoading(true);
     try {
       const part = campaign.participants.find(p => p.id === activeParticipantId);
-      const res = await fetch("/api/ai/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaign: {
-            title: campaign.title,
-            budget: campaign.budget,
-            brief: {
-              objectives: campaign.brief.objectives,
-              guidelines: campaign.brief.guidelines
+      const data = await apiPost<{
+        success: boolean;
+        prediction?: unknown;
+        error?: string;
+      }>("/api/ai/predict", {
+        campaign: {
+          title: campaign.title,
+          budget: campaign.budget,
+          brief: {
+            objectives: campaign.brief.objectives,
+            guidelines: campaign.brief.guidelines,
+          },
+        },
+        metrics: {
+          views: metrics.impressions,
+          likes: Math.round(metrics.clicks * 0.1),
+          comments: Math.round(metrics.conversions * 0.5),
+          shares: Math.round(metrics.conversions * 0.2),
+          clicks: metrics.clicks,
+          conversions: metrics.conversions,
+          budget_spent: metrics.budget_spent,
+          attributed_value: metrics.attributed_value,
+        },
+        creator: part
+          ? {
+              followers: part.id === "mock-influencer-uuid" ? 48500 : 35000,
+              engagement: 4.8,
+              niches: campaign.brief.objectives,
             }
-          },
-          metrics: {
-            views: metrics.impressions,
-            likes: Math.round(metrics.clicks * 0.1),
-            comments: Math.round(metrics.conversions * 0.5),
-            shares: Math.round(metrics.conversions * 0.2),
-            clicks: metrics.clicks,
-            conversions: metrics.conversions,
-            budget_spent: metrics.budget_spent,
-            attributed_value: metrics.attributed_value
-          },
-          creator: part ? {
-            followers: part.id === "mock-influencer-uuid" ? 48500 : 35000,
-            engagement: 4.8,
-            niches: campaign.brief.objectives
-          } : undefined
-        })
+          : undefined,
       });
-      const data = await res.json();
       if (data.success) {
         setAiPrediction(data.prediction);
       } else {
@@ -815,7 +817,7 @@ export default function CampaignDetailPage() {
         await apiPost(`/api/campaigns/${campaignId}/apply`, {
           proposed_payout: proposedPayout,
           pitch: pitchText.trim(),
-          _hp: "",
+
         });
       } catch (err: unknown) {
         const message =
@@ -924,13 +926,25 @@ export default function CampaignDetailPage() {
     toast.loading("Analyzing video link and fetching metrics...", { id: "fetch-metrics" });
 
     try {
-      const res = await fetch("/api/metrics/fetch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_url: postUrl, participation_id: activeParticipantId })
+      const data = await apiPost<{
+        success: boolean;
+        metrics?: {
+          views: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          engagement_rate: number;
+          caption: string;
+          platform: "instagram" | "tiktok";
+          fetched_at: string;
+        };
+        error?: string;
+      }>("/api/metrics/fetch", {
+        post_url: postUrl,
+        participation_id: activeParticipantId,
       });
 
-      const data = await res.json();
       if (data.success && data.metrics) {
         const m = data.metrics;
         setFetchedPreview(m);
@@ -1033,7 +1047,7 @@ export default function CampaignDetailPage() {
             saves: savesVal,
             engagement_rate: erVal,
           },
-          _hp: "",
+
         });
       } catch (err: unknown) {
         const message =

@@ -32,7 +32,7 @@ Set in **Project → Settings → Environment Variables**. Mark sensitive values
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Production, Preview |
 | `STRIPE_SECRET_KEY` | **Yes** | Production |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | No | Production, Preview |
-| `STRIPE_WEBHOOK_SECRET` | **Yes** | Production (also in Supabase for Edge Function) |
+| `STRIPE_WEBHOOK_SECRET` | **Yes** | Supabase Edge Function only (default handler) |
 | `NEXT_PUBLIC_APP_URL` | No | Production |
 | `CRON_SECRET` | **Yes** | Production |
 
@@ -98,8 +98,9 @@ Do **not** point production Stripe webhooks at `/api/webhooks/stripe` on Vercel 
 Rules:
 
 1. `AETHER_MOCK_MODE` must be exactly `true` to enable mock mode (not inferred from missing keys).
-2. When mock is off, all `REQUIRED_APP_VARS` must be set.
-3. `SUPABASE_SERVICE_ROLE_KEY` is required only if `STRIPE_WEBHOOK_HANDLER=vercel`.
+2. `AETHER_MOCK_MODE=true` and `STRIPE_WEBHOOK_HANDLER=vercel` are **rejected** when `VERCEL_ENV=production` (Vercel Production deploys only; local `next build` with mock mode still works).
+3. When mock is off, all vars from `getRequiredEnvVarNames()` must be set.
+4. `STRIPE_WEBHOOK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are required on Vercel only if `STRIPE_WEBHOOK_HANDLER=vercel` (local legacy).
 
 ---
 

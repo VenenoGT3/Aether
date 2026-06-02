@@ -1,13 +1,48 @@
 import { z, type ZodSchema } from "zod";
 import { jsonError, validationError } from "@/lib/api/response";
 
+/** Default max JSON body size for API routes (256 KB) */
+export const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
+
 export async function parseJsonBody<T>(
   request: Request,
-  schema: ZodSchema<T>
+  schema: ZodSchema<T>,
+  maxBytes = DEFAULT_MAX_BODY_BYTES
 ): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return {
+      ok: false,
+      response: jsonError(
+        "Content-Type must be application/json.",
+        415
+      ),
+    };
+  }
+
+  let rawText: string;
+  try {
+    rawText = await request.text();
+  } catch {
+    return {
+      ok: false,
+      response: jsonError("Could not read request body.", 400),
+    };
+  }
+
+  if (rawText.length > maxBytes) {
+    return {
+      ok: false,
+      response: jsonError(
+        "Request body is too large. Please reduce the payload size.",
+        413
+      ),
+    };
+  }
+
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = rawText ? JSON.parse(rawText) : {};
   } catch {
     return {
       ok: false,

@@ -34,6 +34,30 @@ export async function applyToCampaign(
 
   const supabase = await createClient();
 
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const { count: recentApplications, error: countErr } = await supabase
+    .from("participations")
+    .select("id", { count: "exact", head: true })
+    .eq("influencer_id", userId)
+    .gte("applied_at", dayAgo);
+
+  if (countErr) {
+    return {
+      ok: false,
+      error: "Could not verify application limits. Please try again.",
+      status: 500,
+    };
+  }
+
+  if ((recentApplications ?? 0) >= 20) {
+    return {
+      ok: false,
+      error:
+        "Daily application limit reached (20 per day). Please try again tomorrow.",
+      status: 429,
+    };
+  }
+
   const { data: campaign, error: campErr } = await supabase
     .from("campaigns")
     .select("id, status, business_id, budget_total")

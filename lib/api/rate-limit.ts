@@ -60,25 +60,41 @@ export function checkRateLimit(
   return { allowed: true };
 }
 
-/** Presets — tuned for abuse prevention while keeping UX usable */
+/** Per-user / per-session presets */
 export const RATE_LIMITS = {
-  /** AI generation (pitch, predict, safety) */
   ai: { limit: 20, windowMs: 60_000 },
-  /** Creator/campaign matchmaking */
   discover: { limit: 15, windowMs: 60_000 },
-  /** Campaign search / browse API */
   search: { limit: 60, windowMs: 60_000 },
-  /** Apply to campaign (per user) */
   apply: { limit: 5, windowMs: 60_000 },
-  /** Post / deliverable submission */
   submit: { limit: 8, windowMs: 60_000 },
-  /** Metrics scrape */
   metrics: { limit: 25, windowMs: 60_000 },
-  /** Stripe webhooks */
   webhook: { limit: 200, windowMs: 60_000 },
-  /** Cron invocations */
   cron: { limit: 10, windowMs: 60_000 },
 } as const;
+
+/**
+ * Per-IP ceilings for abuse-prone routes (multi-account spam, scraping).
+ * Applied in addition to per-user limits when preset is in DUAL_IP_PRESETS.
+ */
+export const RATE_LIMITS_IP: Partial<
+  Record<keyof typeof RATE_LIMITS, { limit: number; windowMs: number }>
+> = {
+  apply: { limit: 12, windowMs: 60_000 },
+  submit: { limit: 20, windowMs: 60_000 },
+  search: { limit: 100, windowMs: 60_000 },
+  discover: { limit: 30, windowMs: 60_000 },
+  ai: { limit: 45, windowMs: 60_000 },
+  metrics: { limit: 60, windowMs: 60_000 },
+};
+
+export const DUAL_IP_PRESETS = new Set<keyof typeof RATE_LIMITS>([
+  "apply",
+  "submit",
+  "search",
+  "discover",
+  "ai",
+  "metrics",
+]);
 
 export type RateLimitPreset = keyof typeof RATE_LIMITS;
 
@@ -90,10 +106,23 @@ export function applyRateLimit(
 ): { allowed: true } | { allowed: false; retryAfterSec: number } {
   const rl = RATE_LIMITS[preset];
   const ip = getClientIp(request);
-  const key = buildRateLimitKey(routeKey, ip, userId);
-  const result = checkRateLimit(key, rl.limit, rl.windowMs);
-  if (!result.allowed) {
-    return { allowed: false, retryAfterSec: result.retryAfterSec ?? 60 };
+  const userKey = buildRateLimitKey(routeKey, ip, userId);
+  const userResult = checkRateLimit(userKey, rl.limit, rl.windowMs);
+  if (!userResult.allowed) {
+    return { allowed: false, retryAfterSec: userResult.retryAfterSec ?? 60 };
   }
+
+  if (DUAL_IP_PRESETS.has(preset)) {
+    const ipRl = RATE_LIMITS_IP[preset] ?? {
+      limit: rl.limit * 3,
+      windowMs: rl.windowMs,
+    };
+    const ipKey = buildRateLimitKey(`${routeKey}:ip`, ip, null);
+    const ipResult = checkRateLimit(ipKey, ipRl.limit, ipRl.windowMs);
+    if (!ipResult.allowed) {
+      return { allowed: false, retryAfterSec: ipResult.retryAfterSec ?? 60 };
+    }
+  }
+
   return { allowed: true };
 }

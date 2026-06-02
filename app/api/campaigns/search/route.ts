@@ -1,8 +1,10 @@
-import { guardApiGet } from "@/lib/api/guard";
+import { guardApiGet, methodNotAllowed } from "@/lib/api/guard";
 import { CampaignSearchQuerySchema } from "@/lib/api/schemas";
 import { jsonSuccess, jsonError } from "@/lib/api/response";
 import { createClient } from "@/lib/supabase/server";
 import { isMockMode } from "@/lib/env";
+
+export const POST = () => methodNotAllowed(["GET"]);
 
 export async function GET(request: Request) {
   const guarded = await guardApiGet(request, {
@@ -39,10 +41,7 @@ export async function GET(request: Request) {
     .range(offset, offset + limit - 1);
 
   if (q) {
-    const safe = q.replace(/[%_]/g, "");
-    query = query.or(
-      `title.ilike.%${safe}%,description.ilike.%${safe}%`
-    );
+    query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
   }
 
   if (niche) {

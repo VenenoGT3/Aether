@@ -39,18 +39,25 @@ Errors surface as `Error` with a friendly `message` and optional field hints.
 
 ## Rate limit presets
 
-| Preset | Limit | Use case |
-|--------|-------|----------|
-| `apply` | 5/min | Campaign applications |
-| `submit` | 8/min | Post / deliverable upload |
-| `search` | 60/min | Campaign browse API |
-| `discover` | 15/min | AI matchmaking |
-| `ai` | 20/min | Pitch, predict, safety |
-| `metrics` | 25/min | SociaVault scrape |
-| `webhook` | 200/min | Stripe |
-| `cron` | 10/min | Metrics cron |
+| Preset | Per user | Per IP (additional) | Use case |
+|--------|----------|---------------------|----------|
+| `apply` | 5/min | 12/min | Campaign applications |
+| `submit` | 8/min | 20/min | Post / deliverable upload |
+| `search` | 60/min | 100/min | Campaign browse API |
+| `discover` | 15/min | 30/min | AI matchmaking |
+| `ai` | 20/min | 45/min | Pitch, predict, safety |
+| `metrics` | 25/min | 60/min | SociaVault scrape |
+| `webhook` | 200/min | — | Stripe |
+| `cron` | 10/min | — | Metrics cron |
 
-Limits are per **authenticated user** when `auth` is set, otherwise per **IP**.
+Abuse-prone routes enforce **both** per-user and per-IP windows. Server-side caps also apply (e.g. 20 campaign applications per influencer per day).
+
+## Request limits
+
+- JSON bodies max **256 KB** (`DEFAULT_MAX_BODY_BYTES`)
+- `Content-Type: application/json` required on POST
+- Route params validated with `parseUuidParam()`
+- Social post URLs restricted to Instagram / TikTok / YouTube hosts (`lib/api/abuse.ts`)
 
 ## Honeypot
 

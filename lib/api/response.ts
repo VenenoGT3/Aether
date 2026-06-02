@@ -65,3 +65,16 @@ export function rateLimitError(retryAfterSec: number): NextResponse {
 export function conflictError(message: string): NextResponse {
   return jsonError(message, 409);
 }
+
+export function methodNotAllowed(allowed: string[]): NextResponse {
+  return NextResponse.json(
+    {
+      success: false,
+      error: `Method not allowed. Use ${allowed.join(" or ")}.`,
+    },
+    {
+      status: 405,
+      headers: { Allow: allowed.join(", ") },
+    }
+  );
+}

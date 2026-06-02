@@ -44,6 +44,7 @@ import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
 import { RefreshCw } from "lucide-react";
+import { apiPost } from "@/lib/api/client";
 
 const mockInvites = [
   {
@@ -132,16 +133,14 @@ export default function InfluencerDashboard() {
         let successCount = 0;
         for (const post of postsData) {
           try {
-            const res = await fetch("/api/metrics/fetch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
+            const data = await apiPost<{ success: boolean }>(
+              "/api/metrics/fetch",
+              {
                 post_url: post.post_url,
                 platform: post.platform,
-                participation_id: post.participation_id
-              })
-            });
-            const data = await res.json();
+                participation_id: post.participation_id,
+              }
+            );
             if (data.success) successCount++;
           } catch (e) {
             console.error("Failed to refresh influencer post:", post.post_url, e);

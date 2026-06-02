@@ -32,6 +32,7 @@ import { getClientProfile, Profile, supabase, isMockMode } from "@/lib/supabase/
 import { useTransactions, getCampaignMetricsAction } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
 import { toast } from "sonner";
+import { apiPost } from "@/lib/api/client";
 
 export default function BusinessDashboard() {
   const { t } = useTranslation();
@@ -123,16 +124,14 @@ export default function BusinessDashboard() {
         let successCount = 0;
         for (const post of posts) {
           try {
-            const res = await fetch("/api/metrics/fetch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
+            const data = await apiPost<{ success: boolean }>(
+              "/api/metrics/fetch",
+              {
                 post_url: post.post_url,
                 platform: post.platform,
-                participation_id: post.participation_id
-              })
-            });
-            const data = await res.json();
+                participation_id: post.participation_id,
+              }
+            );
             if (data.success) successCount++;
           } catch (e) {
             console.error("Failed to refresh post:", post.post_url, e);

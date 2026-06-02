@@ -6,15 +6,26 @@ import {
 import { rateLimitError } from "@/lib/api/response";
 import { rejectIfHoneypot } from "@/lib/api/honeypot";
 import { parseJsonBody, parseQuery } from "@/lib/api/validate";
-import { requireApiAuth, type ApiAuthContext } from "@/lib/api/auth";
+import {
+  isInternalCronCall,
+  requireApiAuth,
+  type ApiAuthContext,
+} from "@/lib/api/auth";
 import type { UserRole } from "@/types";
+import { DEFAULT_MAX_BODY_BYTES } from "@/lib/api/validate";
+import { methodNotAllowed } from "@/lib/api/response";
 
 export type ApiGuardOptions<T> = {
   schema: ZodSchema<T>;
   rateLimit: RateLimitPreset;
   routeKey: string;
   auth?: boolean | UserRole;
+  /** Allow verified CRON_SECRET bearer without a user session (metrics cron) */
+  allowCronBearer?: boolean;
+  maxBodyBytes?: number;
 };
+
+export { methodNotAllowed };
 
 export type GuardedRequest<T> = {
   data: T;
@@ -35,11 +46,16 @@ function enforceRateLimit(
 }
 
 async function resolveAuth(
-  auth?: boolean | UserRole
+  request: Request,
+  auth?: boolean | UserRole,
+  allowCronBearer?: boolean
 ): Promise<
   { ok: true; auth: ApiAuthContext | null } | { ok: false; response: Response }
 > {
   if (!auth) return { ok: true, auth: null };
+  if (allowCronBearer && isInternalCronCall(request)) {
+    return { ok: true, auth: null };
+  }
   const role = auth === true ? undefined : auth;
   const authResult = await requireApiAuth(role);
   if (!authResult.ok) return { ok: false, response: authResult.response };
@@ -52,7 +68,11 @@ export async function guardApiPost<T>(
 ): Promise<
   { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
 > {
-  const authResult = await resolveAuth(options.auth);
+  const authResult = await resolveAuth(
+    request,
+    options.auth,
+    options.allowCronBearer
+  );
   if (!authResult.ok) return { ok: false, response: authResult.response };
 
   const rateLimited = enforceRateLimit(
@@ -63,7 +83,11 @@ export async function guardApiPost<T>(
   );
   if (rateLimited) return { ok: false, response: rateLimited };
 
-  const body = await parseJsonBody(request, options.schema);
+  const body = await parseJsonBody(
+    request,
+    options.schema,
+    options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
+  );
   if (!body.ok) return { ok: false, response: body.response };
 
   const hp = rejectIfHoneypot(body.data as { _hp?: string });
@@ -80,7 +104,11 @@ export async function guardApiGet<T>(
 ): Promise<
   { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
 > {
-  const authResult = await resolveAuth(options.auth);
+  const authResult = await resolveAuth(
+    request,
+    options.auth,
+    options.allowCronBearer
+  );
   if (!authResult.ok) return { ok: false, response: authResult.response };
 
   const rateLimited = enforceRateLimit(

@@ -1,5 +1,6 @@
+import "server-only";
 import Stripe from "stripe";
-import { getStripeSecretKey } from "@/lib/env";
+import { getStripeSecretKey } from "@/lib/env.server";
 
 export const stripeServer = new Stripe(getStripeSecretKey(), {
   apiVersion: "2023-10-16" as any, // fallback standard API version

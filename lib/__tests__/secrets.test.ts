@@ -32,4 +32,5 @@ describe("secret runtime boundaries", () => {
     const { canUseServiceRoleInNextRuntime } = await import("@/lib/env");
     expect(canUseServiceRoleInNextRuntime()).toBe(true);
   });
+
 });

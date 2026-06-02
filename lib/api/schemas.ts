@@ -1,11 +1,41 @@
 import { z } from "zod";
+import {
+  isAllowedPostUrl,
+  isSuspiciousSearchQuery,
+  sanitizeSearchQuery,
+} from "@/lib/api/abuse";
 
 export const uuid = z.string().uuid({ message: "Invalid ID format." });
-const url = z.string().url({ message: "Must be a valid URL." }).max(2048);
+
+const socialPostUrl = z
+  .string()
+  .url({ message: "Must be a valid URL." })
+  .max(2048)
+  .refine(isAllowedPostUrl, {
+    message: "Post URL must be from Instagram, TikTok, or YouTube.",
+  });
+
 const shortText = z.string().trim().min(1, "Cannot be empty.").max(500);
 const mediumText = z.string().trim().min(1).max(5000);
 const optionalMediumText = z.string().trim().max(5000).optional();
+const pitchText = z
+  .string()
+  .trim()
+  .min(10, "Pitch must be at least 10 characters.")
+  .max(5000, "Pitch is too long (max 5000 characters).")
+  .optional();
 const tone = z.enum(["professional", "energetic", "creative"]);
+
+const searchQuery = z
+  .string()
+  .trim()
+  .max(200, "Search query is too long.")
+  .optional()
+  .default("")
+  .transform(sanitizeSearchQuery)
+  .refine((q) => !isSuspiciousSearchQuery(q), {
+    message: "Search query contains invalid characters.",
+  });
 
 /** Honeypot — hidden field must stay empty */
 const honeypot = z
@@ -62,7 +92,7 @@ export const AiDiscoverBodySchema = z.object({
       })
     )
     .min(1)
-    .max(50),
+    .max(25),
   _hp: honeypot,
 });
 
@@ -105,7 +135,7 @@ export const AiSafetyBodySchema = z.object({
 });
 
 export const MetricsFetchBodySchema = z.object({
-  post_url: url,
+  post_url: socialPostUrl,
   participation_id: uuid.optional(),
   platform: z.enum(["instagram", "tiktok"]).optional(),
   _hp: honeypot,
@@ -118,12 +148,12 @@ export const CampaignApplyBodySchema = z.object({
     .number()
     .positive("Proposed payout must be greater than zero.")
     .max(100_000_000, "Proposed payout is too large."),
-  pitch: z.string().trim().max(5000).optional(),
+  pitch: pitchText,
   _hp: honeypot,
 });
 
 export const PostSubmitBodySchema = z.object({
-  post_url: url,
+  post_url: socialPostUrl,
   platform: z.enum(["instagram", "tiktok", "youtube"]).optional(),
   caption: z.string().trim().max(2200).optional(),
   metrics: z
@@ -140,8 +170,14 @@ export const PostSubmitBodySchema = z.object({
 });
 
 export const CampaignSearchQuerySchema = z.object({
-  q: z.string().trim().max(200).optional().default(""),
-  niche: z.string().trim().max(80).optional().default(""),
+  q: searchQuery,
+  niche: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .default("")
+    .transform(sanitizeSearchQuery),
   page: z.coerce.number().int().min(1).max(100).optional().default(1),
   limit: z.coerce.number().int().min(1).max(30).optional().default(20),
 });

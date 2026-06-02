@@ -33,23 +33,23 @@ export function getStripeWebhookHandler(): StripeWebhookHandler {
   return raw === "vercel" ? "vercel" : "supabase";
 }
 
-/** Required on Vercel / Next.js when mock mode is off. */
+/** Required on Vercel / Next.js when mock mode is off (always). */
 export const REQUIRED_APP_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
   "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
   "NEXT_PUBLIC_APP_URL",
   "CRON_SECRET",
 ] as const;
 
-/** Only when STRIPE_WEBHOOK_HANDLER=vercel (not recommended for production). */
+/** Only when STRIPE_WEBHOOK_HANDLER=vercel (legacy local testing — forbidden in production). */
 export const REQUIRED_VERCEL_WEBHOOK_VARS = [
+  "STRIPE_WEBHOOK_SECRET",
   "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
 
-/** @deprecated Use REQUIRED_APP_VARS — kept for tests/docs compatibility */
+/** @deprecated Use getRequiredEnvVarNames() */
 export const REQUIRED_PRODUCTION_VARS = [
   ...REQUIRED_APP_VARS,
   ...REQUIRED_VERCEL_WEBHOOK_VARS,
@@ -57,19 +57,52 @@ export const REQUIRED_PRODUCTION_VARS = [
 
 export type RequiredAppVar = (typeof REQUIRED_APP_VARS)[number];
 
-/**
- * Throws if required variables are missing. No-op in mock mode.
- * Service role is required only when webhooks run on Vercel (`STRIPE_WEBHOOK_HANDLER=vercel`).
- */
-export function validateEnv(): void {
-  if (isMockMode) return;
-
+/** Env var names required for the current webhook handler. */
+export function getRequiredEnvVarNames(): string[] {
   const required: string[] = [...REQUIRED_APP_VARS];
-
   if (getStripeWebhookHandler() === "vercel") {
     required.push(...REQUIRED_VERCEL_WEBHOOK_VARS);
   }
+  return required;
+}
 
+/** True on Vercel Production deploys (not local `next build` or Preview). */
+export function isVercelProductionDeploy(): boolean {
+  return process.env.VERCEL_ENV === "production";
+}
+
+/**
+ * Blocks unsafe configuration on Vercel Production only.
+ * Local `next build` with AETHER_MOCK_MODE=true remains valid for CI/demo builds.
+ */
+export function validateProductionSafety(): void {
+  if (!isVercelProductionDeploy()) return;
+
+  if (isMockMode) {
+    throw new Error(
+      "[Aether] AETHER_MOCK_MODE=true is forbidden on Vercel Production. " +
+        "Set AETHER_MOCK_MODE=false in Project → Environment Variables."
+    );
+  }
+
+  if (getStripeWebhookHandler() === "vercel") {
+    throw new Error(
+      "[Aether] STRIPE_WEBHOOK_HANDLER=vercel is forbidden on Vercel Production. " +
+        "Use the default (supabase) and deploy supabase/functions/stripe-webhook so " +
+        "SUPABASE_SERVICE_ROLE_KEY never enters the Vercel runtime."
+    );
+  }
+}
+
+/**
+ * Throws if required variables are missing. No-op in mock mode.
+ * STRIPE_WEBHOOK_SECRET and service role are required only for STRIPE_WEBHOOK_HANDLER=vercel.
+ */
+export function validateEnv(): void {
+  validateProductionSafety();
+  if (isMockMode) return;
+
+  const required = getRequiredEnvVarNames();
   const missing = required.filter((key) => !process.env[key]?.trim());
 
   if (missing.length > 0) {
@@ -78,8 +111,9 @@ export function validateEnv(): void {
         `Set AETHER_MOCK_MODE=true for a local demo, or provide:\n` +
         missing.map((k) => `  - ${k}`).join("\n") +
         (getStripeWebhookHandler() === "supabase"
-          ? `\n\nNote: SUPABASE_SERVICE_ROLE_KEY is not required on Vercel when ` +
-            `STRIPE_WEBHOOK_HANDLER=supabase (default). Set it in Supabase Edge Function secrets instead.`
+          ? `\n\nNote: STRIPE_WEBHOOK_SECRET and SUPABASE_SERVICE_ROLE_KEY belong in ` +
+            `Supabase Edge Function secrets (stripe-webhook), not on Vercel, when ` +
+            `STRIPE_WEBHOOK_HANDLER=supabase (default).`
           : "")
     );
   }
@@ -97,14 +131,6 @@ export function getSupabaseAnonKey(): string {
     return supabaseAnonKey || "placeholder-anon-key";
   }
   return supabaseAnonKey;
-}
-
-export function getStripeSecretKey(): string {
-  const key = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
-  if (isMockMode) {
-    return key || "sk_test_placeholder";
-  }
-  return key;
 }
 
 /** Public Edge Function URL for Stripe dashboard (when using default handler). */

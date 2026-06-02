@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { guardApiPost } from "@/lib/api/guard";
+import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
+import { jsonError } from "@/lib/api/response";
 import { AiPitchBodySchema } from "@/lib/api/schemas";
 import { getGeminiApiKey } from "@/lib/env.server";
+
+export const GET = () => methodNotAllowed(["POST"]);
 
 export async function POST(request: Request) {
   try {
@@ -96,9 +99,9 @@ Keep the pitch extremely concise, around 100-120 words. Begin directly with a co
     return NextResponse.json({ pitch, generatedBy: "fallback_template" });
   } catch (error: any) {
     console.error("Error in AI pitch writer route:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
-      { status: 500 }
+    return jsonError(
+      error instanceof Error ? error.message : "Internal Server Error",
+      500
     );
   }
 }

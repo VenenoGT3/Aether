@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { guardApiPost } from "@/lib/api/guard";
+import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
+import { jsonError } from "@/lib/api/response";
 import { AiPredictBodySchema } from "@/lib/api/schemas";
 import { getGeminiApiKey } from "@/lib/env.server";
 
@@ -39,6 +40,8 @@ interface PredictResponse {
   analysis: string;
   recommendations: string[];
 }
+
+export const GET = () => methodNotAllowed(["POST"]);
 
 export async function POST(request: Request) {
   try {
@@ -210,9 +213,9 @@ interface PredictResponse {
 
   } catch (error: any) {
     console.error("Error in predict route:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
-      { status: 500 }
+    return jsonError(
+      error instanceof Error ? error.message : "Internal Server Error",
+      500
     );
   }
 }

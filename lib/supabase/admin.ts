@@ -5,7 +5,10 @@ import {
   isMockMode,
   canUseServiceRoleInNextRuntime,
 } from "@/lib/env";
-import { getServiceRoleKey } from "@/lib/env.server";
+import {
+  getOptionalServiceRoleKey,
+  getServiceRoleKey,
+} from "@/lib/env.server";
 
 /**
  * Service-role Supabase client — bypasses RLS.
@@ -26,8 +29,7 @@ export function createAdminClient() {
   }
 
   const serviceRoleKey = isMockMode
-    ? process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-      "placeholder-service-role-key"
+    ? getOptionalServiceRoleKey() || "placeholder-service-role-key"
     : getServiceRoleKey();
 
   return createClient(getSupabaseUrl(), serviceRoleKey, {

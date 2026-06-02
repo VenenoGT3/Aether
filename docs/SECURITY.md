@@ -14,7 +14,7 @@ Aether is **secure by default** when `AETHER_MOCK_MODE` is not `true`. Mock mode
 | Rate limiting | Added | In-memory limiter on AI, metrics, webhooks |
 | Webhook signatures | Enforced | Stripe `constructEvent` when not in mock mode |
 | Cron auth | Enforced | `Authorization: Bearer CRON_SECRET` when not in mock mode |
-| Service role key | Scoped | `lib/env.server.ts` + `createAdminClient()` — webhooks only |
+| Service role key | Scoped | Supabase Edge Function by default; `createAdminClient()` only for legacy `vercel` handler |
 | Metrics API | Fixed | Requires auth + participation access (or cron bearer) |
 
 ---
@@ -67,7 +67,7 @@ See **[SECRETS.md](./SECRETS.md)** for the full Vercel + Supabase matrix.
 |--------|----------|----------|
 | `NEXT_PUBLIC_*` | Client bundle | Public by design |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function (default) | Never on Vercel Production |
-| `STRIPE_WEBHOOK_SECRET` | Supabase Edge + Vercel | Webhook verification |
+| `STRIPE_WEBHOOK_SECRET` | Supabase Edge (default) | Webhook verification; Vercel only if legacy handler |
 | `CRON_SECRET` | Vercel server | Cron + internal metrics |
 | `GEMINI_API_KEY`, `SOCIAVAULT_API_KEY` | `lib/env.server.ts` | API routes |
 
@@ -81,13 +81,15 @@ See `lib/api/README.md`. All routes use Zod + rate limits + friendly `400` error
 
 | Route | Auth | Rate limit |
 |-------|------|------------|
-| `POST /api/campaigns/[id]/apply` | Influencer | 5/min |
-| `POST /api/participations/[id]/posts` | Influencer | 8/min |
-| `GET /api/campaigns/search` | Signed-in | 60/min |
-| `POST /api/ai/*` | Role-specific | 15–20/min |
-| `POST /api/metrics/fetch` | Signed-in + participation | 25/min |
+| `POST /api/campaigns/[id]/apply` | Influencer | 5/min user + 12/min IP; 20/day server cap |
+| `POST /api/participations/[id]/posts` | Influencer | 8/min user + 20/min IP |
+| `GET /api/campaigns/search` | Signed-in | 60/min user + 100/min IP |
+| `POST /api/ai/*` | Role-specific | 15–20/min user + 30–45/min IP |
+| `POST /api/metrics/fetch` | Signed-in or cron bearer | 25/min user + 60/min IP |
 | `/api/webhooks/stripe` | Stripe signature | 200/min |
 | `/api/cron/metrics` | CRON_SECRET | 10/min |
+
+All routes use Zod validation, honeypot (`_hp`), JSON size limits, and friendly `{ error, fields }` responses. See `lib/api/README.md`.
 
 ---
 
@@ -95,7 +97,7 @@ See `lib/api/README.md`. All routes use Zod + rate limits + friendly `400` error
 
 1. **In-memory rate limiting** — Resets on cold start; not shared across instances. **Mitigation:** Use Upstash Redis / Vercel KV for production scale.
 
-2. **Mock mode** — Trusts cookies and skips API auth. **Mitigation:** Never deploy with `AETHER_MOCK_MODE=true`.
+2. **Mock mode** — Trusts cookies and skips API auth. **Mitigation:** `validateProductionSafety()` fails Vercel Production deploys if `AETHER_MOCK_MODE=true`.
 
 3. **Service role on webhooks** — Bypasses RLS by design. **Mitigation:** Stripe signature verification; monitor webhook logs.
 

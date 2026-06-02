@@ -28,15 +28,25 @@ export async function parseApiResponse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+/** Attach empty honeypot field expected by guarded API routes */
+export function withHoneypot<T extends object>(body: T): T & { _hp: "" } {
+  return { ...body, _hp: "" };
+}
+
 export async function apiPost<T>(
   path: string,
   body: unknown
 ): Promise<T> {
+  const payload =
+    body !== null && typeof body === "object"
+      ? withHoneypot(body as object)
+      : body;
+
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   return parseApiResponse<T>(res);
 }

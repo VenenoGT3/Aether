@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { guardApiPost } from "@/lib/api/guard";
+import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { CampaignApplyBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { applyToCampaign } from "@/lib/api/services/campaign-apply";
 import { isMockMode } from "@/lib/env";
+
+export const GET = () => methodNotAllowed(["POST"]);
 
 export async function POST(
   request: Request,

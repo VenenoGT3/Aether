@@ -28,6 +28,32 @@ function requireServerSecret(name: string): string {
   );
 }
 
+/** Optional secret for mock/local paths — never throws. */
+function optionalServerSecret(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+export function getStripeSecretKey(): string {
+  const key = requireServerSecret("STRIPE_SECRET_KEY");
+  if (isMockMode) {
+    return key || "sk_test_placeholder";
+  }
+  return key;
+}
+
+export function getOptionalCronSecret(): string | undefined {
+  return optionalServerSecret("CRON_SECRET");
+}
+
+export function getOptionalStripeWebhookSecret(): string | undefined {
+  return optionalServerSecret("STRIPE_WEBHOOK_SECRET");
+}
+
+export function getOptionalServiceRoleKey(): string | undefined {
+  return optionalServerSecret("SUPABASE_SERVICE_ROLE_KEY");
+}
+
 export function getServiceRoleKey(): string {
   if (!canUseServiceRoleInNextRuntime()) {
     throw new Error(

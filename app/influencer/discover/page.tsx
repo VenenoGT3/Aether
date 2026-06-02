@@ -250,31 +250,26 @@ export default function DiscoverPage() {
       // Rank and match raw campaigns using AI Matchmaking API
       try {
         const creatorNiches: string[] = (profile as any)?.niches || (profile?.niche ? [profile.niche] : ["Tech", "Minimalism"]);
-        const matchResponse = await fetch("/api/ai/discover", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        try {
+          const matchData = await apiPost<{
+            success: boolean;
+            campaigns?: typeof rawCamps;
+          }>("/api/ai/discover", {
             creator: {
               name: profile?.full_name || "Marcus Vance",
               bio: profile?.bio || "Tech creator and minimalist design specialist.",
               niches: creatorNiches,
               followers: profile?.followers || 48500,
-              engagement: Number(profile?.engagement_rate) || 4.8
+              engagement: Number(profile?.engagement_rate) || 4.8,
             },
-            campaigns: rawCamps
-          })
-        });
-
-        if (matchResponse.ok) {
-          const matchData = await matchResponse.json();
+            campaigns: rawCamps,
+          });
           if (matchData.success && matchData.campaigns) {
             setCampaigns(matchData.campaigns);
           } else {
             setCampaigns(rawCamps);
           }
-        } else {
+        } catch {
           setCampaigns(rawCamps);
         }
       } catch (matchErr) {
@@ -352,7 +347,6 @@ export default function DiscoverPage() {
       } else {
         await apiPost(`/api/campaigns/${campaign.id}/apply`, {
           proposed_payout: proposed,
-          _hp: "",
         });
       }
 
@@ -383,35 +377,30 @@ export default function DiscoverPage() {
     
     toast.loading(t("Aether AI is writing your pitch..."), { id: "ai-pitch" });
     try {
-      const response = await fetch("/api/ai/pitch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const data = await apiPost<{ pitch?: string; generatedBy?: string }>(
+        "/api/ai/pitch",
+        {
           campaign: {
             title: selectedCampaign.title,
             description: selectedCampaign.description,
             niches: selectedCampaign.target_niches,
             budget: selectedCampaign.budget_total,
-            brandName: selectedCampaign.businessName
+            brandName: selectedCampaign.businessName,
           },
-           creator: {
+          creator: {
             name: user?.full_name || "Marcus Vance",
             bio: user?.bio || "Tech creator and minimalist design specialist.",
-            niches: (user as any)?.niches || (user?.niche ? [user.niche] : ["Tech", "Productivity"]),
-            followers: (user as any)?.follower_count || user?.followers || 48500,
-            engagement: (user as any)?.engagement_rate || user?.engagement_rate || 4.8
+            niches:
+              (user as any)?.niches ||
+              (user?.niche ? [user.niche] : ["Tech", "Productivity"]),
+            followers:
+              (user as any)?.follower_count || user?.followers || 48500,
+            engagement:
+              (user as any)?.engagement_rate || user?.engagement_rate || 4.8,
           },
-          tone: pitchTone
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to call pitch API");
-      }
-
-      const data = await response.json();
+          tone: pitchTone,
+        }
+      );
       setPitchText(data.pitch || "");
       toast.success(t("AI pitch ready!"), { 
         id: "ai-pitch",
@@ -487,7 +476,6 @@ export default function DiscoverPage() {
         await apiPost(`/api/campaigns/${selectedCampaign.id}/apply`, {
           proposed_payout: proposedPayout,
           pitch: pitchText.trim() || undefined,
-          _hp: "",
         });
       }
 

@@ -67,8 +67,9 @@ export async function requireApiAuth(
 
 /** Cron / internal service calls bypass user auth when bearer matches CRON_SECRET */
 export function isInternalCronCall(request: Request): boolean {
+  if (isMockMode) return false;
   const auth = request.headers.get("authorization");
-  const secret = getCronSecret() || process.env.CRON_SECRET?.trim();
+  const secret = getCronSecret();
   if (!secret) return false;
   return auth === `Bearer ${secret}`;
 }

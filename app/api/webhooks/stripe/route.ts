@@ -6,7 +6,10 @@ import {
   getStripeWebhookHandler,
   getSupabaseStripeWebhookUrl,
 } from "@/lib/env";
-import { getStripeWebhookSecret } from "@/lib/env.server";
+import {
+  getOptionalStripeWebhookSecret,
+  getStripeWebhookSecret,
+} from "@/lib/env.server";
 import { verifyStripeWebhookSignature } from "@/lib/campaign-lifecycle";
 import { handleStripeWebhookEvent } from "@/lib/stripe/webhook-handler";
 import { guardRateLimitOnly } from "@/lib/api/guard";
@@ -32,7 +35,7 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature") || "";
   const webhookSecret = isMockMode
-    ? process.env.STRIPE_WEBHOOK_SECRET?.trim()
+    ? getOptionalStripeWebhookSecret()
     : getStripeWebhookSecret();
 
   const sigCheck = verifyStripeWebhookSignature(

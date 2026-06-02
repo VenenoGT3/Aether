@@ -3,10 +3,11 @@ import { isMockMode } from "@/lib/env";
 import { getSociavaultApiKey } from "@/lib/env.server";
 import { guardApiPost } from "@/lib/api/guard";
 import { MetricsFetchBodySchema } from "@/lib/api/schemas";
-import { isInternalCronCall, requireApiAuth } from "@/lib/api/auth";
+import { isInternalCronCall } from "@/lib/api/auth";
 import { assertParticipationAccess } from "@/lib/api/participation-access";
 import { createClient } from "@/lib/supabase/server";
-import { forbiddenError } from "@/lib/api/response";
+import { forbiddenError, unauthorizedError } from "@/lib/api/response";
+import { methodNotAllowed } from "@/lib/api/guard";
 
 /**
  * Detect social platform from post URL
@@ -58,6 +59,8 @@ function generateSimulatedMetrics(url: string, platform: "instagram" | "tiktok")
   };
 }
 
+export const GET = () => methodNotAllowed(["POST"]);
+
 export async function POST(request: Request) {
   try {
     const guarded = await guardApiPost(request, {
@@ -65,6 +68,7 @@ export async function POST(request: Request) {
       rateLimit: "metrics",
       routeKey: "metrics/fetch",
       auth: true,
+      allowCronBearer: true,
     });
     if (!guarded.ok) return guarded.response;
 
@@ -72,12 +76,12 @@ export async function POST(request: Request) {
     let platform = guarded.ctx.data.platform;
 
     const internalCron = isInternalCronCall(request);
-    let actorUserId: string | null = null;
 
     if (!internalCron) {
-      const auth = await requireApiAuth();
-      if (!auth.ok) return auth.response;
-      actorUserId = auth.auth.userId;
+      if (!guarded.ctx.auth) {
+        return unauthorizedError();
+      }
+      const actorUserId = guarded.ctx.auth.userId;
 
       if (participation_id) {
         const access = await assertParticipationAccess(

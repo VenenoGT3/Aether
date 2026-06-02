@@ -1,5 +1,7 @@
 "use server";
 
+import { getGeminiApiKey } from "@/lib/env.server";
+
 interface BriefResponse {
   title: string;
   description: string;
@@ -34,7 +36,7 @@ interface BriefResponse {
  */
 export async function generateCampaignBriefAction(prompt: string): Promise<{ success: boolean; brief?: BriefResponse; error?: string }> {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
     const isMock = !apiKey || apiKey.startsWith("AIzaSyPlaceholder") || apiKey === "AIzaSy...";
 
     if (isMock) {

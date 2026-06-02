@@ -1,9 +1,11 @@
-import { guardApiPost } from "@/lib/api/guard";
+import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { PostSubmitBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { submitParticipationPost } from "@/lib/api/services/post-submit";
 import { isMockMode } from "@/lib/env";
+
+export const GET = () => methodNotAllowed(["POST"]);
 
 export async function POST(
   request: Request,
