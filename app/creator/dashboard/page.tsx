@@ -170,16 +170,16 @@ export default function InfluencerDashboard() {
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
   
   // Verification metrics mock
-  const [verifiedPlatforms, setVerifiedPlatforms] = useState<Record<string, string>>({
-    tiktok: "@marcusv.tiktok"
-  });
+  const [verifiedPlatforms, setVerifiedPlatforms] = useState<Record<string, string>>(
+    isMockMode ? { tiktok: "@marcusv.tiktok" } : {}
+  );
 
   const loadVerificationData = () => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("aether-verified-platforms");
       if (stored) {
         setVerifiedPlatforms(JSON.parse(stored));
-      } else {
+      } else if (isMockMode) {
         localStorage.setItem("aether-verified-platforms", JSON.stringify({ tiktok: "@marcusv.tiktok" }));
       }
     }
@@ -342,14 +342,10 @@ export default function InfluencerDashboard() {
   // Dynamic earnings aggregator
   const getEarningsChartData = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-    const monthlyEarnings: Record<string, number> = {
-      Jan: 1200,
-      Feb: 2400,
-      Mar: 1800,
-      Apr: 3900,
-      May: 4200,
-      Jun: 5800
-    };
+    // Demo seed only in mock mode; real mode starts at zero (real releases add on).
+    const monthlyEarnings: Record<string, number> = isMockMode
+      ? { Jan: 1200, Feb: 2400, Mar: 1800, Apr: 3900, May: 4200, Jun: 5800 }
+      : { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
 
     transactions.forEach((tx) => {
       if (tx.status !== "succeeded") return;
@@ -372,8 +368,8 @@ export default function InfluencerDashboard() {
   };
 
   const earningsData = getEarningsChartData();
-  const totalEarnings = transactions.filter(t => t.type === "release" && t.status === "succeeded").reduce((sum, t) => sum + t.amount, 0) || 19300;
-  const engagementRate = aggregateMetrics.engagement_rate || user?.engagement_rate || 4.82;
+  const totalEarnings = transactions.filter(t => t.type === "release" && t.status === "succeeded").reduce((sum, t) => sum + t.amount, 0) || (isMockMode ? 19300 : 0);
+  const engagementRate = aggregateMetrics.engagement_rate || user?.engagement_rate || (isMockMode ? 4.82 : 0);
 
   const isStripeConnected = !!user?.stripe_connect_id && !!user?.stripe_onboarding_completed;
 
@@ -388,7 +384,7 @@ export default function InfluencerDashboard() {
             {t("Aether Creator Hub")}
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            {user?.full_name ? `${user.full_name.split(" ")[0]}'s ${t("Creator Hub")}` : `Marcus's ${t("Work Center")}`}
+            {user?.full_name ? `${user.full_name.split(" ")[0]}'s ${t("Creator Hub")}` : isMockMode ? `Marcus's ${t("Work Center")}` : t("Creator Hub")}
           </h1>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -506,10 +502,14 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-[#007AFF]/10 text-[#007AFF]"><Users size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">48.5K</h3>
-                  <span className="text-xs text-[#34C759] font-semibold flex items-center gap-1 mt-1.5">
-                    +4.2% <ArrowUpRight size={12} /> {t("this month").includes("month") ? "this month" : "questo mese"}
-                  </span>
+                  <h3 className="text-3xl font-bold tracking-tight">
+                    {user?.followers ? user.followers.toLocaleString() : isMockMode ? "48.5K" : "—"}
+                  </h3>
+                  {isMockMode && (
+                    <span className="text-xs text-[#34C759] font-semibold flex items-center gap-1 mt-1.5">
+                      +4.2% <ArrowUpRight size={12} /> {t("this month").includes("month") ? "this month" : "questo mese"}
+                    </span>
+                  )}
                 </div>
               </motion.div>
 
@@ -561,10 +561,12 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-primary/10 text-primary"><Bell size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">Tech</h3>
-                  <span className="text-xs text-muted-foreground font-medium block mt-1.5">
-                    #MinimalistSetups tags
-                  </span>
+                  <h3 className="text-3xl font-bold tracking-tight">{user?.niche || (isMockMode ? "Tech" : "—")}</h3>
+                  {isMockMode && (
+                    <span className="text-xs text-muted-foreground font-medium block mt-1.5">
+                      #MinimalistSetups tags
+                    </span>
+                  )}
                 </div>
               </motion.div>
             </motion.div>
@@ -640,7 +642,12 @@ export default function InfluencerDashboard() {
                   <p className="text-xs text-muted-foreground mb-8">{t("Review sponsorship terms and lock deposits.")}</p>
                   
                   <div className="space-y-4">
-                    {mockInvites.map((invite) => (
+                    {!isMockMode && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("No campaign invites. Find open campaigns in Discover.")}
+                      </p>
+                    )}
+                    {(isMockMode ? mockInvites : []).map((invite) => (
                       <motion.div 
                         key={invite.id}
                         whileHover={{ scale: 1.015, x: 2 }}
@@ -816,7 +823,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-[#007AFF]/10 text-[#007AFF]"><Users size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{(user?.followers || 48500).toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">{(user?.followers || (isMockMode ? 48500 : 0)).toLocaleString()}</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Aggregated profile traffic</span>
                 </div>
               </div>
@@ -827,7 +834,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-[#34C759]/10 text-[#34C759]"><Eye size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{(aggregateMetrics.impressions || 56000).toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">{(aggregateMetrics.impressions || (isMockMode ? 56000 : 0)).toLocaleString()}</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Across all campaign posts</span>
                 </div>
               </div>
@@ -849,7 +856,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-primary/10 text-primary"><DollarSign size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">$12,700</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">{isMockMode ? "$12,700" : "—"}</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Attributed sales generated</span>
                 </div>
               </div>
@@ -873,10 +880,12 @@ export default function InfluencerDashboard() {
                               Impressions: p.metrics.impressions || 15000,
                               Reach: p.metrics.reach || 12000
                             }))
-                          : [
+                          : isMockMode
+                          ? [
                               { name: "Workspace Review", Impressions: 18000, Reach: 15000 },
                               { name: "Lifestyle Launch", Impressions: 38000, Reach: 32000 }
                             ]
+                          : []
                       } 
                       margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >

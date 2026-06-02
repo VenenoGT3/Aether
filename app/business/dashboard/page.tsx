@@ -475,19 +475,15 @@ export default function BusinessDashboard() {
   // Smart ROI calculations
   const totalSpendVal = Object.values(campaignMetrics).reduce((sum, m) => sum + (m.budget_spent || 0), 0);
   const totalRevenueVal = Object.values(campaignMetrics).reduce((sum, m) => sum + (m.attributed_value || 0), 0);
-  const averageRoi = totalSpendVal > 0 ? (totalRevenueVal / totalSpendVal).toFixed(1) : "3.2";
+  const averageRoi = totalSpendVal > 0 ? (totalRevenueVal / totalSpendVal).toFixed(1) : (isMockMode ? "3.2" : "0");
 
   // Recharts Chart Data
   const getSpendHistoryData = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthlySpend: Record<string, number> = {
-      Jan: 4000,
-      Feb: 5500,
-      Mar: 8200,
-      Apr: 7000,
-      May: 12500,
-      Jun: 15000
-    };
+    // Demo seed only in mock mode; real mode starts at zero (real spend adds on).
+    const monthlySpend: Record<string, number> = isMockMode
+      ? { Jan: 4000, Feb: 5500, Mar: 8200, Apr: 7000, May: 12500, Jun: 15000 }
+      : { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
 
     transactions.forEach(tx => {
       if (tx.status !== "succeeded") return;
@@ -743,9 +739,11 @@ export default function BusinessDashboard() {
                     <h3 className="text-3xl font-bold tracking-tight text-foreground">
                       ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                     </h3>
-                    <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
-                      +18.4% <ArrowUpRight size={12} /> {t("this month")}
-                    </span>
+                    {isMockMode && (
+                      <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
+                        +18.4% <ArrowUpRight size={12} /> {t("this month")}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -771,9 +769,11 @@ export default function BusinessDashboard() {
                   </div>
                   <div className="mt-6">
                     <h3 className="text-3xl font-bold tracking-tight text-foreground">{creatorsRecruited}</h3>
-                    <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
-                      4.8% ER {t("average")}
-                    </span>
+                    {isMockMode && (
+                      <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
+                        4.8% ER {t("average")}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1071,9 +1071,9 @@ export default function BusinessDashboard() {
                               </p>
 
                               <div className="flex gap-4 pt-1 text-[10px] text-muted-foreground/80 font-semibold">
-                                <span>Impressions: <strong className="text-foreground">{latestSub.metrics?.views?.toLocaleString() || "15K"}</strong></span>
-                                <span>Engagement: <strong className="text-foreground">{latestSub.metrics?.roi ? "4.8%" : "3.5%"}</strong></span>
-                                <span>Est. ROI: <strong className="text-[#34C759]">{latestSub.metrics?.roi || "2.1"}x</strong></span>
+                                <span>Impressions: <strong className="text-foreground">{latestSub.metrics?.views?.toLocaleString() || (isMockMode ? "15K" : "0")}</strong></span>
+                                <span>Engagement: <strong className="text-foreground">{isMockMode ? (latestSub.metrics?.roi ? "4.8%" : "3.5%") : "—"}</strong></span>
+                                <span>Est. ROI: <strong className="text-[#34C759]">{latestSub.metrics?.roi || (isMockMode ? "2.1" : "0")}x</strong></span>
                               </div>
                             </div>
                           </div>
