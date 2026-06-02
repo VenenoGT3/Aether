@@ -68,7 +68,10 @@ export interface ModerationClip {
 const CLIPS_LS_KEY = "aether-mock-clips";
 const EARNINGS_LS_KEY = "aether-mock-clip-earnings";
 const PAYOUTS_LS_KEY = "aether-mock-clip-payouts";
+const JOINED_LS_KEY = "aether-mock-joined-campaigns";
 const DEFAULT_CPM = 2.5;
+// Start un-joined so the Join flow is visible/testable; joining is recorded here.
+const SEED_JOINED: string[] = [];
 
 const SEED_CLIPS: CreatorClip[] = [
   {
@@ -154,6 +157,85 @@ function detectPlatform(url: string): string {
   if (lower.includes("tiktok.com")) return "tiktok";
   if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
   return "instagram";
+}
+
+export interface JoinResult {
+  ok: boolean;
+  alreadyJoined?: boolean;
+  error?: string;
+}
+
+/**
+ * Creator: which performance campaigns the creator has actively joined, plus a
+ * join() action that calls POST /api/campaigns/[id]/join (real) or records the
+ * join locally (mock). Clip submission is gated on membership of joinedIds.
+ */
+export function useJoinedCampaigns() {
+  const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (isMockMode) {
+      setJoinedIds(new Set(readLs<string[]>(JOINED_LS_KEY, SEED_JOINED)));
+      setLoading(false);
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const { data } = await supabase
+      .from("participations")
+      .select("campaign_id")
+      .eq("influencer_id", user.id)
+      .eq("status", "active");
+    setJoinedIds(
+      new Set(((data ?? []) as { campaign_id: string }[]).map((r) => r.campaign_id))
+    );
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
+    load();
+    if (typeof window === "undefined") return;
+    const handler = () => load();
+    window.addEventListener("aether-clips-update", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("aether-clips-update", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, [load]);
+
+  const join = useCallback(
+    async (campaignId: string): Promise<JoinResult> => {
+      if (isMockMode) {
+        const list = readLs<string[]>(JOINED_LS_KEY, SEED_JOINED);
+        if (list.includes(campaignId)) return { ok: true, alreadyJoined: true };
+        list.push(campaignId);
+        writeLs(JOINED_LS_KEY, list);
+        return { ok: true, alreadyJoined: false };
+      }
+      try {
+        const res = await apiPost<{ alreadyJoined?: boolean }>(
+          `/api/campaigns/${campaignId}/join`,
+          {}
+        );
+        await load();
+        return { ok: true, alreadyJoined: res.alreadyJoined };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Could not join campaign.",
+        };
+      }
+    },
+    [load]
+  );
+
+  return { joinedIds, loading, join, refresh: load };
 }
 
 /** Creator: list + submit clips. */

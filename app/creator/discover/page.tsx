@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { getClientProfile, isMockMode, supabase } from "@/lib/supabase/client";
 import { apiPost, apiGet } from "@/lib/api/client";
+import { useJoinedCampaigns } from "@/lib/supabase/clips";
 import { Profile } from "@/types";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
@@ -50,21 +51,23 @@ interface Campaign {
   image_url: string;
   matchScore?: number;
   matchingReason?: string;
+  campaign_type?: "fixed" | "performance";
 }
 
 const initialMockCampaigns: Campaign[] = [
   {
-    id: "camp_1",
-    title: "Ergonomic Desk Tech Review",
-    description: "Promote our new premium ergonomic monitor arm and setup accessories. Share a high-aesthetic workspace transformation reel.",
-    businessName: "Acme Tech Corp",
-    budget_total: 2500,
-    target_niches: ["Tech", "Minimalism", "Productivity"],
-    deliverables: [{ type: "instagram_reel", quantity: 1, description: "1x 60s Reel showing full desk transformation." }],
-    timeline: { start_date: "2026-06-01", end_date: "2026-06-30" },
-    payout_speed: "Instant Escrow",
-    days_left: 8,
-    image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
+    id: "camp_perf_1",
+    title: "Aether Clip Challenge — Earn Per View",
+    description: "Open clipping campaign. Cut short-form clips from our launch footage and earn per 1,000 views. No application needed — join and start posting.",
+    businessName: "Aether Labs",
+    budget_total: 10000,
+    target_niches: ["Tech", "Design", "Lifestyle"],
+    deliverables: [{ type: "clip", quantity: 1, description: "Short-form vertical clips (TikTok / Reels / Shorts)." }],
+    timeline: { start_date: "2026-05-25", end_date: "2026-06-30" },
+    payout_speed: "Pay per view (CPM)",
+    days_left: 28,
+    image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
+    campaign_type: "performance"
   },
   {
     id: "camp_2",
@@ -154,6 +157,8 @@ export default function DiscoverPage() {
   // Dialog State
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const { joinedIds, join } = useJoinedCampaigns();
+  const [joiningId, setJoiningId] = useState<string | null>(null);
   
   // Application Form State
   const [proposedPayout, setProposedPayout] = useState<number>(0);
@@ -361,8 +366,29 @@ export default function DiscoverPage() {
     }
   };
 
-  // OPEN DETAILED APPLY MODAL
+  // PERFORMANCE: open-join (no pitch / approval)
+  const handleJoinCampaign = async (campaign: Campaign) => {
+    setJoiningId(campaign.id);
+    const res = await join(campaign.id);
+    setJoiningId(null);
+    if (res.ok) {
+      toast.success(
+        res.alreadyJoined
+          ? t("You've already joined this campaign.")
+          : t("Joined! Head to Clips & Earnings to submit clips."),
+        { description: campaign.title }
+      );
+    } else {
+      toast.error(res.error || t("Could not join campaign."));
+    }
+  };
+
+  // OPEN DETAILED APPLY MODAL (or open-join for performance campaigns)
   const openApplyModal = (campaign: Campaign) => {
+    if (campaign.campaign_type === "performance") {
+      void handleJoinCampaign(campaign);
+      return;
+    }
     setSelectedCampaign(campaign);
     setProposedPayout(campaign.budget_total);
     setPitchText("");
@@ -920,19 +946,32 @@ export default function DiscoverPage() {
                             </div>
                           ) : (
                             <>
-                              <button
-                                onClick={() => handleExpressInterest(camp)}
-                                className="px-3.5 py-2.5 rounded-full border border-border/20 hover:border-primary/20 text-muted-foreground hover:text-foreground text-[11px] font-bold cursor-pointer transition-all bg-card/60"
-                              >
-                                {t("Express Interest")}
-                              </button>
-                              <Button
-                                onClick={() => openApplyModal(camp)}
-                                size="sm"
-                                className="rounded-full px-4 text-[11px] font-bold shadow-sm cursor-pointer"
-                              >
-                                {t("Apply")}
-                              </Button>
+                              {camp.campaign_type === "performance" ? (
+                                <Button
+                                  onClick={() => openApplyModal(camp)}
+                                  size="sm"
+                                  disabled={joiningId === camp.id || joinedIds.has(camp.id)}
+                                  className="rounded-full px-4 text-[11px] font-bold shadow-sm cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0"
+                                >
+                                  {joinedIds.has(camp.id) ? t("Joined") : t("Join Campaign")}
+                                </Button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleExpressInterest(camp)}
+                                    className="px-3.5 py-2.5 rounded-full border border-border/20 hover:border-primary/20 text-muted-foreground hover:text-foreground text-[11px] font-bold cursor-pointer transition-all bg-card/60"
+                                  >
+                                    {t("Express Interest")}
+                                  </button>
+                                  <Button
+                                    onClick={() => openApplyModal(camp)}
+                                    size="sm"
+                                    className="rounded-full px-4 text-[11px] font-bold shadow-sm cursor-pointer"
+                                  >
+                                    {t("Apply")}
+                                  </Button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>

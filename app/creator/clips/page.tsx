@@ -12,6 +12,7 @@ import {
   Loader2,
   Wallet,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import {
   useCreatorClips,
   useCreatorEarnings,
+  useJoinedCampaigns,
   type ClipStatus,
 } from "@/lib/supabase/clips";
 
@@ -41,11 +43,15 @@ export default function CreatorClipsPage() {
   const { t } = useTranslation();
   const { clips, loading, submitClip } = useCreatorClips();
   const { breakdown, payouts } = useCreatorEarnings();
+  const { joinedIds, join } = useJoinedCampaigns();
 
   const [campaigns, setCampaigns] = useState<PerfCampaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [postUrl, setPostUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [joining, setJoining] = useState(false);
+
+  const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
 
   const loadCampaigns = useCallback(async () => {
     if (isMockMode) {
@@ -72,9 +78,32 @@ export default function CreatorClipsPage() {
     loadCampaigns();
   }, [loadCampaigns]);
 
+  const handleJoin = async () => {
+    if (!selectedCampaign) {
+      toast.error(t("Pick a campaign to join."));
+      return;
+    }
+    setJoining(true);
+    const res = await join(selectedCampaign);
+    setJoining(false);
+    if (res.ok) {
+      toast.success(
+        res.alreadyJoined
+          ? t("You're already in this campaign.")
+          : t("Joined! You can now submit clips.")
+      );
+    } else {
+      toast.error(res.error || t("Could not join campaign."));
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedCampaign) {
       toast.error(t("Pick a campaign to clip for."));
+      return;
+    }
+    if (!isJoined) {
+      toast.error(t("Join this campaign before submitting clips."));
       return;
     }
     if (!postUrl.trim()) {
@@ -235,27 +264,50 @@ export default function CreatorClipsPage() {
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Clip URL")}</label>
-              <input
-                type="url"
-                placeholder="https://tiktok.com/@you/video/..."
-                value={postUrl}
-                onChange={(e) => setPostUrl(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 placeholder:text-muted-foreground/40"
-              />
-            </div>
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="w-full rounded-xl py-5 font-bold text-xs gap-1.5 cursor-pointer bg-primary text-white border-0 h-auto"
-            >
-              {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {t("Submit clip")}
-            </Button>
-            <p className="text-[10px] text-muted-foreground leading-normal">
-              {t("You can submit as many clips as you like. Each is reviewed, then tracked for views.")}
-            </p>
+            {!isJoined ? (
+              <div className="space-y-3 pt-1">
+                <Button
+                  onClick={handleJoin}
+                  disabled={joining || !selectedCampaign}
+                  className="w-full rounded-xl py-5 font-bold text-xs gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0 h-auto"
+                >
+                  {joining ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                  {t("Join Campaign")}
+                </Button>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  {t("Join this campaign to start submitting clips. It's instant and free — no application needed.")}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Clip URL")}</label>
+                    <span className="text-[9px] font-bold text-[#34C759] flex items-center gap-1">
+                      <CheckCircle2 size={10} /> {t("Joined")}
+                    </span>
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="https://tiktok.com/@you/video/..."
+                    value={postUrl}
+                    onChange={(e) => setPostUrl(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 placeholder:text-muted-foreground/40"
+                  />
+                </div>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="w-full rounded-xl py-5 font-bold text-xs gap-1.5 cursor-pointer bg-primary text-white border-0 h-auto"
+                >
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {t("Submit clip")}
+                </Button>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  {t("You can submit as many clips as you like. Each is reviewed, then tracked for views.")}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="p-6 apple-card">
