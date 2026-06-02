@@ -27,7 +27,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
-import { createCampaignAction } from "@/lib/supabase/campaigns";
+import { createCampaignAction, updateCampaignStatusAction } from "@/lib/supabase/campaigns";
+import { fundCampaignPoolAction } from "@/lib/stripe/actions";
+import { PoolPaymentModal } from "@/components/pool-payment-modal";
 import { generateCampaignBriefAction } from "@/lib/actions/ai";
 import { useTranslation } from "@/lib/translations";
 
@@ -60,6 +62,15 @@ export default function NewCampaignWizard() {
   const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
   const [cardExpiry, setCardExpiry] = useState("12/28");
   const [cardCvc, setCardCvc] = useState("342");
+
+  // Performance pool funding (real Stripe Elements)
+  const [poolPublishing, setPoolPublishing] = useState(false);
+  const [poolFunding, setPoolFunding] = useState<{
+    clientSecret: string;
+    amount: number;
+    campaignId: string;
+    title: string;
+  } | null>(null);
 
   // Form State
   const [title, setTitle] = useState("");
@@ -185,6 +196,16 @@ export default function NewCampaignWizard() {
     }
   };
 
+  const celebrate = () => {
+    const end = Date.now() + 2 * 1000;
+    const frame = () => {
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  };
+
   // Publish / Payment Handler
   const handlePublishClick = () => {
     // Validate fields before showing payment modal
@@ -195,7 +216,84 @@ export default function NewCampaignWizard() {
       setStep(1);
       return;
     }
+    if (isPerformance) {
+      void startPerformancePublish();
+      return;
+    }
     setShowPaymentModal(true);
+  };
+
+  /**
+   * Performance publish: create the campaign as a DRAFT, then fund its pool.
+   * Real mode opens a Stripe Elements form and the webhook flips it to 'open' on
+   * payment. Mock mode simulates funding by activating the campaign directly.
+   */
+  const startPerformancePublish = async () => {
+    setPoolPublishing(true);
+    try {
+      const payload = {
+        title,
+        description,
+        budget_total: budgetTotal,
+        target_niches: niches,
+        target_audience: { location, ageRange, gender, minFollowers },
+        deliverables,
+        timeline: { startDate, endDate, draftDueDate },
+        status: "draft",
+        campaign_type: "performance",
+        cpm_rate: cpmRate,
+        budget_pool: budgetTotal,
+        max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
+        platforms,
+        view_holdback_hours: viewHoldbackHours,
+        content_rules: contentRules.trim() ? { notes: contentRules.trim() } : {},
+      };
+
+      const res = await createCampaignAction(payload);
+      if (!res.success || !res.campaign) {
+        toast.error(t("Failed to create campaign"), { description: res.error });
+        setPoolPublishing(false);
+        return;
+      }
+
+      const fund = await fundCampaignPoolAction(res.campaign.id);
+      if (!fund.success) {
+        toast.error(t("Failed to start pool funding"), { description: fund.error });
+        setPoolPublishing(false);
+        return;
+      }
+
+      if (fund.isMock) {
+        // Mock: simulate successful funding by activating the campaign.
+        await updateCampaignStatusAction(res.campaign.id, "open");
+        celebrate();
+        toast.success(t("Pool funded!"), {
+          description: t("Budget pool funded (simulated). Creators can now join and clip."),
+        });
+        setPoolPublishing(false);
+        router.push("/business/dashboard");
+        return;
+      }
+
+      if (!fund.clientSecret) {
+        toast.error(t("Payment setup failed. Please try again."));
+        setPoolPublishing(false);
+        return;
+      }
+
+      // Real: hand off to the Stripe Elements form; webhook activates on success.
+      setPoolFunding({
+        clientSecret: fund.clientSecret,
+        amount: fund.amount ?? budgetTotal,
+        campaignId: res.campaign.id,
+        title,
+      });
+      setPoolPublishing(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("An unexpected error occurred.");
+      toast.error(t("Could not publish campaign"), { description: message });
+      setPoolPublishing(false);
+    }
   };
 
   const handleConfirmPayment = async () => {
@@ -990,9 +1088,16 @@ export default function NewCampaignWizard() {
               ) : (
                 <Button
                   onClick={handlePublishClick}
+                  disabled={poolPublishing}
                   className="rounded-full px-6 py-5 font-bold text-xs gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 shadow-md h-auto"
                 >
-                  {isPerformance ? <Zap size={13} /> : <Lock size={13} />}{" "}
+                  {poolPublishing ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : isPerformance ? (
+                    <Zap size={13} />
+                  ) : (
+                    <Lock size={13} />
+                  )}{" "}
                   {isPerformance ? t("Publish & Fund Pool") : t("Publish & Fund Escrow")}
                 </Button>
               )}
@@ -1253,6 +1358,23 @@ export default function NewCampaignWizard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Performance pool funding — real Stripe Elements */}
+      <PoolPaymentModal
+        open={!!poolFunding}
+        clientSecret={poolFunding?.clientSecret ?? null}
+        amount={poolFunding?.amount ?? budgetTotal}
+        campaignTitle={poolFunding?.title ?? title}
+        onSucceeded={() => {
+          setPoolFunding(null);
+          celebrate();
+          toast.success(t("Payment received!"), {
+            description: t("Your campaign is being activated and will go live shortly."),
+          });
+          router.push("/business/dashboard");
+        }}
+        onClose={() => setPoolFunding(null)}
+      />
     </div>
   );
 }

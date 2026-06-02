@@ -221,9 +221,11 @@ export async function createCampaignAction(campaignData: any) {
             budget_pool: campaignData.budget_pool ?? campaignData.budget_total,
             budget_reserved: 0,
             budget_paid: 0,
+            funded_at: null,
           }
         : {}),
-      status: campaignData.status || "draft",
+      // Performance campaigns must be funded before going live → always 'draft' here.
+      status: isPerformance ? "draft" : campaignData.status || "draft",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -249,7 +251,8 @@ export async function createCampaignAction(campaignData: any) {
         target_audience: campaignData.target_audience || {},
         deliverables: campaignData.deliverables || [],
         timeline: campaignData.timeline || {},
-        status: campaignData.status || "draft",
+        // Performance campaigns must be funded before going live → always 'draft' here.
+        status: isPerformance ? "draft" : campaignData.status || "draft",
         // Performance-clipping fields (Phase 6)
         campaign_type: campaignData.campaign_type || "fixed",
         cpm_rate: isPerformance ? campaignData.cpm_rate ?? null : null,

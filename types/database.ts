@@ -107,6 +107,8 @@ export const CampaignSchema = z.object({
   min_payout_threshold: z.number().nonnegative().default(10).optional(),
   platforms: z.array(z.string()).default([]).optional(),
   view_holdback_hours: z.number().int().nonnegative().default(48).optional(),
+  funding_payment_intent_id: z.string().nullable().optional(),
+  funded_at: z.union([z.date(), z.string()]).nullable().optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });

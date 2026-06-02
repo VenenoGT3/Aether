@@ -17,8 +17,37 @@ export async function handleStripeWebhookEvent(
     case "payment_intent.succeeded": {
       const paymentIntent = event.data.object as {
         id: string;
-        metadata?: { participationId?: string; transactionId?: string };
+        metadata?: {
+          participationId?: string;
+          transactionId?: string;
+          campaignId?: string;
+          kind?: string;
+        };
       };
+
+      // Performance campaign pool funding: activate the campaign on payment.
+      if (paymentIntent.metadata?.kind === "pool_funding") {
+        const campaignId = paymentIntent.metadata?.campaignId;
+        const match = campaignId
+          ? supabase.from("campaigns").update({
+              status: "open",
+              funded_at: new Date().toISOString(),
+            }).eq("id", campaignId)
+          : supabase.from("campaigns").update({
+              status: "open",
+              funded_at: new Date().toISOString(),
+            }).eq("funding_payment_intent_id", paymentIntent.id);
+
+        const { error: campErr } = await match;
+        if (campErr) {
+          console.error(
+            `Error activating campaign for pool funding PI ${paymentIntent.id}:`,
+            campErr.message
+          );
+        }
+        break;
+      }
+
       const participationId = paymentIntent.metadata?.participationId;
       const transactionId = paymentIntent.metadata?.transactionId;
 

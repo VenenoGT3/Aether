@@ -25,8 +25,29 @@ async function handleEvent(
     case "payment_intent.succeeded": {
       const paymentIntent = event.data.object as {
         id: string;
-        metadata?: { participationId?: string; transactionId?: string };
+        metadata?: {
+          participationId?: string;
+          transactionId?: string;
+          campaignId?: string;
+          kind?: string;
+        };
       };
+
+      // Performance campaign pool funding: activate the campaign on payment.
+      if (paymentIntent.metadata?.kind === "pool_funding") {
+        const campaignId = paymentIntent.metadata?.campaignId;
+        const update = { status: "open", funded_at: new Date().toISOString() };
+        const q = campaignId
+          ? supabase.from("campaigns").update(update).eq("id", campaignId)
+          : supabase
+              .from("campaigns")
+              .update(update)
+              .eq("funding_payment_intent_id", paymentIntent.id);
+        const { error: campErr } = await q;
+        if (campErr) console.error("campaign pool funding:", campErr.message);
+        break;
+      }
+
       const participationId = paymentIntent.metadata?.participationId;
       const transactionId = paymentIntent.metadata?.transactionId;
 

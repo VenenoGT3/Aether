@@ -123,6 +123,79 @@ export async function fundEscrowAction(
 }
 
 /**
+ * Server Action: Fund a performance campaign's budget pool.
+ *
+ * Creates a Stripe PaymentIntent for the full budget_pool and stores it on the
+ * campaign. The campaign stays 'draft' (not joinable) until the
+ * payment_intent.succeeded webhook flips it to 'open' and sets funded_at — so a
+ * performance campaign can never go live without a successful payment.
+ */
+export async function fundCampaignPoolAction(campaignId: string) {
+  try {
+    if (isMockMode) {
+      // Mock: no real charge; the client simulates activation.
+      return { success: true, isMock: true as const };
+    }
+
+    const user = await getServerUser();
+    assertBusinessCanFundEscrow(user?.role);
+
+    const supabase = await createClient();
+
+    const { data: campaign, error: campErr } = await supabase
+      .from("campaigns")
+      .select("id, business_id, campaign_type, budget_pool, funded_at")
+      .eq("id", campaignId)
+      .single();
+
+    if (campErr || !campaign) {
+      throw new Error("Campaign not found.");
+    }
+    if (campaign.business_id !== user!.user_id) {
+      throw new Error("You can only fund your own campaigns.");
+    }
+    if (campaign.campaign_type !== "performance") {
+      throw new Error("Only performance campaigns are funded via a budget pool.");
+    }
+    if (campaign.funded_at) {
+      throw new Error("This campaign pool is already funded.");
+    }
+
+    const amount = Number(campaign.budget_pool || 0);
+    if (amount <= 0) {
+      throw new Error("Campaign budget pool must be greater than zero.");
+    }
+
+    const { clientSecret, paymentIntentId } = await createEscrowPaymentIntent(
+      amount,
+      { campaignId, kind: "pool_funding" }
+    );
+
+    await supabase
+      .from("campaigns")
+      .update({ funding_payment_intent_id: paymentIntentId })
+      .eq("id", campaignId);
+
+    return {
+      success: true,
+      clientSecret,
+      paymentIntentId,
+      amount,
+      isMock: false as const,
+    };
+  } catch (error: unknown) {
+    const message =
+      error instanceof AuthorizationError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Failed to fund campaign pool";
+    console.error("Error in fundCampaignPoolAction:", error);
+    return { success: false, error: message };
+  }
+}
+
+/**
  * Server Action: Approve work and release funds from escrow to influencer
  */
 export async function releaseEscrowAction(participationId: string) {
