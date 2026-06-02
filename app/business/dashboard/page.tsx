@@ -540,7 +540,7 @@ export default function BusinessDashboard() {
   if (!mounted) return null;
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden bg-black">
+    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden">
       {/* Background Decorative Glows */}
       <div className="absolute top-0 right-1/4 w-[350px] h-[350px] bg-gradient-to-tr from-[#007AFF]/5 to-transparent blur-[90px] pointer-events-none rounded-full" />
       <div className="absolute bottom-10 left-10 w-[300px] h-[300px] bg-gradient-to-tr from-secondary/3 to-transparent blur-[80px] pointer-events-none rounded-full" />
