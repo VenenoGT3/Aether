@@ -68,6 +68,29 @@ export async function submitClip(
     };
   }
 
+  // Anti-fraud: the same post can't be reused across campaigns to double-dip a
+  // single video's views against multiple pools. The per-campaign unique
+  // constraint already blocks same-campaign dupes; this catches the same URL
+  // still active in *another* campaign. (RLS scopes this to the caller's own
+  // clips, so it stops a creator reusing their own post; terminal-state clips
+  // — rejected/disqualified — are excluded so a clean re-submission is allowed.)
+  const { data: reused } = await supabase
+    .from("clips")
+    .select("id")
+    .eq("post_url", body.post_url)
+    .neq("campaign_id", body.campaign_id)
+    .in("status", ["pending", "approved", "tracking"])
+    .limit(1)
+    .maybeSingle();
+
+  if (reused) {
+    return {
+      ok: false,
+      error: "This post has already been submitted to another campaign.",
+      status: 409,
+    };
+  }
+
   const platform = detectPlatform(body.post_url, body.platform);
 
   const { data: clip, error: insertErr } = await supabase

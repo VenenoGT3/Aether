@@ -7,6 +7,8 @@
  * process.env directly and legitimately uses the Supabase service role.
  */
 
+import { defaultFraudConfig, type FraudConfig } from "./fraud";
+
 export const isMockMode =
   (process.env.AETHER_MOCK_MODE ?? "").trim().toLowerCase() === "true";
 
@@ -103,4 +105,32 @@ export function getHeartbeatIntervalMinutes(): number {
 export function getProviderErrorAlertThreshold(): number {
   const raw = Number(process.env.WORKER_PROVIDER_ERROR_ALERT_THRESHOLD);
   return Number.isFinite(raw) && raw > 0 ? raw : 5;
+}
+
+/** Parse a numeric env var with a fallback and a minimum allowed value. */
+function numEnv(name: string, fallback: number, min = 0): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw >= min ? raw : fallback;
+}
+
+/**
+ * Anti-fraud thresholds for view-sync. Starts from the conservative defaults in
+ * worker/fraud.ts and lets each be tuned via FRAUD_* env vars without code
+ * changes. Platform-specific scaling (TikTok vs Instagram) is applied on top of
+ * these by fraud.platformThresholds().
+ */
+export function getFraudConfig(): FraudConfig {
+  const d = defaultFraudConfig();
+  return {
+    maxGrowthFactor: numEnv("FRAUD_MAX_GROWTH_FACTOR", d.maxGrowthFactor, 1),
+    maxAbsoluteJump: numEnv("FRAUD_MAX_ABSOLUTE_JUMP", d.maxAbsoluteJump, 1),
+    factorCheckMinBaseline: numEnv("FRAUD_FACTOR_MIN_BASELINE", d.factorCheckMinBaseline, 0),
+    spikeMultiplier: numEnv("FRAUD_SPIKE_MULTIPLIER", d.spikeMultiplier, 1),
+    spikeMinDelta: numEnv("FRAUD_SPIKE_MIN_DELTA", d.spikeMinDelta, 0),
+    spikeMinHistory: numEnv("FRAUD_SPIKE_MIN_HISTORY", d.spikeMinHistory, 1),
+    botMinSnapshots: numEnv("FRAUD_BOT_MIN_SNAPSHOTS", d.botMinSnapshots, 2),
+    botCvThreshold: numEnv("FRAUD_BOT_CV_THRESHOLD", d.botCvThreshold, 0),
+    botMinDelta: numEnv("FRAUD_BOT_MIN_DELTA", d.botMinDelta, 0),
+    historyWindow: numEnv("FRAUD_HISTORY_SNAPSHOTS", d.historyWindow, 1),
+  };
 }

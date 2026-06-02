@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
-import { checkVelocity } from "./fraud";
-import { getViewSyncBatchSize } from "./env";
+import { evaluateClipFraud } from "./fraud";
+import { getFraudConfig, getViewSyncBatchSize } from "./env";
 import { log } from "./logger";
 import type { ClipRow, ViewSyncOutcome } from "./types";
 
@@ -65,26 +65,48 @@ export async function runViewSyncForClip(
 
   const metrics = await getViewsProvider().fetchViews(clip);
 
-  // Fraud / velocity guard: implausible jumps disqualify the clip (which stops
-  // it accruing, since record_clip_earning only pays 'tracking' clips).
-  const velocity = checkVelocity(clip.current_views, metrics.views);
-  if (velocity.suspicious) {
+  // Fraud guard. Load the clip's recent snapshot history so we can run the
+  // history-based checks (spike vs the clip's own trend, bot-like uniformity)
+  // alongside the single-sync velocity caps. History is best-effort — if it
+  // can't be loaded we fall back to velocity-only (priorViews stays empty).
+  const config = getFraudConfig();
+  const { data: snaps } = await supabase
+    .from("view_snapshots")
+    .select("views")
+    .eq("clip_id", clipId)
+    .order("captured_at", { ascending: false })
+    .limit(config.historyWindow);
+  const priorViews = (snaps ?? [])
+    .map((s) => Number((s as { views: number }).views))
+    .reverse(); // oldest → newest
+
+  // A flagged clip is disqualified, which stops it accruing (record_clip_earning
+  // only pays 'tracking' clips).
+  const fraud = evaluateClipFraud({
+    platform: clip.platform,
+    previousViews: clip.current_views,
+    newViews: metrics.views,
+    priorViews,
+    config,
+  });
+  if (fraud.suspicious) {
     await supabase
       .from("clips")
       .update({
         status: "disqualified",
-        review_note: `auto-disqualified: ${velocity.reason}`,
+        review_note: `auto-disqualified: ${fraud.reason}`,
         last_synced_at: new Date().toISOString(),
       })
       .eq("id", clipId);
     log.warn("viewsync.disqualified", {
       clipId,
       campaignId: clip.campaign_id,
-      reason: velocity.reason,
+      platform: clip.platform,
+      reason: fraud.reason,
       prevViews: clip.current_views,
       newViews: metrics.views,
     });
-    return { status: "disqualified", clipId, reason: velocity.reason ?? "velocity" };
+    return { status: "disqualified", clipId, reason: fraud.reason ?? "fraud" };
   }
 
   // Never let a noisy provider read lower the stored count.
