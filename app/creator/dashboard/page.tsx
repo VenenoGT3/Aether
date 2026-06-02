@@ -70,6 +70,7 @@ export default function InfluencerDashboard() {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "trends" | "wallet">("overview");
+  const [showLegacy, setShowLegacy] = useState(false);
   const [user, setUser] = useState<Profile | null>(null);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const { transactions, balances, refresh: refreshTransactions } = useTransactions();
@@ -414,6 +415,28 @@ export default function InfluencerDashboard() {
         </div>
       </div>
 
+      {/* Performance clipping earnings + clips (new model) — primary content */}
+      <CreatorPerformanceSummary />
+
+      {/* Legacy profile overview + fixed-fee wallet/activity. Collapsed by
+          default so performance clipping stays the primary focus. */}
+      <button
+        onClick={() => setShowLegacy((v) => !v)}
+        className="w-full flex items-center gap-3 mb-6 group cursor-pointer"
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 group-hover:text-foreground transition-colors flex items-center gap-1.5">
+          <ChevronRight size={13} className={`transition-transform ${showLegacy ? "rotate-90" : ""}`} />
+          {t("Profile & fixed-fee activity")}
+          <span className="font-medium normal-case tracking-normal text-muted-foreground/50">{t("(legacy)")}</span>
+        </span>
+        <span className="h-px flex-1 bg-border/20" />
+        <span className="text-[10px] font-semibold text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0">
+          {showLegacy ? t("Hide") : t("Show")}
+        </span>
+      </button>
+
+      {showLegacy && (
+      <>
       {/* Segmented Control / Apple Pill Tabs */}
       <div className="flex justify-center sm:justify-start mb-8">
         <div className="bg-secondary/40 border border-border/20 p-1.5 rounded-full flex gap-1 relative max-w-lg w-full sm:w-auto">
@@ -448,7 +471,7 @@ export default function InfluencerDashboard() {
             }`}
           >
             <BarChart3 size={13} />
-            {t("Performance")}
+            {t("Analytics")}
           </button>
           
           <button
@@ -461,17 +484,6 @@ export default function InfluencerDashboard() {
             {t("Wallet & Balance")}
           </button>
         </div>
-      </div>
-
-      {/* Performance clipping earnings + clips (new model) */}
-      <CreatorPerformanceSummary />
-
-      {/* Below: profile overview + legacy fixed-fee wallet/activity. */}
-      <div className="flex items-center gap-3 mb-6">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          {t("Profile & fixed-fee activity")}
-        </span>
-        <span className="h-px flex-1 bg-border/20" />
       </div>
 
       <AnimatePresence mode="wait">
@@ -687,7 +699,9 @@ export default function InfluencerDashboard() {
               </motion.div>
             </motion.div>
 
-            {/* Social Verification & Developer Tools Row */}
+            {/* Social verification (mock OAuth) + mock developer mailbox are
+                demo-only tools — hidden outside mock mode to cut clutter. */}
+            {isMockMode && (
             <motion.div
               variants={containerVariants}
               initial="hidden"
@@ -805,6 +819,7 @@ export default function InfluencerDashboard() {
                 </div>
               </motion.div>
             </motion.div>
+            )}
           </motion.div>
         ) : activeTab === "trends" ? (
           <motion.div
@@ -947,6 +962,8 @@ export default function InfluencerDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
 
       {/* Platform OAuth Mock Popup Modal */}
       <AnimatePresence>

@@ -78,6 +78,7 @@ export default function BusinessDashboard() {
   const { transactions, balances, refresh: refreshTransactions } = useTransactions();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "review" | "billing">("overview");
+  const [showLegacy, setShowLegacy] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
 
@@ -597,6 +598,34 @@ export default function BusinessDashboard() {
         </motion.div>
       )}
 
+      {/* Performance campaigns at a glance (new model) — primary content */}
+      <BrandPerformanceSummary />
+
+      {/* Legacy fixed-fee escrow model (campaigns, review queue, billing).
+          Collapsed by default so the performance model stays primary; the
+          pending-review count is surfaced on the header so nothing urgent hides. */}
+      <button
+        onClick={() => setShowLegacy((v) => !v)}
+        className="w-full flex items-center gap-3 mb-6 relative z-10 group cursor-pointer"
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 group-hover:text-foreground transition-colors flex items-center gap-1.5">
+          <ChevronRight size={13} className={`transition-transform ${showLegacy ? "rotate-90" : ""}`} />
+          {t("Fixed-fee Escrow Activity")}
+          <span className="font-medium normal-case tracking-normal text-muted-foreground/50">{t("(legacy)")}</span>
+        </span>
+        {(pendingApplications.length + pendingDeliverables.length) > 0 && (
+          <span className="text-[9px] font-bold bg-[#FF9500]/10 text-[#FF9500] border border-[#FF9500]/20 px-2 py-0.5 rounded-full shrink-0">
+            {pendingApplications.length + pendingDeliverables.length} {t("pending")}
+          </span>
+        )}
+        <span className="h-px flex-1 bg-border/20" />
+        <span className="text-[10px] font-semibold text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0">
+          {showLegacy ? t("Hide") : t("Show")}
+        </span>
+      </button>
+
+      {showLegacy && (
+      <>
       {/* Segmented Control / Apple Pill Tabs */}
       <div className="flex justify-center sm:justify-start mb-8 relative z-10">
         <div className="bg-secondary/40 border border-border/20 p-1.5 rounded-full flex gap-1 relative max-w-xl w-full sm:w-auto">
@@ -647,18 +676,6 @@ export default function BusinessDashboard() {
             {t("Billing & Escrows")}
           </button>
         </div>
-      </div>
-
-      {/* Performance campaigns at a glance (new model) */}
-      <BrandPerformanceSummary />
-
-      {/* Everything below is the legacy fixed-fee escrow model (campaigns,
-          review queue, billing). Labeled so the two models are distinct. */}
-      <div className="flex items-center gap-3 mb-6 relative z-10">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          {t("Fixed-fee Escrow Activity")}
-        </span>
-        <span className="h-px flex-1 bg-border/20" />
       </div>
 
       {loading ? (
@@ -1301,6 +1318,8 @@ export default function BusinessDashboard() {
           )}
 
         </AnimatePresence>
+      )}
+      </>
       )}
     </div>
   );
