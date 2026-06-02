@@ -59,7 +59,7 @@ export default function BrandModerationPage() {
   const { t } = useTranslation();
   const [campaigns, setCampaigns] = useState<PerfCampaign[]>([]);
   const [allClips, setAllClips] = useState<BrandClip[]>([]);
-  const { clips: pending, flagged, loading, moderate } = useBrandModeration();
+  const { clips: pending, flagged, loading, moderate, override } = useBrandModeration();
   const [busyId, setBusyId] = useState<string | null>(null);
   // Per-clip review inputs.
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -140,6 +140,18 @@ export default function BrandModerationPage() {
     setBusyId(null);
     if (res.ok) {
       toast.success(t("Clip disqualified — earnings stopped and reversed"));
+      loadClips();
+    } else {
+      toast.error(res.error || t("Action failed"));
+    }
+  };
+
+  const handleOverride = async (clipId: string) => {
+    setBusyId(clipId);
+    const res = await override(clipId);
+    setBusyId(null);
+    if (res.ok) {
+      toast.success(t("Flag cleared — clip keeps earning"));
       loadClips();
     } else {
       toast.error(res.error || t("Action failed"));
@@ -374,7 +386,16 @@ export default function BrandModerationPage() {
                       ))}
                     </ul>
                   )}
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      onClick={() => handleOverride(clip.id)}
+                      disabled={busyId === clip.id}
+                      variant="outline"
+                      className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer border-border hover:bg-[#34C759]/10 hover:text-[#34C759] text-foreground h-auto"
+                    >
+                      {busyId === clip.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      {t("Override (keep)")}
+                    </Button>
                     <Button
                       onClick={() => handleDisqualify(clip.id)}
                       disabled={busyId === clip.id}

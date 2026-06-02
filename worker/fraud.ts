@@ -10,10 +10,16 @@
  * (record_clip_earning only pays 'tracking' clips). Defaults are deliberately
  * conservative to avoid blocking legitimately viral creators — tune via env.
  *
- * Checks (cheapest / most certain first):
- *   1. velocity   — single-sync absolute + multiplicative caps (platform-aware)
- *   2. spike      — latest jump is wildly above the clip's own recent average
- *   3. botPattern — unnaturally uniform per-sync growth (a counter being farmed)
+ * Signals (each contributes a weight to a 0–100 score; see scoreClipFraud):
+ *   - velocity     — single-sync absolute + multiplicative caps (platform-aware)
+ *   - spike        — latest jump is wildly above the clip's own recent average
+ *   - botPattern   — unnaturally uniform per-sync growth (a counter being farmed)
+ *   - lowEngagement— high views with almost no likes/comments/shares (fake accounts)
+ *   - anomaly      — large view counts within minutes of submission
+ *   - viewDrop     — counted views later removed (post-approval monitoring)
+ *   - creatorBurst — one creator submitting many clips in a short window
+ *   - duplicate    — same content reused across campaigns (passed in by the worker)
+ * Scores carry over between syncs with a time-decay so recent risk lingers.
  */
 
 // ---- Default thresholds (overridable via env in worker/env.ts) ----
@@ -54,6 +60,21 @@ export const ANOMALY_WINDOW_MINUTES = 10;
 /** This many views within the window = anomaly (organic growth ramps up). */
 export const ANOMALY_MIN_VIEWS = 5_000;
 
+// ---- Post-approval monitoring: views removed after they were counted ----
+/** Only judge a drop above this counted baseline (small counts are noisy). */
+export const VIEW_DROP_MIN_VIEWS = 10_000;
+/** A reported count this fraction below the stored count = removed/fake views. */
+export const VIEW_DROP_PCT = 0.25; // 25%
+
+// ---- Suspicious creator behavior: many clips in a short window ----
+/** Window (minutes) over which a creator's recent submissions are counted. */
+export const CREATOR_BURST_WINDOW_MINUTES = 30;
+/** This many submissions inside the window = burst (farming behavior). */
+export const CREATOR_BURST_MAX_CLIPS = 8;
+
+/** Half-life (minutes) for the time-decay of a clip's carried-over score. */
+export const FRAUD_DECAY_HALF_LIFE_MINUTES = 720; // 12h
+
 // ---- Fraud-score weights (0–100 combined) + thresholds ----
 export const WEIGHT_VELOCITY = 80;       // hard single-sync cap breach (near-certain)
 export const WEIGHT_SPIKE = 35;
@@ -61,6 +82,8 @@ export const WEIGHT_BOT = 40;
 export const WEIGHT_ENGAGEMENT = 35;
 export const WEIGHT_ANOMALY = 35;
 export const WEIGHT_CROSS_CAMPAIGN = 70;
+export const WEIGHT_VIEW_DROP = 45;
+export const WEIGHT_CREATOR_BURST = 30;
 /** Auto-disqualify at/above this score. */
 export const FRAUD_DISQUALIFY_SCORE = 80;
 /** Flag for manual brand review at/above this score (below disqualify). */
@@ -93,6 +116,12 @@ export interface FraudConfig {
   engagementMinRatio: number;
   anomalyWindowMinutes: number;
   anomalyMinViews: number;
+  // Post-approval view-drop + creator-burst + time-decay
+  viewDropMinViews: number;
+  viewDropPct: number;
+  creatorBurstWindowMinutes: number;
+  creatorBurstMaxClips: number;
+  decayHalfLifeMinutes: number;
   // Score weights + decision thresholds
   velocityWeight: number;
   spikeWeight: number;
@@ -100,6 +129,8 @@ export interface FraudConfig {
   engagementWeight: number;
   anomalyWeight: number;
   crossCampaignWeight: number;
+  viewDropWeight: number;
+  creatorBurstWeight: number;
   disqualifyScore: number;
   flagScore: number;
 }
@@ -121,12 +152,19 @@ export function defaultFraudConfig(): FraudConfig {
     engagementMinRatio: ENGAGEMENT_MIN_RATIO,
     anomalyWindowMinutes: ANOMALY_WINDOW_MINUTES,
     anomalyMinViews: ANOMALY_MIN_VIEWS,
+    viewDropMinViews: VIEW_DROP_MIN_VIEWS,
+    viewDropPct: VIEW_DROP_PCT,
+    creatorBurstWindowMinutes: CREATOR_BURST_WINDOW_MINUTES,
+    creatorBurstMaxClips: CREATOR_BURST_MAX_CLIPS,
+    decayHalfLifeMinutes: FRAUD_DECAY_HALF_LIFE_MINUTES,
     velocityWeight: WEIGHT_VELOCITY,
     spikeWeight: WEIGHT_SPIKE,
     botWeight: WEIGHT_BOT,
     engagementWeight: WEIGHT_ENGAGEMENT,
     anomalyWeight: WEIGHT_ANOMALY,
     crossCampaignWeight: WEIGHT_CROSS_CAMPAIGN,
+    viewDropWeight: WEIGHT_VIEW_DROP,
+    creatorBurstWeight: WEIGHT_CREATOR_BURST,
     disqualifyScore: FRAUD_DISQUALIFY_SCORE,
     flagScore: FRAUD_FLAG_SCORE,
   };
@@ -317,6 +355,46 @@ export function checkVelocityAnomaly(
   return { suspicious: false };
 }
 
+/**
+ * Post-approval monitoring: a reported view count materially BELOW the count we
+ * already credited means the platform removed views (fake/bought) or the post
+ * was edited/taken down. Earnings were accruing against the higher number, so
+ * this is a strong signal. Only judged above a baseline (small counts are noisy).
+ */
+export function checkViewDrop(
+  countedViews: number,
+  reportedViews: number,
+  config: FraudConfig
+): VelocityResult {
+  if (countedViews < config.viewDropMinViews) return { suspicious: false };
+  const drop = countedViews - reportedViews;
+  if (reportedViews < countedViews && drop >= countedViews * config.viewDropPct) {
+    return {
+      suspicious: true,
+      reason: `views fell ${drop.toLocaleString()} (${((drop / countedViews) * 100).toFixed(0)}%) after being counted — likely removed/fake views`,
+    };
+  }
+  return { suspicious: false };
+}
+
+/**
+ * Suspicious creator behavior: a single creator submitting many clips inside a
+ * short window looks like coordinated farming rather than organic posting. The
+ * worker counts submissions in creatorBurstWindowMinutes and passes the count.
+ */
+export function checkCreatorBurst(
+  recentClipCount: number,
+  config: FraudConfig
+): VelocityResult {
+  if (recentClipCount >= config.creatorBurstMaxClips) {
+    return {
+      suspicious: true,
+      reason: `creator submitted ${recentClipCount} clips within ${config.creatorBurstWindowMinutes}m (burst threshold ${config.creatorBurstMaxClips})`,
+    };
+  }
+  return { suspicious: false };
+}
+
 export interface FraudInput {
   platform: string | null | undefined;
   previousViews: number;
@@ -357,35 +435,52 @@ export interface FraudScoreInput {
   shares?: number;
   /** Minutes since the clip was submitted (for the velocity-anomaly check). */
   ageMinutes?: number | null;
-  /** Same post URL active in another campaign (cross-campaign abuse). */
+  /** Same content (post URL or external id) active in another campaign. */
   crossCampaignDuplicate?: boolean;
+  /** Clips this creator submitted within the burst window (suspicious behavior). */
+  creatorBurstCount?: number;
+  /** Prior persisted fraud score (for time-decayed carry-over). */
+  priorScore?: number;
+  /** Minutes since priorScore was recorded (drives the decay). */
+  minutesSincePriorScore?: number;
   config?: FraudConfig;
 }
 
 export interface FraudScore {
-  /** Combined 0–100 fraud risk. */
+  /** Combined 0–100 fraud risk (this sync's signals OR decayed prior risk). */
   score: number;
+  /** Just this sync's signal weight (before decay carry-over). */
+  signalScore: number;
   reasons: string[];
   /** score >= disqualifyScore → auto-disqualify. */
   disqualify: boolean;
   /** flagScore <= score < disqualifyScore → flag for manual brand review. */
   flag: boolean;
+  /** A hard single-sync velocity-cap breach fired (near-certain fraud). */
+  velocityBreach: boolean;
 }
 
 /**
- * Combine every fraud signal into a 0–100 score. Each signal adds its weight;
- * a hard velocity-cap breach alone meets the disqualify threshold, while softer
- * signals (spike / bot / low-engagement / anomaly / cross-campaign) must
- * corroborate before they disqualify — so genuine virality isn't killed by one
- * heuristic. All weights/thresholds are tunable via env (getFraudConfig).
+ * Combine every fraud signal into a 0–100 score.
+ *
+ * WITHIN a sync, signals SUM (weighted): a hard velocity-cap breach alone meets
+ * the disqualify threshold, while softer signals (spike / bot / low-engagement /
+ * anomaly / duplicate / view-drop / creator-burst) must corroborate before they
+ * disqualify — so genuine virality isn't killed by one heuristic.
+ *
+ * ACROSS syncs, the prior score is carried over with a time-decay (half-life)
+ * and combined via max() — recent suspicious events linger then fade, but a
+ * single persistent soft signal can't compound itself into a disqualify.
+ *
+ * All weights/thresholds are tunable via env (getFraudConfig).
  */
 export function scoreClipFraud(input: FraudScoreInput): FraudScore {
   const config = input.config ?? defaultFraudConfig();
   const { platform, previousViews, newViews, priorViews } = input;
   const reasons: string[] = [];
-  let score = 0;
+  let signal = 0;
   const add = (weight: number, reason?: string) => {
-    score += weight;
+    signal += weight;
     if (reason) reasons.push(reason);
   };
 
@@ -410,12 +505,33 @@ export function scoreClipFraud(input: FraudScoreInput): FraudScore {
   const anomaly = checkVelocityAnomaly(newViews, input.ageMinutes, config);
   if (anomaly.suspicious) add(config.anomalyWeight, anomaly.reason);
 
+  const viewDrop = checkViewDrop(previousViews, newViews, config);
+  if (viewDrop.suspicious) add(config.viewDropWeight, viewDrop.reason);
+
+  const burst = checkCreatorBurst(input.creatorBurstCount ?? 0, config);
+  if (burst.suspicious) add(config.creatorBurstWeight, burst.reason);
+
   if (input.crossCampaignDuplicate) {
-    add(config.crossCampaignWeight, "same post URL active in another campaign (cross-campaign abuse)");
+    add(config.crossCampaignWeight, "same content active in another campaign (cross-campaign duplicate)");
   }
 
-  score = Math.min(Math.round(score), 100);
+  const signalScore = Math.min(Math.round(signal), 100);
+
+  // Time-decayed carry-over of the prior score. Past risk lingers but fades;
+  // max() (not sum) prevents a single persistent soft signal from compounding.
+  const prior = input.priorScore ?? 0;
+  const elapsed = input.minutesSincePriorScore;
+  const decayedPrior =
+    prior > 0 && elapsed != null && Number.isFinite(elapsed) && config.decayHalfLifeMinutes > 0
+      ? prior * Math.pow(0.5, Math.max(0, elapsed) / config.decayHalfLifeMinutes)
+      : 0;
+
+  if (decayedPrior >= config.flagScore && decayedPrior > signalScore) {
+    reasons.push(`sustained risk carried from recent syncs (decayed to ${Math.round(decayedPrior)})`);
+  }
+
+  const score = Math.min(Math.round(Math.max(signalScore, decayedPrior)), 100);
   const disqualify = score >= config.disqualifyScore;
   const flag = !disqualify && score >= config.flagScore;
-  return { score, reasons, disqualify, flag };
+  return { score, signalScore, reasons, disqualify, flag, velocityBreach: velocity.suspicious };
 }

@@ -200,3 +200,45 @@ export function disqualifyClip(
 ): Promise<ClipModerationResult> {
   return moderateClip(clipId, brandUserId, "disqualify", reason);
 }
+
+/**
+ * Brand override of a fraud flag: clears the flag and marks the clip so the
+ * worker stops soft-score flagging/disqualifying it (a hard velocity-cap breach
+ * still disqualifies — see worker/fraud.ts). Does NOT change the clip status, so
+ * the clip keeps tracking/earning. Owner-only.
+ */
+export async function overrideClipFraud(
+  clipId: string,
+  brandUserId: string
+): Promise<ClipModerationResult> {
+  const supabase = await createClient();
+
+  const { data: clip, error: clipErr } = await supabase
+    .from("clips")
+    .select("id, status, campaign_id")
+    .eq("id", clipId)
+    .maybeSingle();
+  if (clipErr) return { ok: false, error: "Could not load the clip.", status: 500 };
+  if (!clip) return { ok: false, error: "Clip not found.", status: 404 };
+
+  const { data: campaign, error: campErr } = await supabase
+    .from("campaigns")
+    .select("business_id")
+    .eq("id", clip.campaign_id)
+    .maybeSingle();
+  if (campErr || !campaign) return { ok: false, error: "Campaign not found.", status: 404 };
+  if (campaign.business_id !== brandUserId) {
+    return { ok: false, error: "You can only override clips on your own campaigns.", status: 403 };
+  }
+
+  const { data: updated, error: updErr } = await supabase
+    .from("clips")
+    .update({ fraud_overridden: true, fraud_flagged: false })
+    .eq("id", clipId)
+    .select("id, status, reviewed_at, reviewed_by")
+    .single();
+  if (updErr) {
+    return { ok: false, error: updErr.message || "Could not override the clip.", status: 500 };
+  }
+  return { ok: true, clip: updated };
+}

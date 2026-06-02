@@ -819,5 +819,35 @@ export function useBrandModeration(campaignId?: string) {
     [load]
   );
 
-  return { clips, flagged, loading, refresh: load, moderate };
+  // Brand override of a fraud flag: clears the flag and keeps the clip earning.
+  const override = useCallback(
+    async (clipId: string) => {
+      if (isMockMode) {
+        const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+        const idx = list.findIndex((c) => c.id === clipId);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            ...({ fraud_flagged: false, fraud_overridden: true } as Partial<CreatorClip>),
+          };
+          writeLs(CLIPS_LS_KEY, list);
+        }
+        await load();
+        return { ok: true };
+      }
+      try {
+        await apiPost(`/api/clips/${clipId}/fraud-override`, {});
+        await load();
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Override failed.",
+        };
+      }
+    },
+    [load]
+  );
+
+  return { clips, flagged, loading, refresh: load, moderate, override };
 }

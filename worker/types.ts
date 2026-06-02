@@ -14,6 +14,9 @@ export interface ClipRow {
   current_views: number;
   last_synced_at: string | null;
   submitted_at: string | null;
+  fraud_score: number;
+  fraud_score_updated_at: string | null;
+  fraud_overridden: boolean;
 }
 
 /** View metrics returned by a provider for a single post. */

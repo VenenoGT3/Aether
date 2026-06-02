@@ -5,6 +5,8 @@ import {
   checkBotPattern,
   checkLowEngagement,
   checkVelocityAnomaly,
+  checkViewDrop,
+  checkCreatorBurst,
   scoreClipFraud,
   evaluateClipFraud,
   platformThresholds,
@@ -230,5 +232,95 @@ describe("scoreClipFraud (0–100 scoring)", () => {
     });
     expect(r.flag || r.disqualify).toBe(true);
     expect(r.reasons.join(" ")).toMatch(/cross-campaign/i);
+  });
+});
+
+describe("checkViewDrop (post-approval monitoring)", () => {
+  const cfg = defaultFraudConfig();
+
+  it("ignores drops on small counts", () => {
+    expect(checkViewDrop(5_000, 1_000, cfg).suspicious).toBe(false);
+  });
+
+  it("flags a large drop after views were counted", () => {
+    const r = checkViewDrop(100_000, 60_000, cfg); // 40% removed
+    expect(r.suspicious).toBe(true);
+    expect(r.reason).toMatch(/removed\/fake/i);
+  });
+
+  it("does not flag normal growth or tiny dips", () => {
+    expect(checkViewDrop(100_000, 105_000, cfg).suspicious).toBe(false);
+    expect(checkViewDrop(100_000, 98_000, cfg).suspicious).toBe(false); // 2% noise
+  });
+});
+
+describe("checkCreatorBurst (suspicious creator behavior)", () => {
+  const cfg = defaultFraudConfig();
+
+  it("flags many submissions in the window", () => {
+    expect(checkCreatorBurst(cfg.creatorBurstMaxClips, cfg).suspicious).toBe(true);
+    expect(checkCreatorBurst(cfg.creatorBurstMaxClips + 5, cfg).suspicious).toBe(true);
+  });
+
+  it("does not flag a normal submission rate", () => {
+    expect(checkCreatorBurst(cfg.creatorBurstMaxClips - 1, cfg).suspicious).toBe(false);
+    expect(checkCreatorBurst(0, cfg).suspicious).toBe(false);
+  });
+});
+
+describe("scoreClipFraud time-decay", () => {
+  const base = {
+    platform: "youtube",
+    previousViews: 100_000,
+    newViews: 104_000,
+    priorViews: [88_000, 92_000, 97_000, 100_000],
+    likes: 5_000,
+    comments: 600,
+    shares: 300,
+    ageMinutes: 5_000,
+  };
+
+  it("carries over a prior score, decayed by elapsed time", () => {
+    const cfg = defaultFraudConfig();
+    // No fresh signals this sync; prior risk of 80 decays over one half-life → ~40.
+    const r = scoreClipFraud({
+      ...base,
+      priorScore: 80,
+      minutesSincePriorScore: cfg.decayHalfLifeMinutes,
+    });
+    expect(r.signalScore).toBe(0);
+    expect(r.score).toBeGreaterThanOrEqual(38);
+    expect(r.score).toBeLessThanOrEqual(42);
+  });
+
+  it("a single persistent soft signal does NOT compound into a disqualify", () => {
+    // Low engagement fires every sync (weight 35). Feed the prior score back in
+    // repeatedly with a small gap; max-with-decay keeps it pinned near 35.
+    const cfg = defaultFraudConfig();
+    let prior = 0;
+    for (let i = 0; i < 10; i++) {
+      const r = scoreClipFraud({
+        ...base,
+        newViews: 200_000,
+        likes: 10, // ~0% engagement → low-engagement signal
+        comments: 0,
+        shares: 0,
+        priorScore: prior,
+        minutesSincePriorScore: 30,
+        config: cfg,
+      });
+      prior = r.score;
+    }
+    expect(prior).toBeLessThan(cfg.disqualifyScore); // never auto-disqualifies
+  });
+
+  it("ignores the prior score once it has fully decayed (long gap)", () => {
+    const cfg = defaultFraudConfig();
+    const r = scoreClipFraud({
+      ...base,
+      priorScore: 70,
+      minutesSincePriorScore: cfg.decayHalfLifeMinutes * 8, // ~0
+    });
+    expect(r.score).toBe(0);
   });
 });

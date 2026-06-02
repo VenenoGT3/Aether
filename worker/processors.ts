@@ -14,7 +14,7 @@ import type { ClipRow, ViewSyncOutcome } from "./types";
  */
 
 const CLIP_COLUMNS =
-  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, counted_views, current_views, last_synced_at, submitted_at";
+  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_score_updated_at, fraud_overridden";
 
 /**
  * Promote 'pending' clips past their 5-working-day approval deadline to
@@ -51,6 +51,42 @@ export async function fetchTrackingClipIds(
     throw new Error(`[view-sync] failed to load tracking clips: ${error.message}`);
   }
   return (data ?? []).map((row) => (row as { id: string }).id);
+}
+
+/**
+ * Notify the campaign's brand that a clip was auto-disqualified for fraud.
+ * Best-effort: a failed insert must never break the sync.
+ */
+async function notifyBrandOfFraud(
+  supabase: SupabaseClient,
+  clip: ClipRow,
+  score: number,
+  reasons: string[]
+): Promise<void> {
+  try {
+    const { data: campaign } = await supabase
+      .from("campaigns")
+      .select("business_id, title")
+      .eq("id", clip.campaign_id)
+      .maybeSingle();
+    const businessId = (campaign as { business_id?: string } | null)?.business_id;
+    if (!businessId) return;
+    const title = (campaign as { title?: string } | null)?.title ?? "your campaign";
+    await supabase.from("notifications").insert({
+      user_id: businessId,
+      title: "Clip auto-disqualified for fraud",
+      content: `A clip on "${title}" scored ${score}/100 and was auto-disqualified. Signals: ${
+        reasons.slice(0, 3).join("; ") || "multiple fraud signals"
+      }.`,
+      type: "fraud",
+      is_read: false,
+    });
+  } catch (err) {
+    log.warn("viewsync.notify_failed", {
+      clipId: clip.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
@@ -97,10 +133,11 @@ export async function runViewSyncForClip(
     .map((s) => Number((s as { views: number }).views))
     .reverse(); // oldest → newest
 
-  // Cross-campaign abuse: same post URL active in another campaign (best-effort).
-  let crossCampaignDuplicate = false;
+  // Duplicate content: same post URL OR external id active in another campaign
+  // (best-effort). Either match is treated as a cross-campaign duplicate.
+  let duplicateContent = false;
   try {
-    const { data: dup } = await supabase
+    const { data: dupUrl } = await supabase
       .from("clips")
       .select("id")
       .eq("post_url", clip.post_url)
@@ -108,7 +145,34 @@ export async function runViewSyncForClip(
       .in("status", ["pending", "approved", "tracking"])
       .limit(1)
       .maybeSingle();
-    crossCampaignDuplicate = !!dup;
+    duplicateContent = !!dupUrl;
+    if (!duplicateContent && clip.external_post_id) {
+      const { data: dupId } = await supabase
+        .from("clips")
+        .select("id")
+        .eq("external_post_id", clip.external_post_id)
+        .neq("campaign_id", clip.campaign_id)
+        .in("status", ["pending", "approved", "tracking"])
+        .limit(1)
+        .maybeSingle();
+      duplicateContent = !!dupId;
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // Suspicious creator behavior: clips this creator submitted in the burst window.
+  let creatorBurstCount = 0;
+  try {
+    const windowStart = new Date(
+      Date.now() - config.creatorBurstWindowMinutes * 60_000
+    ).toISOString();
+    const { count } = await supabase
+      .from("clips")
+      .select("id", { count: "exact", head: true })
+      .eq("creator_id", clip.creator_id)
+      .gte("submitted_at", windowStart);
+    creatorBurstCount = count ?? 0;
   } catch {
     /* best-effort */
   }
@@ -116,6 +180,9 @@ export async function runViewSyncForClip(
   const ageMinutes = clip.submitted_at
     ? (Date.now() - new Date(clip.submitted_at).getTime()) / 60_000
     : null;
+  const minutesSincePriorScore = clip.fraud_score_updated_at
+    ? (Date.now() - new Date(clip.fraud_score_updated_at).getTime()) / 60_000
+    : undefined;
 
   const fraud = scoreClipFraud({
     platform: clip.platform,
@@ -126,13 +193,20 @@ export async function runViewSyncForClip(
     comments: metrics.comments,
     shares: metrics.shares,
     ageMinutes,
-    crossCampaignDuplicate,
+    crossCampaignDuplicate: duplicateContent,
+    creatorBurstCount,
+    priorScore: clip.fraud_score,
+    minutesSincePriorScore,
     config,
   });
 
-  // High score → auto-disqualify (stops accrual; reversal trigger refunds the
-  // reserved budget). record_clip_earning also only pays 'tracking' clips.
-  if (fraud.disqualify) {
+  const nowIso = new Date().toISOString();
+  // A hard velocity-cap breach (near-certain) ALWAYS disqualifies. A score-based
+  // disqualification respects a brand override (the brand vouched for the clip).
+  const shouldDisqualify =
+    fraud.velocityBreach || (fraud.disqualify && !clip.fraud_overridden);
+
+  if (shouldDisqualify) {
     await supabase
       .from("clips")
       .update({
@@ -141,22 +215,36 @@ export async function runViewSyncForClip(
         fraud_score: fraud.score,
         fraud_flagged: false,
         fraud_reasons: fraud.reasons,
-        last_synced_at: new Date().toISOString(),
+        fraud_score_updated_at: nowIso,
+        last_synced_at: nowIso,
       })
       .eq("id", clipId);
+    await notifyBrandOfFraud(supabase, clip, fraud.score, fraud.reasons);
     log.warn("viewsync.disqualified", {
       clipId,
       campaignId: clip.campaign_id,
       platform: clip.platform,
       score: fraud.score,
+      signalScore: fraud.signalScore,
       reasons: fraud.reasons,
+      velocityBreach: fraud.velocityBreach,
+      overridden: clip.fraud_overridden,
       prevViews: clip.current_views,
       newViews: metrics.views,
     });
     return { status: "disqualified", clipId, reason: fraud.reasons[0] ?? "fraud" };
   }
 
-  if (fraud.flag) {
+  // Flag for manual review (unless the brand has overridden this clip).
+  const flag = fraud.flag && !clip.fraud_overridden;
+  if ((fraud.flag || fraud.disqualify) && clip.fraud_overridden) {
+    log.warn("viewsync.override_suppressed", {
+      clipId,
+      campaignId: clip.campaign_id,
+      score: fraud.score,
+      reasons: fraud.reasons,
+    });
+  } else if (flag) {
     log.warn("viewsync.flagged", {
       clipId,
       campaignId: clip.campaign_id,
@@ -180,16 +268,17 @@ export async function runViewSyncForClip(
     throw new Error(`[view-sync] snapshot insert failed for ${clipId}: ${snapErr.message}`);
   }
 
-  // Persist the latest fraud assessment (flag self-clears if it drops below the
-  // band on a later sync).
+  // Persist the latest (time-decayed) fraud assessment. The flag self-clears if
+  // the score drops below the band on a later sync.
   const { error: updErr } = await supabase
     .from("clips")
     .update({
       current_views: nextViews,
       fraud_score: fraud.score,
-      fraud_flagged: fraud.flag,
+      fraud_flagged: flag,
       fraud_reasons: fraud.reasons,
-      last_synced_at: new Date().toISOString(),
+      fraud_score_updated_at: nowIso,
+      last_synced_at: nowIso,
     })
     .eq("id", clipId);
   if (updErr) {
