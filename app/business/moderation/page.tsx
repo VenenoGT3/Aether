@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Play,
   MessageSquare,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -58,7 +59,7 @@ export default function BrandModerationPage() {
   const { t } = useTranslation();
   const [campaigns, setCampaigns] = useState<PerfCampaign[]>([]);
   const [allClips, setAllClips] = useState<BrandClip[]>([]);
-  const { clips: pending, loading, moderate } = useBrandModeration();
+  const { clips: pending, flagged, loading, moderate } = useBrandModeration();
   const [busyId, setBusyId] = useState<string | null>(null);
   // Per-clip review inputs.
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -127,6 +128,18 @@ export default function BrandModerationPage() {
           ? t("Changes requested — sent back to the creator")
           : t("Clip rejected")
       );
+      loadClips();
+    } else {
+      toast.error(res.error || t("Action failed"));
+    }
+  };
+
+  const handleDisqualify = async (clipId: string) => {
+    setBusyId(clipId);
+    const res = await moderate(clipId, "disqualify", {});
+    setBusyId(null);
+    if (res.ok) {
+      toast.success(t("Clip disqualified — earnings stopped and reversed"));
       loadClips();
     } else {
       toast.error(res.error || t("Action failed"));
@@ -319,6 +332,62 @@ export default function BrandModerationPage() {
               </motion.div>
               );
             })
+          )}
+
+          {/* Fraud risk — flagged tracking clips for manual review */}
+          {flagged.length > 0 && (
+            <div className="space-y-3 pt-4">
+              <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
+                <ShieldAlert size={18} className="text-destructive" /> {t("Fraud risk — flagged for review")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t("Still earning, but these clips tripped fraud signals. Review and disqualify if abusive.")}
+              </p>
+              {flagged.map((clip) => (
+                <motion.div
+                  key={clip.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-5 apple-card border-destructive/20 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20 uppercase tracking-wide">
+                        {t("Risk")} {clip.fraud_score ?? 0}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
+                      <span className="text-[11px] font-semibold truncate">{clip.creatorName} · {clip.campaignTitle}</span>
+                    </div>
+                    <a
+                      href={clip.post_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-1 shrink-0"
+                    >
+                      <Play size={11} /> {t("Watch")} <ExternalLink size={10} />
+                    </a>
+                  </div>
+                  {clip.fraud_reasons && clip.fraud_reasons.length > 0 && (
+                    <ul className="text-[11px] text-muted-foreground list-disc list-inside space-y-0.5">
+                      {clip.fraud_reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => handleDisqualify(clip.id)}
+                      disabled={busyId === clip.id}
+                      variant="outline"
+                      className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer border-border hover:bg-destructive/10 hover:text-destructive text-foreground h-auto"
+                    >
+                      {busyId === clip.id ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                      {t("Disqualify")}
+                    </Button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           )}
         </div>
 

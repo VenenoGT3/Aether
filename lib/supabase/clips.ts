@@ -97,6 +97,9 @@ export interface ModerationClip {
   submitted_at: string;
   /** When the brand's 5-working-day review window closes. */
   approval_deadline?: string | null;
+  /** Fraud risk (for the flagged-review list). */
+  fraud_score?: number;
+  fraud_reasons?: string[];
 }
 
 const CLIPS_LS_KEY = "aether-mock-clips";
@@ -615,9 +618,10 @@ export function useCreatorEarnings() {
   return { breakdown, payouts, loading, refresh: load, withdraw };
 }
 
-/** Brand: pending clips to moderate + approve/reject. */
+/** Brand: pending clips to moderate + fraud-flagged tracking clips to review. */
 export function useBrandModeration(campaignId?: string) {
   const [clips, setClips] = useState<ModerationClip[]>([]);
+  const [flagged, setFlagged] = useState<ModerationClip[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -644,20 +648,35 @@ export function useBrandModeration(campaignId?: string) {
             approval_deadline: c.approval_deadline,
           }))
       );
+      // Fraud-flagged tracking clips (worker sets these in real mode; usually
+      // empty in mock).
+      setFlagged(
+        list
+          .filter(
+            (c) =>
+              c.status === "tracking" &&
+              (c as { fraud_flagged?: boolean }).fraud_flagged === true
+          )
+          .filter((c) => !campaignId || c.campaign_id === campaignId)
+          .map((c) => ({
+            id: c.id,
+            campaign_id: c.campaign_id,
+            campaignTitle: c.campaignTitle,
+            creatorName: mockUser.full_name || "Creator",
+            platform: c.platform,
+            post_url: c.post_url,
+            status: c.status,
+            current_views: c.current_views,
+            creatorCpm: mockCpmFor(c.campaign_id),
+            submitted_at: c.submitted_at,
+            fraud_score: (c as { fraud_score?: number }).fraud_score,
+            fraud_reasons: (c as { fraud_reasons?: string[] }).fraud_reasons,
+          }))
+      );
       setLoading(false);
       return;
     }
-    let query = supabase
-      .from("clips")
-      .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
-      )
-      .eq("status", "pending")
-      .eq("quality_status", "pending_review")
-      .order("created_at", { ascending: false });
-    if (campaignId) query = query.eq("campaign_id", campaignId);
 
-    const { data } = await query;
     type Row = {
       id: string;
       campaign_id: string;
@@ -668,16 +687,47 @@ export function useBrandModeration(campaignId?: string) {
       current_views: number | null;
       created_at: string;
       submitted_at: string | null;
-      approval_deadline: string | null;
+      approval_deadline?: string | null;
+      fraud_score?: number | null;
+      fraud_reasons?: string[] | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
       creator: { email?: string } | null;
       participation: { creator_cpm_rate?: number | null } | null;
     };
-    const rows = (data ?? []) as unknown as Row[];
 
-    // Resolve creator display names in ONE batched query (no N+1).
-    // profiles.user_id is the FK to users.id, which equals clips.creator_id.
-    const creatorIds = [...new Set(rows.map((r) => r.creator_id).filter(Boolean))];
+    // Pending review queue + fraud-flagged tracking clips, in parallel.
+    let pendingQuery = supabase
+      .from("clips")
+      .select(
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
+      )
+      .eq("status", "pending")
+      .eq("quality_status", "pending_review")
+      .order("created_at", { ascending: false });
+    let flaggedQuery = supabase
+      .from("clips")
+      .select(
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, fraud_score, fraud_reasons, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
+      )
+      .eq("status", "tracking")
+      .eq("fraud_flagged", true)
+      .order("fraud_score", { ascending: false });
+    if (campaignId) {
+      pendingQuery = pendingQuery.eq("campaign_id", campaignId);
+      flaggedQuery = flaggedQuery.eq("campaign_id", campaignId);
+    }
+
+    const [{ data: pendingData }, { data: flaggedData }] = await Promise.all([
+      pendingQuery,
+      flaggedQuery,
+    ]);
+    const pendingRows = (pendingData ?? []) as unknown as Row[];
+    const flaggedRows = (flaggedData ?? []) as unknown as Row[];
+
+    // Resolve creator display names for both sets in ONE batched query (no N+1).
+    const creatorIds = [
+      ...new Set([...pendingRows, ...flaggedRows].map((r) => r.creator_id).filter(Boolean)),
+    ];
     const nameById = new Map<string, string>();
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
@@ -691,25 +741,26 @@ export function useBrandModeration(campaignId?: string) {
       );
     }
 
-    setClips(
-      rows.map((r) => ({
-        id: r.id,
-        campaign_id: r.campaign_id,
-        campaignTitle: r.campaign?.title ?? "Campaign",
-        // Prefer display name; gracefully fall back to email, then "Unknown creator".
-        creatorName:
-          nameById.get(r.creator_id) || r.creator?.email || "Unknown creator",
-        platform: r.platform,
-        post_url: r.post_url,
-        status: r.status,
-        current_views: Number(r.current_views ?? 0),
-        creatorCpm: Number(
-          r.participation?.creator_cpm_rate ?? r.campaign?.cpm_rate ?? DEFAULT_CPM
-        ),
-        submitted_at: r.submitted_at ?? r.created_at,
-        approval_deadline: r.approval_deadline,
-      }))
-    );
+    const toClip = (r: Row): ModerationClip => ({
+      id: r.id,
+      campaign_id: r.campaign_id,
+      campaignTitle: r.campaign?.title ?? "Campaign",
+      creatorName: nameById.get(r.creator_id) || r.creator?.email || "Unknown creator",
+      platform: r.platform,
+      post_url: r.post_url,
+      status: r.status,
+      current_views: Number(r.current_views ?? 0),
+      creatorCpm: Number(
+        r.participation?.creator_cpm_rate ?? r.campaign?.cpm_rate ?? DEFAULT_CPM
+      ),
+      submitted_at: r.submitted_at ?? r.created_at,
+      approval_deadline: r.approval_deadline ?? null,
+      fraud_score: r.fraud_score ?? undefined,
+      fraud_reasons: r.fraud_reasons ?? undefined,
+    });
+
+    setClips(pendingRows.map(toClip));
+    setFlagged(flaggedRows.map(toClip));
     setLoading(false);
   }, [campaignId]);
 
@@ -729,7 +780,7 @@ export function useBrandModeration(campaignId?: string) {
   const moderate = useCallback(
     async (
       clipId: string,
-      action: "approve" | "reject" | "request_changes",
+      action: "approve" | "reject" | "request_changes" | "disqualify",
       opts?: { reason?: string; score?: number }
     ) => {
       if (isMockMode) {
@@ -740,6 +791,8 @@ export function useBrandModeration(campaignId?: string) {
             list[idx] = { ...list[idx], status: "tracking", quality_status: "approved", quality_notes: null, quality_score: opts?.score ?? null };
           } else if (action === "reject") {
             list[idx] = { ...list[idx], status: "rejected", quality_status: "rejected", quality_notes: opts?.reason ?? null };
+          } else if (action === "disqualify") {
+            list[idx] = { ...list[idx], status: "disqualified", quality_status: "rejected", quality_notes: opts?.reason ?? null };
           } else {
             // request_changes: stays pending, flagged back to the creator.
             list[idx] = { ...list[idx], status: "pending", quality_status: "changes_requested", quality_notes: opts?.reason ?? null, quality_score: opts?.score ?? null };
@@ -766,5 +819,5 @@ export function useBrandModeration(campaignId?: string) {
     [load]
   );
 
-  return { clips, loading, refresh: load, moderate };
+  return { clips, flagged, loading, refresh: load, moderate };
 }

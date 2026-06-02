@@ -13,6 +13,7 @@ export interface ClipRow {
   counted_views: number;
   current_views: number;
   last_synced_at: string | null;
+  submitted_at: string | null;
 }
 
 /** View metrics returned by a provider for a single post. */

@@ -11,7 +11,7 @@ export type ClipModerationResult =
   | { ok: true; clip: ModeratedClip }
   | { ok: false; error: string; status: number };
 
-type ModerationAction = "approve" | "reject" | "request_changes";
+type ModerationAction = "approve" | "reject" | "request_changes" | "disqualify";
 
 /**
  * Quality control: a brand decision moves both the operational `status` and the
@@ -116,6 +116,13 @@ async function moderateClip(
     }
     nextStatus = "pending"; // stays out of tracking; creator resubmits
     nextQuality = "changes_requested";
+  } else if (action === "disqualify") {
+    // Fraud removal (e.g. brand actioning a flagged clip): stop it earning.
+    if (!REJECTABLE_FROM.includes(clip.status)) {
+      return { ok: false, error: `Cannot disqualify a clip in '${clip.status}' state.`, status: 409 };
+    }
+    nextStatus = "disqualified";
+    nextQuality = "rejected";
   } else {
     if (!REJECTABLE_FROM.includes(clip.status)) {
       return { ok: false, error: `Cannot reject a clip in '${clip.status}' state.`, status: 409 };
@@ -133,7 +140,7 @@ async function moderateClip(
       reviewed_by: brandUserId,
       review_note: action === "approve" ? null : note ?? null,
       approved_at: action === "approve" ? nowIso : null,
-      rejected_at: action === "reject" ? nowIso : null,
+      rejected_at: action === "reject" || action === "disqualify" ? nowIso : null,
       auto_approved: false,
       // Quality control fields.
       quality_status: nextQuality,
@@ -183,4 +190,13 @@ export function requestChangesClip(
   qualityScore?: number
 ): Promise<ClipModerationResult> {
   return moderateClip(clipId, brandUserId, "request_changes", reason, qualityScore);
+}
+
+/** Disqualify → 'disqualified' (fraud removal; stops earning, reverses accrued). */
+export function disqualifyClip(
+  clipId: string,
+  brandUserId: string,
+  reason?: string
+): Promise<ClipModerationResult> {
+  return moderateClip(clipId, brandUserId, "disqualify", reason);
 }

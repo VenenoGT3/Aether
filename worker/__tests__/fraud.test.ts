@@ -3,6 +3,9 @@ import {
   checkVelocity,
   checkSpike,
   checkBotPattern,
+  checkLowEngagement,
+  checkVelocityAnomaly,
+  scoreClipFraud,
   evaluateClipFraud,
   platformThresholds,
   defaultFraudConfig,
@@ -119,5 +122,113 @@ describe("worker/fraud evaluateClipFraud", () => {
       priorViews: [100_000, 102_000, 104_000, 106_000, 108_000],
     });
     expect(r.suspicious).toBe(true);
+  });
+});
+
+describe("checkLowEngagement (fake-account signal)", () => {
+  const cfg = defaultFraudConfig();
+
+  it("ignores small clips (below the min-views floor)", () => {
+    expect(checkLowEngagement(5_000, 0, 0, 0, cfg).suspicious).toBe(false);
+  });
+
+  it("flags high views with near-zero engagement", () => {
+    const r = checkLowEngagement(100_000, 10, 2, 0, cfg); // 0.012% << 0.5%
+    expect(r.suspicious).toBe(true);
+  });
+
+  it("does not flag a healthy engagement ratio", () => {
+    const r = checkLowEngagement(100_000, 4_000, 800, 200, cfg); // 5%
+    expect(r.suspicious).toBe(false);
+  });
+});
+
+describe("checkVelocityAnomaly (too fast after submission)", () => {
+  const cfg = defaultFraudConfig();
+
+  it("flags thousands of views minutes after submission", () => {
+    const r = checkVelocityAnomaly(8_000, 3, cfg);
+    expect(r.suspicious).toBe(true);
+  });
+
+  it("does not flag the same views once the post has aged", () => {
+    expect(checkVelocityAnomaly(8_000, 600, cfg).suspicious).toBe(false);
+  });
+
+  it("is inert without an age (null)", () => {
+    expect(checkVelocityAnomaly(8_000, null, cfg).suspicious).toBe(false);
+  });
+});
+
+describe("scoreClipFraud (0–100 scoring)", () => {
+  it("scores a clean steady clip near zero (no action)", () => {
+    const r = scoreClipFraud({
+      platform: "youtube",
+      previousViews: 100_000,
+      newViews: 104_000,
+      priorViews: [88_000, 92_000, 97_000, 100_000],
+      likes: 5_000,
+      comments: 600,
+      shares: 300,
+      ageMinutes: 5_000,
+    });
+    expect(r.score).toBe(0);
+    expect(r.disqualify).toBe(false);
+    expect(r.flag).toBe(false);
+  });
+
+  it("auto-disqualifies on a hard velocity-cap breach alone", () => {
+    const r = scoreClipFraud({
+      platform: "youtube",
+      previousViews: 1_000,
+      newViews: 1_000 + MAX_ABSOLUTE_JUMP + 1,
+      priorViews: [],
+    });
+    expect(r.disqualify).toBe(true);
+    expect(r.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it("does not disqualify a lone spike — only flags when corroborated", () => {
+    const spikeOnly = scoreClipFraud({
+      platform: "instagram",
+      previousViews: 108_000,
+      newViews: 108_000 + 400_000,
+      priorViews: [100_000, 102_000, 104_000, 106_000, 108_000],
+      // healthy engagement, well-aged → no other signal fires
+      likes: 25_000,
+      comments: 3_000,
+      shares: 1_500,
+      ageMinutes: 5_000,
+    });
+    expect(spikeOnly.disqualify).toBe(false);
+
+    // Same spike but with no engagement → score crosses the flag band.
+    const spikePlusBadEngagement = scoreClipFraud({
+      platform: "instagram",
+      previousViews: 108_000,
+      newViews: 108_000 + 400_000,
+      priorViews: [100_000, 102_000, 104_000, 106_000, 108_000],
+      likes: 5,
+      comments: 0,
+      shares: 0,
+      ageMinutes: 5_000,
+    });
+    expect(spikePlusBadEngagement.flag || spikePlusBadEngagement.disqualify).toBe(true);
+  });
+
+  it("treats a cross-campaign duplicate as a strong signal", () => {
+    const r = scoreClipFraud({
+      platform: "tiktok",
+      previousViews: 50_000,
+      newViews: 52_000,
+      priorViews: [40_000, 44_000, 48_000, 50_000],
+      likes: 3_000,
+      comments: 400,
+      shares: 200,
+      ageMinutes: 5_000,
+      crossCampaignDuplicate: true,
+    });
+    expect(r.flag || r.disqualify).toBe(true);
+    expect(r.reasons.join(" ")).toMatch(/cross-campaign/i);
   });
 });

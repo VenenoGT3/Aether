@@ -194,5 +194,17 @@ export function getFraudConfig(): FraudConfig {
     botCvThreshold: numEnv("FRAUD_BOT_CV_THRESHOLD", d.botCvThreshold, 0),
     botMinDelta: numEnv("FRAUD_BOT_MIN_DELTA", d.botMinDelta, 0),
     historyWindow: numEnv("FRAUD_HISTORY_SNAPSHOTS", d.historyWindow, 1),
+    engagementMinViews: numEnv("FRAUD_ENGAGEMENT_MIN_VIEWS", d.engagementMinViews, 0),
+    engagementMinRatio: numEnv("FRAUD_ENGAGEMENT_MIN_RATIO", d.engagementMinRatio, 0),
+    anomalyWindowMinutes: numEnv("FRAUD_ANOMALY_WINDOW_MINUTES", d.anomalyWindowMinutes, 0),
+    anomalyMinViews: numEnv("FRAUD_ANOMALY_MIN_VIEWS", d.anomalyMinViews, 0),
+    velocityWeight: numEnv("FRAUD_WEIGHT_VELOCITY", d.velocityWeight, 0),
+    spikeWeight: numEnv("FRAUD_WEIGHT_SPIKE", d.spikeWeight, 0),
+    botWeight: numEnv("FRAUD_WEIGHT_BOT", d.botWeight, 0),
+    engagementWeight: numEnv("FRAUD_WEIGHT_ENGAGEMENT", d.engagementWeight, 0),
+    anomalyWeight: numEnv("FRAUD_WEIGHT_ANOMALY", d.anomalyWeight, 0),
+    crossCampaignWeight: numEnv("FRAUD_WEIGHT_CROSS_CAMPAIGN", d.crossCampaignWeight, 0),
+    disqualifyScore: numEnv("FRAUD_DISQUALIFY_SCORE", d.disqualifyScore, 1),
+    flagScore: numEnv("FRAUD_FLAG_SCORE", d.flagScore, 1),
   };
 }
