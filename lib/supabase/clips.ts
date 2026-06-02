@@ -435,7 +435,7 @@ export function useBrandModeration(campaignId?: string) {
     let query = supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title), creator:creator_id(email)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title), creator:creator_id(email)"
       )
       .eq("status", "pending")
       .order("created_at", { ascending: false });
@@ -445,6 +445,7 @@ export function useBrandModeration(campaignId?: string) {
     type Row = {
       id: string;
       campaign_id: string;
+      creator_id: string;
       platform: string;
       post_url: string;
       status: ClipStatus;
@@ -454,12 +455,31 @@ export function useBrandModeration(campaignId?: string) {
       creator: { email?: string } | null;
     };
     const rows = (data ?? []) as unknown as Row[];
+
+    // Resolve creator display names in ONE batched query (no N+1).
+    // profiles.user_id is the FK to users.id, which equals clips.creator_id.
+    const creatorIds = [...new Set(rows.map((r) => r.creator_id).filter(Boolean))];
+    const nameById = new Map<string, string>();
+    if (creatorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", creatorIds);
+      ((profiles ?? []) as { user_id: string; full_name: string | null }[]).forEach(
+        (p) => {
+          if (p.full_name?.trim()) nameById.set(p.user_id, p.full_name);
+        }
+      );
+    }
+
     setClips(
       rows.map((r) => ({
         id: r.id,
         campaign_id: r.campaign_id,
         campaignTitle: r.campaign?.title ?? "Campaign",
-        creatorName: r.creator?.email ?? "Creator",
+        // Prefer display name; gracefully fall back to email, then "Unknown creator".
+        creatorName:
+          nameById.get(r.creator_id) || r.creator?.email || "Unknown creator",
         platform: r.platform,
         post_url: r.post_url,
         status: r.status,
