@@ -30,11 +30,15 @@ export const earningsCalcQueue = new Queue(QUEUE_NAMES.earningsCalc, {
 export const payoutBatchQueue = new Queue(QUEUE_NAMES.payoutBatch, {
   connection,
 });
+export const poolReconcileQueue = new Queue(QUEUE_NAMES.poolReconcile, {
+  connection,
+});
 
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     viewSyncQueue.close(),
     earningsCalcQueue.close(),
     payoutBatchQueue.close(),
+    poolReconcileQueue.close(),
   ]);
 }

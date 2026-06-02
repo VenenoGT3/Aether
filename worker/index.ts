@@ -4,6 +4,7 @@ import {
   viewSyncQueue,
   earningsCalcQueue,
   payoutBatchQueue,
+  poolReconcileQueue,
   closeQueues,
 } from "./queues";
 import {
@@ -12,6 +13,7 @@ import {
   runEarningsCalc,
 } from "./processors";
 import { runPayoutBatch } from "./payout";
+import { runPoolFundingReconciliation } from "./reconcile";
 import { getServiceClient } from "./supabase";
 import { QUEUE_NAMES, JOB_NAMES } from "./types";
 import type { SyncClipJob, CalcEarningJob } from "./types";
@@ -19,6 +21,7 @@ import {
   allowSimulatedPayoutsInRealMode,
   getHeartbeatIntervalMinutes,
   getPayoutBatchIntervalMinutes,
+  getPoolReconciliationIntervalMinutes,
   getProviderErrorAlertThreshold,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
@@ -48,6 +51,7 @@ import {
 
 const VIEW_SYNC_SCHEDULER_ID = "view-sync-scheduler";
 const PAYOUT_SCHEDULER_ID = "payout-batch-scheduler";
+const POOL_RECONCILE_SCHEDULER_ID = "pool-reconcile-scheduler";
 const CLIP_RETRY = { attempts: 3, backoff: { type: "exponential", delay: 5_000 } } as const;
 
 async function startSchedulers(): Promise<void> {
@@ -63,9 +67,16 @@ async function startSchedulers(): Promise<void> {
     { every: payoutMinutes * 60_000 },
     { name: JOB_NAMES.runPayouts, data: {} }
   );
+  const reconcileMinutes = getPoolReconciliationIntervalMinutes();
+  await poolReconcileQueue.upsertJobScheduler(
+    POOL_RECONCILE_SCHEDULER_ID,
+    { every: reconcileMinutes * 60_000 },
+    { name: JOB_NAMES.reconcileFunding, data: {} }
+  );
   log.info("schedulers.ready", {
     viewSyncEveryMin: syncMinutes,
     payoutEveryMin: payoutMinutes,
+    reconcileEveryMin: reconcileMinutes,
   });
 }
 
@@ -153,6 +164,28 @@ function startPayoutWorker(): Worker {
         return await runPayoutBatch();
       } catch (err) {
         log.error("payout.batch.error", {
+          jobId: job.id,
+          attempt: job.attemptsMade + 1,
+          error: errMessage(err),
+        });
+        throw err;
+      }
+    },
+    { connection, concurrency: 1 }
+  );
+}
+
+function startReconcileWorker(): Worker {
+  // Single-instance — recovers performance campaigns stuck in 'draft' after a
+  // missed/delayed pool-funding webhook. Idempotent; safe to run repeatedly.
+  return new Worker(
+    QUEUE_NAMES.poolReconcile,
+    async (job: Job) => {
+      if (job.name !== JOB_NAMES.reconcileFunding) return { ignored: job.name };
+      try {
+        return await runPoolFundingReconciliation();
+      } catch (err) {
+        log.error("reconcile.error", {
           jobId: job.id,
           attempt: job.attemptsMade + 1,
           error: errMessage(err),
@@ -253,10 +286,11 @@ async function scanPoolExhaustion(): Promise<void> {
  */
 async function emitHeartbeat(): Promise<void> {
   try {
-    const [vs, ec, pb] = await Promise.all([
+    const [vs, ec, pb, pr] = await Promise.all([
       viewSyncQueue.getJobCounts(),
       earningsCalcQueue.getJobCounts(),
       payoutBatchQueue.getJobCounts(),
+      poolReconcileQueue.getJobCounts(),
     ]);
     const w = takeWindow();
     const t = totals();
@@ -273,6 +307,7 @@ async function emitHeartbeat(): Promise<void> {
       viewSync: depth(vs),
       earnings: depth(ec),
       payout: depth(pb),
+      reconcile: depth(pr),
     });
 
     const provThreshold = getProviderErrorAlertThreshold();
@@ -324,6 +359,7 @@ async function main(): Promise<void> {
     [startViewSyncWorker(), QUEUE_NAMES.viewSync],
     [startEarningsWorker(), QUEUE_NAMES.earningsCalc],
     [startPayoutWorker(), QUEUE_NAMES.payoutBatch],
+    [startReconcileWorker(), QUEUE_NAMES.poolReconcile],
   ];
   workers.forEach(([w, q]) => attachListeners(w, q));
 

@@ -105,6 +105,8 @@ npm run payouts:once     # one payout batch (no Redis)
 
 **Real-money safety guard.** In real mode (`AETHER_MOCK_MODE=false`) without an `AYRSHARE_API_KEY`, views are *simulated* — so the worker **refuses to accrue earnings or run payouts** (it would otherwise pay real money for fake views). View-sync still runs (snapshots update for visibility), but no `earnings` rows are created and payout batches no-op, with a loud `[ALERT]` at startup and each heartbeat. Set `AYRSHARE_API_KEY` for real views, or `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true` to override on staging (never in production). Mock mode is unaffected.
 
+**Pool-funding reconciliation.** A repeatable worker job (every `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES`) recovers performance campaigns stuck in `draft` after pool funding when the `payment_intent.succeeded` webhook is missed or delayed. It finds draft performance campaigns that have a `funding_payment_intent_id`, checks the PaymentIntent status in Stripe, and **activates** (`status: open` + `funded_at`) those that have succeeded — idempotently (guarded on `status='draft'`, so it can't race the webhook or touch live campaigns). Canceled/failed PaymentIntents are **left in draft** (cancellation + refund stays an explicit owner action via the cancel endpoint); a campaign stuck too long fires `campaign.funding_stuck` `[ALERT]`. This complements the manual `POST /api/campaigns/[id]/reconcile-funding` endpoint.
+
 ---
 
 ## Environment variable reference
@@ -133,6 +135,8 @@ npm run payouts:once     # one payout batch (no Redis)
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |
 | `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE` | worker | Override the simulated-views safety guard (testing only; default false — **never enable in production**) |
+| `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES` | worker | Cadence of the pool-funding reconciliation safety net (default 15) |
+| `POOL_FUNDING_STUCK_ALERT_MINUTES` | worker | A draft+funded campaign stuck longer than this fires a `[ALERT]` (default 120) |
 | `GEMINI_API_KEY` / `RESEND_API_KEY` / `SOCIAVAULT_API_KEY` | app | Optional (AI brief, email, legacy scraping) |
 
 Full secret-placement matrix: [docs/SECRETS.md](docs/SECRETS.md).

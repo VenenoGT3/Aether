@@ -124,6 +124,26 @@ export function getPayoutBatchIntervalMinutes(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 360;
 }
 
+/**
+ * How often the pool-funding reconciliation job runs (minutes) — the safety net
+ * for performance campaigns stuck in 'draft' after a missed/delayed
+ * payment_intent.succeeded webhook. Default 15m.
+ */
+export function getPoolReconciliationIntervalMinutes(): number {
+  const raw = Number(process.env.POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 15;
+}
+
+/**
+ * A funded campaign still stuck in 'draft' (PaymentIntent not yet succeeded)
+ * longer than this fires a [ALERT]. Default 120m — generous, so normal webhook
+ * delays don't page.
+ */
+export function getFundingStuckAlertMinutes(): number {
+  const raw = Number(process.env.POOL_FUNDING_STUCK_ALERT_MINUTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 120;
+}
+
 /** How often the worker emits a heartbeat (queue depths + counters), minutes. */
 export function getHeartbeatIntervalMinutes(): number {
   const raw = Number(process.env.WORKER_HEARTBEAT_MINUTES);

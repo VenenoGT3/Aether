@@ -55,3 +55,22 @@ export async function transferToCreator(
 
   return { transferId: transfer.id, mock: false };
 }
+
+/**
+ * Read a PaymentIntent's current status (used by pool-funding reconciliation).
+ * Mirrors lib/stripe/connect.retrievePaymentIntentStatus. Returns null on a
+ * Stripe API error so the caller can log and retry next cycle (never throws).
+ */
+export async function retrievePaymentIntentStatus(
+  paymentIntentId: string
+): Promise<{ status: string } | null> {
+  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
+    return { status: "succeeded" };
+  }
+  try {
+    const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+    return { status: pi.status };
+  } catch {
+    return null;
+  }
+}

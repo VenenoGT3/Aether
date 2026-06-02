@@ -36,6 +36,7 @@ export const QUEUE_NAMES = {
   viewSync: "view-sync",
   earningsCalc: "earnings-calc",
   payoutBatch: "payout-batch",
+  poolReconcile: "pool-reconcile",
 } as const;
 
 export const JOB_NAMES = {
@@ -45,8 +46,10 @@ export const JOB_NAMES = {
   syncClip: "sync-clip",
   /** Earnings accrual for a clip after a fresh snapshot. */
   calcEarning: "calc-earning",
-  /** Placeholder for Phase 5. */
+  /** Repeatable: promote due earnings + pay creators above the threshold. */
   runPayouts: "run-payouts",
+  /** Repeatable: recover performance campaigns stuck in 'draft' after pool funding. */
+  reconcileFunding: "reconcile-funding",
 } as const;
 
 export interface SyncClipJob {
