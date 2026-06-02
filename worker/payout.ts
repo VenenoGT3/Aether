@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { transferToCreator } from "./stripe";
-import { getMinPayoutThreshold, getViewHoldbackHours } from "./env";
+import {
+  getMinPayoutThreshold,
+  getViewHoldbackHours,
+  simulatedEarningsBlocked,
+} from "./env";
 import { log, errMessage } from "./logger";
 import { recordPayoutFailures } from "./metrics";
 import {
@@ -45,6 +49,17 @@ export async function runPayoutBatch(
     payoutsFailed: 0,
     totalPaid: 0,
   };
+
+  // SAFETY GUARD (defense-in-depth): refuse to run real payouts while in real
+  // mode with simulated views — even on pre-existing earnings (e.g. a removed
+  // Ayrshare key). Accrual is already blocked upstream; this halts the batch too.
+  if (simulatedEarningsBlocked()) {
+    log.alert("payout.blocked.simulated_views", {
+      reason: "real mode but views are simulated — refusing to run real payouts",
+      hint: "set AYRSHARE_API_KEY, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only)",
+    });
+    return summary; // all zeros — nothing promoted, claimed, or transferred
+  }
 
   const threshold = getMinPayoutThreshold();
   const holdback = getViewHoldbackHours();

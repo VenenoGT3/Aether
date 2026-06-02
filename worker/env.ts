@@ -53,6 +53,38 @@ export function shouldSimulateViews(): boolean {
   return !isAyrshareEnabled();
 }
 
+/**
+ * Escape hatch (testing only): allow real-mode earnings/payouts even when views
+ * are simulated — e.g. exercising real Stripe *test* transfers on staging
+ * without Ayrshare. NEVER enable this in production. Defaults to false.
+ */
+export function allowSimulatedPayoutsInRealMode(): boolean {
+  return (
+    (process.env.ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE ?? "").trim().toLowerCase() ===
+    "true"
+  );
+}
+
+/**
+ * The dangerous state: NOT mock mode, but views are simulated (no AYRSHARE_API_KEY).
+ * Accruing/paying here would move real money for fake views.
+ *
+ * Note: mock mode is safe (simulated views are expected and Stripe transfers are
+ * mocked), so this is deliberately false in mock mode.
+ */
+export function isRealModeSimulatingViews(): boolean {
+  return !isMockMode && shouldSimulateViews();
+}
+
+/**
+ * True when real earnings accrual / payouts must be BLOCKED: the dangerous state
+ * above, and the testing override is not set. This is the single guard the
+ * worker consults before any real money movement.
+ */
+export function simulatedEarningsBlocked(): boolean {
+  return isRealModeSimulatingViews() && !allowSimulatedPayoutsInRealMode();
+}
+
 /** Minimum gap between Ayrshare API calls (ms) — basic client-side rate limiting. */
 export function getAyrshareMinIntervalMs(): number {
   const raw = Number(process.env.AYRSHARE_MIN_INTERVAL_MS);

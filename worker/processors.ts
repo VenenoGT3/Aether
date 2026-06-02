@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
 import { evaluateClipFraud } from "./fraud";
-import { getFraudConfig, getViewSyncBatchSize } from "./env";
+import { getFraudConfig, getViewSyncBatchSize, simulatedEarningsBlocked } from "./env";
 import { log } from "./logger";
 import type { ClipRow, ViewSyncOutcome } from "./types";
 
@@ -156,6 +156,19 @@ export async function runEarningsCalc(
   views: number,
   client?: SupabaseClient
 ): Promise<number> {
+  // SAFETY GUARD: never accrue real earnings on simulated views in real mode.
+  // View-sync still runs (snapshots / current_views update for visibility), but
+  // no earnings row is created — so nothing can ever be promoted or paid.
+  if (simulatedEarningsBlocked()) {
+    log.warn("earnings.blocked.simulated_views", {
+      clipId,
+      views,
+      reason: "real mode but views are simulated — refusing to accrue real earnings",
+      hint: "set AYRSHARE_API_KEY for real views, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only)",
+    });
+    return 0;
+  }
+
   const supabase = client ?? getServiceClient();
   const { data, error } = await supabase.rpc("record_clip_earning", {
     p_clip_id: clipId,

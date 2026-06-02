@@ -101,7 +101,9 @@ npm run payouts:once     # one payout batch (no Redis)
 
 > The worker reads `process.env` directly and uses the Supabase **service role** (bypasses RLS). Deploy it somewhere it can hold that key securely. It must **not** run in the Vercel app runtime.
 
-**Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), and **repeated views-provider errors** in one window (`views.provider.repeated_errors`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
+**Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), **repeated views-provider errors** in one window (`views.provider.repeated_errors`), and the **real-mode-with-simulated-views** state (`simulated_views_in_real_mode`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
+
+**Real-money safety guard.** In real mode (`AETHER_MOCK_MODE=false`) without an `AYRSHARE_API_KEY`, views are *simulated* — so the worker **refuses to accrue earnings or run payouts** (it would otherwise pay real money for fake views). View-sync still runs (snapshots update for visibility), but no `earnings` rows are created and payout batches no-op, with a loud `[ALERT]` at startup and each heartbeat. Set `AYRSHARE_API_KEY` for real views, or `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true` to override on staging (never in production). Mock mode is unaffected.
 
 ---
 
@@ -130,6 +132,7 @@ npm run payouts:once     # one payout batch (no Redis)
 | `VIEW_HOLDBACK_HOURS` | worker | Fallback holdback (per-campaign value overrides; default 48) |
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |
+| `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE` | worker | Override the simulated-views safety guard (testing only; default false — **never enable in production**) |
 | `GEMINI_API_KEY` / `RESEND_API_KEY` / `SOCIAVAULT_API_KEY` | app | Optional (AI brief, email, legacy scraping) |
 
 Full secret-placement matrix: [docs/SECRETS.md](docs/SECRETS.md).

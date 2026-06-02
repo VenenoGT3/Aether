@@ -16,12 +16,14 @@ import { getServiceClient } from "./supabase";
 import { QUEUE_NAMES, JOB_NAMES } from "./types";
 import type { SyncClipJob, CalcEarningJob } from "./types";
 import {
+  allowSimulatedPayoutsInRealMode,
   getHeartbeatIntervalMinutes,
   getPayoutBatchIntervalMinutes,
   getProviderErrorAlertThreshold,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
   isMockMode,
+  isRealModeSimulatingViews,
   shouldSimulateViews,
 } from "./env";
 import { log, errMessage } from "./logger";
@@ -282,6 +284,14 @@ async function emitHeartbeat(): Promise<void> {
       });
     }
 
+    // Keep paging while the worker is in the dangerous real-mode-simulated state.
+    if (isRealModeSimulatingViews()) {
+      log.alert("simulated_views_in_real_mode", {
+        earningsBlocked: !allowSimulatedPayoutsInRealMode(),
+        overrideEnabled: allowSimulatedPayoutsInRealMode(),
+      });
+    }
+
     await scanPoolExhaustion();
   } catch (err) {
     log.error("heartbeat.error", { error: errMessage(err) });
@@ -296,6 +306,19 @@ async function main(): Promise<void> {
     payoutEveryMin: getPayoutBatchIntervalMinutes(),
     batchSize: getViewSyncBatchSize(),
   });
+
+  // Loud startup alert for the dangerous real-mode-with-simulated-views state.
+  if (isRealModeSimulatingViews()) {
+    if (allowSimulatedPayoutsInRealMode()) {
+      log.alert("startup.simulated_payouts_override", {
+        note: "REAL mode + SIMULATED views, but ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true — real money may move on simulated views. Use for testing only.",
+      });
+    } else {
+      log.alert("startup.simulated_views_guard", {
+        note: "REAL mode + SIMULATED views (no AYRSHARE_API_KEY) — earnings accrual and payouts are BLOCKED. Set AYRSHARE_API_KEY for real views, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only).",
+      });
+    }
+  }
 
   const workers: Array<[Worker, string]> = [
     [startViewSyncWorker(), QUEUE_NAMES.viewSync],
