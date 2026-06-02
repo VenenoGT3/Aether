@@ -13,7 +13,9 @@ import {
   DollarSign, 
   ArrowRight, 
   HelpCircle,
-  Lock
+  Lock,
+  Sparkles,
+  Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -25,11 +27,11 @@ import {
 import { CampaignStatus } from "@/types/database";
 import { useTranslation } from "@/lib/translations";
 
-const STATUS_COLUMNS: Array<{ id: CampaignStatus; label: string; color: string; bg: string }> = [
-  { id: "draft", label: "Drafts", color: "text-muted-foreground", bg: "bg-muted/10" },
-  { id: "open", label: "Open Escrows", color: "text-[#FF9500]", bg: "bg-[#FF9500]/5" },
-  { id: "in_progress", label: "In Progress", color: "text-[#007AFF]", bg: "bg-[#007AFF]/5" },
-  { id: "completed", label: "Completed", color: "text-[#34C759]", bg: "bg-[#34C759]/5" }
+const STATUS_COLUMNS: Array<{ id: CampaignStatus; label: string; color: string; bg: string; border: string }> = [
+  { id: "draft", label: "Drafts", color: "text-muted-foreground", bg: "bg-secondary/15", border: "border-border/5" },
+  { id: "open", label: "Open Escrows", color: "text-[#FF9500]", bg: "bg-[#FF9500]/5", border: "border-[#FF9500]/10" },
+  { id: "in_progress", label: "In Progress", color: "text-[#007AFF]", bg: "bg-[#007AFF]/5", border: "border-[#007AFF]/10" },
+  { id: "completed", label: "Completed", color: "text-[#34C759]", bg: "bg-[#34C759]/5", border: "border-[#34C759]/10" }
 ];
 
 export default function CampaignsPage() {
@@ -143,27 +145,29 @@ export default function CampaignsPage() {
   };
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16">
-      
+    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden bg-black">
+      {/* Background Glow */}
+      <div className="absolute top-10 left-10 w-[300px] h-[300px] bg-gradient-to-br from-primary/5 to-transparent blur-[85px] pointer-events-none rounded-full" />
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-12">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-12 relative z-10">
         <div>
-          <span className="text-xs font-semibold text-primary uppercase tracking-wider block mb-1.5">
+          <span className="text-xs font-semibold text-[#007AFF] uppercase tracking-wider block mb-1.5">
             {t("Campaign Hub")}
           </span>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{t("Workspace Pipelines")}</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight font-heading">{t("Workspace Pipelines")}</h1>
         </div>
         
-        <div className="flex items-center gap-4 w-full sm:w-auto">
+        <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
           {/* View Toggle */}
-          <div className="flex rounded-full bg-secondary/60 p-1 border border-border/10">
+          <div className="flex rounded-full bg-secondary/40 p-1 border border-border/10">
             <button
               onClick={() => setViewMode("kanban")}
               className={`p-2.5 rounded-full transition-all cursor-pointer ${
                 viewMode === "kanban" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Grid size={15} />
+              <Grid size={14} />
             </button>
             <button
               onClick={() => setViewMode("list")}
@@ -171,12 +175,12 @@ export default function CampaignsPage() {
                 viewMode === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <List size={15} />
+              <List size={14} />
             </button>
           </div>
 
           <Link href="/business/campaigns/new" className="shrink-0">
-            <Button className="rounded-full px-5 py-5 font-semibold text-xs shadow-md bg-primary hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 gap-1.5 cursor-pointer">
+            <Button className="rounded-full px-5 py-5 font-semibold text-xs shadow-md bg-primary hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 gap-1.5 cursor-pointer h-auto">
               <Plus size={14} /> {t("New Campaign")}
             </Button>
           </Link>
@@ -184,30 +188,30 @@ export default function CampaignsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-card border border-border/40 p-4 rounded-2xl shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8 bg-card/65 backdrop-blur-md border border-border/30 p-4 rounded-2xl shadow-sm relative z-10">
         <div className="relative flex-1">
           <input
             type="text"
             placeholder={t("Search campaigns...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
+            className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-border/30 bg-background/50 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/35"
           />
-          <Search size={14} className="absolute left-3.5 top-3 text-muted-foreground" />
+          <Search size={13} className="absolute left-3.5 top-3.5 text-muted-foreground/50" />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto py-1">
-          <Filter size={13} className="text-muted-foreground shrink-0" />
-          <span className="text-xs text-muted-foreground font-semibold mr-1.5 shrink-0">{t("Niches:")}</span>
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <Filter size={12} className="text-muted-foreground shrink-0" />
+          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mr-1.5 shrink-0">{t("Niches:")}</span>
           <div className="flex gap-1.5">
             {allNiches.map((niche) => (
               <button
                 key={niche}
                 onClick={() => setSelectedNiche(niche)}
-                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all border ${
+                className={`text-[10px] px-3.5 py-1.5 rounded-full font-semibold transition-all border shrink-0 ${
                   selectedNiche === niche
-                    ? "bg-primary/10 text-primary border-primary/20"
-                    : "bg-secondary/40 text-muted-foreground border-transparent hover:bg-secondary/60 hover:text-foreground"
+                    ? "bg-primary/10 text-primary border-primary/25"
+                    : "bg-secondary/35 text-muted-foreground border-transparent hover:bg-secondary/60 hover:text-foreground"
                 }`}
               >
                 {niche === "All" ? t("All") : niche}
@@ -218,7 +222,7 @@ export default function CampaignsPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 animate-pulse">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 animate-pulse relative z-10">
           {[1, 2, 3, 4].map((col) => (
             <div key={col} className="space-y-4">
               <div className="flex justify-between items-center px-2">
@@ -251,14 +255,14 @@ export default function CampaignsPage() {
           ))}
         </div>
       ) : campaigns.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-20 rounded-3xl bg-card border border-dashed border-border/60 text-center">
-          <HelpCircle size={36} className="text-muted-foreground/45 mb-4" />
-          <h3 className="text-lg font-bold">{t("No Campaigns Found")}</h3>
-          <p className="text-xs text-muted-foreground mt-2 max-w-sm">
-            {t("Launch your marketing campaign wizard to seed escrows and match with micro-influencers.")}
+        <div className="flex flex-col items-center justify-center p-20 rounded-3xl bg-card border border-dashed border-border/50 text-center relative z-10">
+          <HelpCircle size={36} className="text-muted-foreground/35 mb-4" />
+          <h3 className="text-lg font-bold text-foreground">{t("No Campaigns Launched")}</h3>
+          <p className="text-xs text-muted-foreground mt-2 max-w-sm leading-relaxed">
+            {t("Setup your target brief and secure campaign payments in Stripe Connect escrow to start Matching with creators.")}
           </p>
           <Link href="/business/campaigns/new" className="mt-6">
-            <Button className="rounded-full px-5 py-5 text-xs font-semibold bg-primary text-white cursor-pointer">
+            <Button className="rounded-full px-5 py-5 text-xs font-semibold bg-primary text-white cursor-pointer h-auto">
               {t("Create First Campaign")}
             </Button>
           </Link>
@@ -273,7 +277,7 @@ export default function CampaignsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start"
+              className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start relative z-10"
             >
               {STATUS_COLUMNS.map((col) => {
                 const columnCampaigns = filteredCampaigns.filter(c => c.status === col.id);
@@ -281,16 +285,16 @@ export default function CampaignsPage() {
                   <div key={col.id} className="space-y-4">
                     {/* Column Header */}
                     <div className="flex justify-between items-center px-2">
-                      <span className={`text-xs font-bold uppercase tracking-wider ${col.color}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${col.color}`}>
                         {t(col.label)}
                       </span>
-                      <span className="text-[10px] font-bold bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">
+                      <span className="text-[9px] font-bold bg-secondary/80 text-muted-foreground px-2 py-0.5 rounded-full border border-border/10">
                         {columnCampaigns.length}
                       </span>
                     </div>
 
                     {/* Column Body */}
-                    <div className={`p-4 rounded-3xl ${col.bg} border border-border/10 space-y-4 min-h-[480px]`}>
+                    <div className={`p-4 rounded-3xl ${col.bg} border ${col.border} space-y-4 min-h-[500px]`}>
                       <AnimatePresence>
                         {columnCampaigns.map((camp) => (
                           <motion.div
@@ -301,7 +305,7 @@ export default function CampaignsPage() {
                             exit={{ opacity: 0, scale: 0.95 }}
                             transition={appleSpring}
                             whileHover={{ y: -3, scale: 1.015 }}
-                            className="p-5 rounded-2xl bg-card border border-border/30 shadow-sm cursor-pointer hover:shadow-md relative overflow-hidden group"
+                            className="p-5 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/25 shadow-sm cursor-pointer relative overflow-hidden group"
                             onClick={() => router.push(`/campaigns/${camp.id}`)}
                           >
                             {/* Inner dynamic content */}
@@ -312,14 +316,14 @@ export default function CampaignsPage() {
                                 </h4>
                               </div>
 
-                              <p className="text-[10px] text-muted-foreground line-clamp-3 leading-normal">
+                              <p className="text-[10px] text-muted-foreground line-clamp-3 leading-relaxed">
                                 {camp.description}
                               </p>
 
                               {/* Niches */}
-                              <div className="flex flex-wrap gap-1">
+                              <div className="flex flex-wrap gap-1.5">
                                 {camp.target_niches?.map((n: string) => (
-                                  <span key={n} className="text-[8px] font-bold bg-secondary text-muted-foreground px-2 py-0.5 rounded-full uppercase">
+                                  <span key={n} className="text-[8px] font-bold bg-secondary/80 text-muted-foreground px-2 py-0.5 rounded-full uppercase border border-border/5">
                                     {n}
                                   </span>
                                 ))}
@@ -328,9 +332,9 @@ export default function CampaignsPage() {
                               {/* Budget & Payout */}
                               <div className="flex justify-between items-center border-t border-border/10 pt-3 mt-3">
                                 <div>
-                                  <span className="text-[8px] text-muted-foreground uppercase block">{t("Budget")}</span>
-                                  <span className="text-xs font-bold text-foreground flex items-center">
-                                    <DollarSign size={11} />{Number(camp.budget_total).toLocaleString()}
+                                  <span className="text-[8px] text-muted-foreground font-bold uppercase tracking-wider block">{t("Budget")}</span>
+                                  <span className="text-xs font-bold text-foreground flex items-center mt-0.5">
+                                    <DollarSign size={11} className="text-primary" />{Number(camp.budget_total).toLocaleString()}
                                   </span>
                                 </div>
                                 
@@ -341,7 +345,7 @@ export default function CampaignsPage() {
                                       e.stopPropagation();
                                       handleUpdateStatus(camp.id, "open");
                                     }}
-                                    className="text-[9px] font-bold bg-[#FF9500]/10 text-[#FF9500] hover:bg-[#FF9500]/25 px-2.5 py-1 rounded-lg transition-colors border-0"
+                                    className="text-[9px] font-bold bg-[#FF9500]/10 text-[#FF9500] hover:bg-[#FF9500]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
                                   >
                                     {t("Fund Escrow")}
                                   </button>
@@ -352,7 +356,7 @@ export default function CampaignsPage() {
                                       e.stopPropagation();
                                       handleUpdateStatus(camp.id, "in_progress");
                                     }}
-                                    className="text-[9px] font-bold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/25 px-2.5 py-1 rounded-lg transition-colors border-0"
+                                    className="text-[9px] font-bold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
                                   >
                                     {t("Match Creator")}
                                   </button>
@@ -363,10 +367,15 @@ export default function CampaignsPage() {
                                       e.stopPropagation();
                                       handleUpdateStatus(camp.id, "completed");
                                     }}
-                                    className="text-[9px] font-bold bg-[#34C759]/10 text-[#34C759] hover:bg-[#34C759]/25 px-2.5 py-1 rounded-lg transition-colors border-0"
+                                    className="text-[9px] font-bold bg-[#34C759]/10 text-[#34C759] hover:bg-[#34C759]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
                                   >
-                                    {t("Approve & Payout")}
+                                    {t("Release Escrow")}
                                   </button>
+                                )}
+                                {camp.status === "completed" && (
+                                  <span className="text-[9px] font-bold text-[#34C759] uppercase tracking-wider flex items-center gap-1">
+                                    <Check size={11} className="stroke-[3]" /> Released
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -375,8 +384,8 @@ export default function CampaignsPage() {
                       </AnimatePresence>
                       
                       {columnCampaigns.length === 0 && (
-                        <div className="py-12 text-center text-[10px] text-muted-foreground/60">
-                          {t("Empty column")}
+                        <div className="py-16 text-center text-[10px] text-muted-foreground/45 font-medium">
+                          {t("Empty Column")}
                         </div>
                       )}
                     </div>
@@ -394,7 +403,7 @@ export default function CampaignsPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               variants={containerVariants}
-              className="space-y-4"
+              className="space-y-4 relative z-10"
             >
               {filteredCampaigns.map((camp) => (
                 <motion.div
@@ -404,34 +413,34 @@ export default function CampaignsPage() {
                   className="p-6 apple-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
                   onClick={() => router.push(`/campaigns/${camp.id}`)}
                 >
-                  <div className="space-y-2 max-w-md">
+                  <div className="space-y-2 max-w-xl">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                      <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
                         camp.status === "in_progress" 
-                          ? "bg-[#007AFF]/10 text-[#007AFF]" 
+                          ? "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/15" 
                           : camp.status === "open"
-                          ? "bg-[#FF9500]/10 text-[#FF9500]"
+                          ? "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/15"
                           : camp.status === "completed"
-                          ? "bg-[#34C759]/10 text-[#34C759]"
-                          : "bg-secondary text-muted-foreground"
+                          ? "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/15"
+                          : "bg-secondary/40 text-muted-foreground border-border/10"
                       }`}>
                         {t(camp.status === "in_progress" ? "In Progress" : camp.status === "open" ? "Open Escrows" : camp.status === "completed" ? "Completed" : "Drafts")}
                       </span>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1.5">
                         {camp.target_niches?.map((n: string) => (
-                          <span key={n} className="text-[8px] bg-secondary text-muted-foreground px-2 py-0.5 rounded-full font-semibold">
+                          <span key={n} className="text-[8px] bg-secondary/60 text-muted-foreground px-2 py-0.5 rounded-full font-bold uppercase border border-border/5">
                             {n}
                           </span>
                         ))}
                       </div>
                     </div>
                     <h3 className="text-base font-bold text-foreground">{camp.title}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-1 leading-normal">{camp.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">{camp.description}</p>
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-12 border-t border-border/10 md:border-t-0 pt-4 md:pt-0">
+                  <div className="flex items-center justify-between md:justify-end gap-12 border-t border-border/10 md:border-t-0 pt-4 md:pt-0 shrink-0">
                     <div className="text-left md:text-right">
-                      <span className="text-[8px] text-muted-foreground block uppercase">{t("Escrow Budget")}</span>
+                      <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block">{t("Escrow Budget")}</span>
                       <span className="text-sm font-bold text-foreground flex items-center mt-0.5">
                         <DollarSign size={13} className="text-primary" />{Number(camp.budget_total).toLocaleString()}
                       </span>
@@ -444,9 +453,9 @@ export default function CampaignsPage() {
                             e.stopPropagation();
                             handleUpdateStatus(camp.id, "open");
                           }}
-                          className="rounded-full px-4 py-3 text-[10px] font-bold bg-[#FF9500] text-white h-auto cursor-pointer"
+                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#FF9500] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
                         >
-                          {t("Fund Escrow").split(" ")[0]}
+                          {t("Fund Escrow")}
                         </Button>
                       )}
                       {camp.status === "open" && (
@@ -455,9 +464,9 @@ export default function CampaignsPage() {
                             e.stopPropagation();
                             handleUpdateStatus(camp.id, "in_progress");
                           }}
-                          className="rounded-full px-4 py-3 text-[10px] font-bold bg-[#007AFF] text-white h-auto cursor-pointer"
+                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#007AFF] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
                         >
-                          {t("Match Creator").split(" ")[0]}
+                          {t("Match Creator")}
                         </Button>
                       )}
                       {camp.status === "in_progress" && (
@@ -466,13 +475,13 @@ export default function CampaignsPage() {
                             e.stopPropagation();
                             handleUpdateStatus(camp.id, "completed");
                           }}
-                          className="rounded-full px-4 py-3 text-[10px] font-bold bg-[#34C759] text-white h-auto cursor-pointer"
+                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#34C759] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
                         >
-                          {t("Release Payout").split(" ")[0]}
+                          {t("Release Payout")}
                         </Button>
                       )}
 
-                      <div className="w-9 h-9 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors shrink-0">
+                      <div className="w-9 h-9 rounded-2xl bg-secondary/50 border border-border/10 flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors shrink-0">
                         <ArrowRight size={14} />
                       </div>
                     </div>

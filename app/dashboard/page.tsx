@@ -7,5 +7,5 @@ export default async function DashboardRoot() {
   const role = await getServerRole();
   
   // Clean Server-side redirection based on active role cookie
-  redirect(`/${role}/dashboard`);
+  redirect(`/${role === "influencer" ? "creator" : "business"}/dashboard`);
 }

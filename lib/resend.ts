@@ -90,7 +90,7 @@ export async function sendCampaignMatchEmail(toEmail: string, brandName: string,
         <p style="font-size: 13px; color: #515154; margin: 0;">We identified that your niche profile and target audience overlap extensively with this launch. The brand is offering a secure Stripe escrow payout of <strong>$${payout.toLocaleString()} USD</strong>.</p>
       </div>
 
-      <a href="https://aether.co/influencer/discover" style="display: inline-block; background-color: #007aff; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Apply to Campaign</a>
+      <a href="https://aether.co/creator/discover" style="display: inline-block; background-color: #007aff; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Apply to Campaign</a>
       
       <hr style="border: 0; border-top: 1px solid #d2d2d7; margin: 40px 0 20px 0;" />
       <p style="font-size: 11px; color: #86868b; line-height: 1.4; margin: 0;">Aether Notifications Inc., Cupertino, CA.<br />If you wish to change your notification frequencies, visit your user dashboard settings.</p>
@@ -113,7 +113,7 @@ export async function sendApplicationAcceptedEmail(toEmail: string, brandName: s
         <p style="font-size: 13px; color: #515154; margin: 0;">The brand has funded the escrow payout of <strong>$${payout.toLocaleString()} USD</strong>. The funds are locked in Stripe and will release automatically when your draft deliverables are approved.</p>
       </div>
 
-      <a href="https://aether.co/influencer/campaigns" style="display: inline-block; background-color: #34c759; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Submit Deliverables</a>
+      <a href="https://aether.co/creator/campaigns" style="display: inline-block; background-color: #34c759; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Submit Deliverables</a>
       
       <hr style="border: 0; border-top: 1px solid #d2d2d7; margin: 40px 0 20px 0;" />
       <p style="font-size: 11px; color: #86868b; line-height: 1.4; margin: 0;">Aether Notifications Inc., Cupertino, CA.</p>
@@ -137,7 +137,7 @@ export async function sendPaymentReleasedEmail(toEmail: string, brandName: strin
         <p style="font-size: 13px; color: #515154; line-height: 1.5; margin-top: 8px; margin-bottom: 0;">The brand approved your submissions, releasing the funds from escrow. The deposit will appear in your bank account shortly.</p>
       </div>
 
-      <a href="https://aether.co/influencer/dashboard" style="display: inline-block; background-color: #007aff; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">View Wallet Balance</a>
+      <a href="https://aether.co/creator/dashboard" style="display: inline-block; background-color: #007aff; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">View Wallet Balance</a>
       
       <hr style="border: 0; border-top: 1px solid #d2d2d7; margin: 40px 0 20px 0;" />
       <p style="font-size: 11px; color: #86868b; line-height: 1.4; margin: 0;">Aether Notifications Inc., Cupertino, CA.</p>

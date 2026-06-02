@@ -255,7 +255,7 @@ export default function InfluencerOnboarding() {
         description: t("Your influencer dashboard is now active."),
       });
 
-      router.push("/influencer/dashboard");
+      router.push("/creator/dashboard");
       router.refresh();
     } catch (err) {
       toast.error(t("An unexpected error occurred."));

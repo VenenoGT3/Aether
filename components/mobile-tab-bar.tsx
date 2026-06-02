@@ -53,17 +53,17 @@ export function MobileTabBar() {
   const creatorTabs = [
     {
       label: "Work Center",
-      href: "/influencer/dashboard",
+      href: "/creator/dashboard",
       icon: LayoutDashboard,
     },
     {
       label: "Discover",
-      href: "/influencer/discover",
+      href: "/creator/discover",
       icon: Compass,
     },
     {
       label: "Campaigns",
-      href: "/influencer/campaigns",
+      href: "/creator/campaigns",
       icon: Layers,
     },
     {

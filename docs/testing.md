@@ -29,7 +29,7 @@ Follow this checklist to manually run the E2E campaign flow in the development e
 - [ ] **Switch Account Role**
   - Switch to **Influencer** mode using the role switcher or logging in as `creator@aether.co` / `marcus@aether.co`.
 - [ ] **Discover Campaign**
-  - Navigate to `/influencer/discover`.
+  - Navigate to `/creator/discover`.
   - Verify the newly created campaign appears in the discover feed.
 - [ ] **Pitch & Apply**
   - Click on the campaign card to open its detail page at `/campaigns/[id]`.
@@ -131,7 +131,7 @@ test.describe("Aether Complete Campaign E2E Flow", () => {
     // ----------------------------------------------------
     // Swap context to Influencer (Marcus Vance)
     await page.click('button:has-text("Switch to Influencer")');
-    await page.goto("http://localhost:3000/influencer/discover");
+    await page.goto("http://localhost:3000/creator/discover");
     
     // Verify discover list holds new campaign
     await expect(page.locator(`text=${testCampaignTitle}`)).toBeVisible();
@@ -167,7 +167,7 @@ test.describe("Aether Complete Campaign E2E Flow", () => {
     // ----------------------------------------------------
     // Swap back to Influencer
     await page.click('button:has-text("Switch to Influencer")');
-    await page.goto("http://localhost:3000/influencer/campaigns");
+    await page.goto("http://localhost:3000/creator/campaigns");
     await page.click(`text=${testCampaignTitle}`);
     
     // Submit draft post

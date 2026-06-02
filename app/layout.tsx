@@ -1,26 +1,25 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Instrument_Serif } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { NavBar } from "@/components/nav-bar";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
   subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
 });
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0c" },
-  ],
+  themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -73,12 +72,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased dark`}
+      style={{ colorScheme: "dark" }}
       suppressHydrationWarning
     >
       <head>
-        {/* MANDATORY: Declare support for both light and dark themes in HTML header */}
-        <meta name="color-scheme" content="light dark" />
+        {/* MANDATORY: Declare support for dark theme in HTML header */}
+        <meta name="color-scheme" content="dark" />
         
         {/* MANDATORY: Zero-FOUC inline script to execute before React hydration */}
         <script
@@ -86,18 +86,10 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  const pinned = localStorage.getItem("aether-theme-pinned") === "true";
-                  const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                  const isDark = pinned ? !systemDark : systemDark;
-                  if (isDark) {
-                    document.documentElement.classList.add('dark');
-                    document.documentElement.style.colorScheme = 'dark';
-                    document.querySelector('meta[name="color-scheme"]').setAttribute('content', 'dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                    document.documentElement.style.colorScheme = 'light';
-                    document.querySelector('meta[name="color-scheme"]').setAttribute('content', 'light');
-                  }
+                  document.documentElement.classList.add('dark');
+                  document.documentElement.style.colorScheme = 'dark';
+                  const meta = document.querySelector('meta[name="color-scheme"]');
+                  if (meta) meta.setAttribute('content', 'dark');
                 } catch (e) {}
               })();
             `,

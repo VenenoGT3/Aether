@@ -87,9 +87,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  const userRolePath = userRole === "influencer" ? "creator" : "business";
+
   const isProtectedPath =
     pathname.startsWith("/business") ||
-    pathname.startsWith("/influencer") ||
+    pathname.startsWith("/creator") ||
     pathname.startsWith("/campaigns") ||
     pathname === "/dashboard";
 
@@ -108,33 +110,33 @@ export async function middleware(request: NextRequest) {
     if (pathname === "/dashboard") {
       if (!isOnboarded) {
         return NextResponse.redirect(
-          new URL(`/${userRole}/onboarding`, request.url)
+          new URL(`/${userRolePath}/onboarding`, request.url)
         );
       }
-      return NextResponse.redirect(new URL(`/${userRole}/dashboard`, request.url));
+      return NextResponse.redirect(new URL(`/${userRolePath}/dashboard`, request.url));
     }
 
     if (pathname.startsWith("/business") && userRole !== "business") {
-      return NextResponse.redirect(new URL("/influencer/dashboard", request.url));
+      return NextResponse.redirect(new URL("/creator/dashboard", request.url));
     }
 
-    if (pathname.startsWith("/influencer") && userRole !== "influencer") {
+    if (pathname.startsWith("/creator") && userRole !== "influencer") {
       return NextResponse.redirect(new URL("/business/dashboard", request.url));
     }
 
     const isBusinessOnboarding = pathname === "/business/onboarding";
-    const isInfluencerOnboarding = pathname === "/influencer/onboarding";
-    const isOnboardingPath = isBusinessOnboarding || isInfluencerOnboarding;
+    const isCreatorOnboarding = pathname === "/creator/onboarding";
+    const isOnboardingPath = isBusinessOnboarding || isCreatorOnboarding;
 
     if (!isOnboarded && isProtectedPath && !isOnboardingPath) {
       return NextResponse.redirect(
-        new URL(`/${userRole}/onboarding`, request.url)
+        new URL(`/${userRolePath}/onboarding`, request.url)
       );
     }
 
     if (isOnboarded && isOnboardingPath) {
       return NextResponse.redirect(
-        new URL(`/${userRole}/dashboard`, request.url)
+        new URL(`/${userRolePath}/dashboard`, request.url)
       );
     }
   }

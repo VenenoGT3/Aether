@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ThemeToggle } from "./theme-toggle";
 import { LanguageToggle } from "./language-toggle";
 import { useTranslation } from "@/lib/translations";
 import { NotificationCenter } from "./notification-center";
@@ -60,7 +59,7 @@ export function NavBar() {
     });
     
     // Redirect to the appropriate dashboard
-    router.push(`/${newRole}/dashboard`);
+    router.push(`/${newRole === "influencer" ? "creator" : "business"}/dashboard`);
   };
 
   const isAuthPage = pathname?.startsWith("/auth");
@@ -112,25 +111,25 @@ export function NavBar() {
               ) : (
                 <>
                   <Link
-                    href="/influencer/dashboard"
+                    href="/creator/dashboard"
                     className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
-                      pathname === "/influencer/dashboard" ? "bg-secondary text-foreground" : ""
+                      pathname === "/creator/dashboard" ? "bg-secondary text-foreground" : ""
                     }`}
                   >
                     {t("Work Center")}
                   </Link>
                   <Link
-                    href="/influencer/discover"
+                    href="/creator/discover"
                     className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
-                      pathname === "/influencer/discover" ? "bg-secondary text-foreground" : ""
+                      pathname === "/creator/discover" ? "bg-secondary text-foreground" : ""
                     }`}
                   >
                     {t("Discover")}
                   </Link>
                   <Link
-                    href="/influencer/campaigns"
+                    href="/creator/campaigns"
                     className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
-                      pathname === "/influencer/campaigns" ? "bg-secondary text-foreground" : ""
+                      pathname === "/creator/campaigns" ? "bg-secondary text-foreground" : ""
                     }`}
                   >
                     {t("My Campaigns")}
@@ -186,9 +185,6 @@ export function NavBar() {
               {/* Language Selector */}
               <LanguageToggle />
 
-              {/* Theme Selector */}
-              <ThemeToggle />
-
               {/* Notification Bell Dropdown */}
               <NotificationCenter />
 
@@ -242,7 +238,6 @@ export function NavBar() {
           ) : (
             <>
               <LanguageToggle />
-              <ThemeToggle />
               <Link href="/auth/login">
                 <Button className="rounded-full px-5 py-1.5 font-semibold text-sm cursor-pointer shadow-sm hover:scale-[1.02] transition-transform">
                   {t("Sign In")}

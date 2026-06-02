@@ -248,7 +248,7 @@ export default function InfluencerCampaignsPage() {
           <p className="text-sm text-muted-foreground mt-1">{t("Manage pipeline applications, secure escrows, and track active deliverables.")}</p>
         </div>
         
-        <Link href="/influencer/discover">
+        <Link href="/creator/discover">
           <Button className="rounded-full px-5 py-5 text-xs font-semibold cursor-pointer gap-1.5 shadow-sm">
             {t("Discover Campaigns")} <ArrowRight size={13} />
           </Button>
@@ -343,7 +343,7 @@ export default function InfluencerCampaignsPage() {
             {activeTab === "completed" && t("Completed collaborations will show up here after payout release.")}
           </p>
           {activeTab !== "completed" && (
-            <Link href="/influencer/discover" className="mt-5 block">
+            <Link href="/creator/discover" className="mt-5 block">
               <Button variant="outline" size="sm" className="rounded-full text-xs cursor-pointer">
                 {t("Explore Discover Feed")}
               </Button>

@@ -163,7 +163,7 @@ export function NotificationCenter() {
             icon: "/favicon.ico",
             badge: "/favicon.ico",
             vibrate: [100, 50, 100],
-            data: { url: "/influencer/dashboard" }
+            data: { url: "/creator/dashboard" }
           } as any);
           toast.success("Test push triggered!", { id: "test-push-load" });
         } else {
