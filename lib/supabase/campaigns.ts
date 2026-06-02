@@ -29,6 +29,7 @@ const DEFAULT_MOCK_CAMPAIGNS = [
       draftDueDate: "2026-06-08"
     },
     status: "in_progress" as CampaignStatus,
+    campaign_type: "fixed",
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     influencer: {
@@ -61,6 +62,7 @@ const DEFAULT_MOCK_CAMPAIGNS = [
       draftDueDate: "2026-06-22"
     },
     status: "open" as CampaignStatus,
+    campaign_type: "fixed",
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
   },
@@ -87,6 +89,7 @@ const DEFAULT_MOCK_CAMPAIGNS = [
       draftDueDate: "2026-05-18"
     },
     status: "completed" as CampaignStatus,
+    campaign_type: "fixed",
     created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     influencer: {
@@ -94,6 +97,29 @@ const DEFAULT_MOCK_CAMPAIGNS = [
       handle: "@davem",
       avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
     }
+  },
+  {
+    id: "camp_perf_1",
+    business_id: "mock-business-uuid",
+    title: "Aether Clip Challenge — Earn Per View",
+    description: "Open clipping campaign. Cut short-form clips from our launch footage and earn for every view. No application needed — join, post, get paid per 1,000 views.",
+    budget_total: 10000,
+    budget_pool: 10000,
+    budget_reserved: 1840,
+    budget_paid: 920,
+    cpm_rate: 2.5,
+    max_payout_per_creator: 1500,
+    view_holdback_hours: 48,
+    platforms: ["tiktok", "instagram", "youtube"],
+    content_rules: { notes: "Hook in first 2s, tag @aether, no competing brands, keep it vertical." },
+    target_niches: ["Tech", "Design", "Lifestyle"],
+    target_audience: { location: "Global", ageRange: "18-34", gender: "All", minimumFollowers: 0 },
+    deliverables: [],
+    timeline: { startDate: "2026-05-25", endDate: "2026-06-30", draftDueDate: "2026-06-30" },
+    status: "open" as CampaignStatus,
+    campaign_type: "performance",
+    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
   }
 ];
 
@@ -182,11 +208,21 @@ export async function createCampaignAction(campaignData: any) {
   
   if (isMockMode) {
     const campaigns = getMockCampaigns();
+    const isPerformance = campaignData.campaign_type === "performance";
     const newCampaign = {
       ...campaignData,
       id: "camp_" + Math.random().toString(36).substring(2, 9),
       business_id: mockUser.user_id,
       budget_allocated: 0,
+      campaign_type: campaignData.campaign_type || "fixed",
+      // Performance pool accounting (starts empty).
+      ...(isPerformance
+        ? {
+            budget_pool: campaignData.budget_pool ?? campaignData.budget_total,
+            budget_reserved: 0,
+            budget_paid: 0,
+          }
+        : {}),
       status: campaignData.status || "draft",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -201,6 +237,7 @@ export async function createCampaignAction(campaignData: any) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
+    const isPerformance = campaignData.campaign_type === "performance";
     const { data, error } = await supabase
       .from("campaigns")
       .insert({
@@ -212,7 +249,19 @@ export async function createCampaignAction(campaignData: any) {
         target_audience: campaignData.target_audience || {},
         deliverables: campaignData.deliverables || [],
         timeline: campaignData.timeline || {},
-        status: campaignData.status || "draft"
+        status: campaignData.status || "draft",
+        // Performance-clipping fields (Phase 6)
+        campaign_type: campaignData.campaign_type || "fixed",
+        cpm_rate: isPerformance ? campaignData.cpm_rate ?? null : null,
+        budget_pool: isPerformance
+          ? campaignData.budget_pool ?? campaignData.budget_total
+          : null,
+        max_payout_per_creator: isPerformance
+          ? campaignData.max_payout_per_creator ?? null
+          : null,
+        platforms: campaignData.platforms || [],
+        view_holdback_hours: campaignData.view_holdback_hours ?? 48,
+        content_rules: campaignData.content_rules || {},
       })
       .select()
       .single();

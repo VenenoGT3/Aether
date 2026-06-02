@@ -20,7 +20,9 @@ import {
   Loader2,
   Lock,
   CreditCard,
-  CheckCircle2
+  CheckCircle2,
+  Zap,
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -80,7 +82,21 @@ export default function NewCampaignWizard() {
   ]);
   
   const [budgetTotal, setBudgetTotal] = useState(2500);
-  
+
+  // Performance-clipping fields (Phase 6)
+  const [campaignType, setCampaignType] = useState<"fixed" | "performance">("performance");
+  const [cpmRate, setCpmRate] = useState(2.5);
+  const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState(0);
+  const [platforms, setPlatforms] = useState<string[]>(["tiktok", "instagram"]);
+  const [viewHoldbackHours, setViewHoldbackHours] = useState(48);
+  const [contentRules, setContentRules] = useState("");
+  const isPerformance = campaignType === "performance";
+
+  const togglePlatform = (p: string) =>
+    setPlatforms((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+
   const [startDate, setStartDate] = useState("2026-06-01");
   const [endDate, setEndDate] = useState("2026-06-20");
   const [draftDueDate, setDraftDueDate] = useState("2026-06-10");
@@ -196,12 +212,28 @@ export default function NewCampaignWizard() {
         target_audience: { location, ageRange, gender, minFollowers },
         deliverables,
         timeline: { startDate, endDate, draftDueDate },
-        status: "open" // transition from draft to open after payment
+        status: "open", // transition from draft to open after payment
+        campaign_type: campaignType,
+        ...(isPerformance
+          ? {
+              cpm_rate: cpmRate,
+              budget_pool: budgetTotal,
+              max_payout_per_creator:
+                maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
+              platforms,
+              view_holdback_hours: viewHoldbackHours,
+              content_rules: contentRules.trim()
+                ? { notes: contentRules.trim() }
+                : {},
+            }
+          : {}),
       };
 
       const res = await createCampaignAction(campaignPayload);
       
       if (res.success && res.campaign) {
+        // Rich escrow detail state is only relevant to fixed-fee campaigns.
+        if (!isPerformance) {
         // Construct and save the rich campaign detail state
         const richData = {
           id: res.campaign.id,
@@ -253,6 +285,7 @@ export default function NewCampaignWizard() {
           ]
         };
         localStorage.setItem(`aether-campaign-rich-data-${res.campaign.id}`, JSON.stringify(richData));
+        }
 
         // Trigger confetti celebration!
         const end = Date.now() + 2 * 1000;
@@ -278,7 +311,9 @@ export default function NewCampaignWizard() {
         frame();
 
         toast.success(t("Campaign Published!"), {
-          description: t("Escrow funds locked successfully. Live matchmaking is now active.")
+          description: isPerformance
+            ? t("Budget pool funded. Creators can now join and start clipping.")
+            : t("Escrow funds locked successfully. Live matchmaking is now active.")
         });
         
         setShowPaymentModal(false);
@@ -375,6 +410,44 @@ export default function NewCampaignWizard() {
                     >
                       <Sparkles size={13} /> {t("Generate with AI Brief")}
                     </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Campaign Type")}</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCampaignType("performance")}
+                        className={`text-left p-4 rounded-2xl border transition-all ${
+                          isPerformance
+                            ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
+                            : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+                          <Zap size={14} className="text-primary" /> {t("Performance (Pay per view)")}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
+                          {t("Open join. Creators clip your content and earn from a shared budget pool based on views (CPM).")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCampaignType("fixed")}
+                        className={`text-left p-4 rounded-2xl border transition-all ${
+                          !isPerformance
+                            ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
+                            : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+                          <Lock size={14} className="text-[#34C759]" /> {t("Fixed fee (Escrow)")}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
+                          {t("Apply & approve a creator for a set fee, held in escrow and released on approval.")}
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -586,24 +659,38 @@ export default function NewCampaignWizard() {
                   className="space-y-6"
                 >
                   <div>
-                    <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Budget & Escrow Allocation")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("Specify funding committed to this campaign escrow hold.")}</p>
+                    <h3 className="text-lg font-bold tracking-tight text-foreground">
+                      {isPerformance ? t("Budget Pool & Payout Rate") : t("Budget & Escrow Allocation")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {isPerformance
+                        ? t("Fund a shared pool. Creators earn from it based on the views their clips generate.")
+                        : t("Specify funding committed to this campaign escrow hold.")}
+                    </p>
                   </div>
 
                   <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="p-2 rounded-xl bg-primary/10 text-primary">
-                        <Lock size={15} />
+                        {isPerformance ? <Zap size={15} /> : <Lock size={15} />}
                       </span>
                       <div>
-                        <h4 className="text-xs font-bold text-foreground">{t("Secure Stripe Escrow Holding")}</h4>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">{t("Budget is safely locked upon publishing and only routed to the creator's payout balance after content draft approval.")}</p>
+                        <h4 className="text-xs font-bold text-foreground">
+                          {isPerformance ? t("Performance budget pool") : t("Secure Stripe Escrow Holding")}
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
+                          {isPerformance
+                            ? t("The pool is funded on publish. Earnings accrue as views come in and are paid out automatically after the holdback window.")
+                            : t("Budget is safely locked upon publishing and only routed to the creator's payout balance after content draft approval.")}
+                        </p>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Total Campaign Escrow Budget ($)")}</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                      {isPerformance ? t("Total Budget Pool ($)") : t("Total Campaign Escrow Budget ($)")}
+                    </label>
                     <div className="relative rounded-xl shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <span className="text-muted-foreground font-bold text-sm">$</span>
@@ -618,10 +705,98 @@ export default function NewCampaignWizard() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
-                    <Info size={14} className="shrink-0 text-primary" />
-                    <span>{t("Based on targeted niches, matching micro-creators generally expect $1,200 - $3,500.")}</span>
-                  </div>
+                  {isPerformance ? (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Payout rate — CPM ($ per 1,000 views)")}</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground font-bold text-sm">$</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              value={cpmRate}
+                              onChange={(e) => setCpmRate(Number(e.target.value))}
+                              className="w-full pl-8 pr-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Max payout per creator ($, 0 = uncapped)")}</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground font-bold text-sm">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={maxPayoutPerCreator}
+                              onChange={(e) => setMaxPayoutPerCreator(Number(e.target.value))}
+                              className="w-full pl-8 pr-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("View holdback (hours)")}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={viewHoldbackHours}
+                            onChange={(e) => setViewHoldbackHours(Number(e.target.value))}
+                            className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Eligible platforms")}</label>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {["tiktok", "instagram", "youtube"].map((p) => {
+                              const active = platforms.includes(p);
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => togglePlatform(p)}
+                                  className={`text-xs px-3.5 py-2 rounded-full font-semibold capitalize transition-all border ${
+                                    active
+                                      ? "bg-primary text-white border-primary shadow-sm"
+                                      : "bg-secondary/40 text-muted-foreground border-transparent hover:bg-secondary/70 hover:text-foreground"
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Content rules / asset kit")}</label>
+                        <textarea
+                          rows={3}
+                          placeholder={t("e.g. Hook in first 2s, tag @brand, no competing products, vertical only. Link your footage / asset folder.")}
+                          value={contentRules}
+                          onChange={(e) => setContentRules(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                        />
+                      </div>
+
+                      <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
+                        <Eye size={14} className="shrink-0 text-primary" />
+                        <span>
+                          {t("Est. reach:")}{" "}
+                          <span className="font-bold text-foreground">
+                            {cpmRate > 0 ? Math.round((budgetTotal / cpmRate) * 1000).toLocaleString() : "—"}
+                          </span>{" "}
+                          {t("paid views before the pool is exhausted.")}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
+                      <Info size={14} className="shrink-0 text-primary" />
+                      <span>{t("Based on targeted niches, matching micro-creators generally expect $1,200 - $3,500.")}</span>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
@@ -817,7 +992,8 @@ export default function NewCampaignWizard() {
                   onClick={handlePublishClick}
                   className="rounded-full px-6 py-5 font-bold text-xs gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 shadow-md h-auto"
                 >
-                  <Lock size={13} /> {t("Publish & Fund Escrow")}
+                  {isPerformance ? <Zap size={13} /> : <Lock size={13} />}{" "}
+                  {isPerformance ? t("Publish & Fund Pool") : t("Publish & Fund Escrow")}
                 </Button>
               )}
             </div>
@@ -1009,7 +1185,7 @@ export default function NewCampaignWizard() {
                   <span className="text-foreground text-right truncate max-w-[200px]">{title || t("New Campaign")}</span>
                 </div>
                 <div className="flex justify-between font-bold text-sm border-t border-border/10 pt-2.5 mt-2.5">
-                  <span>{t("Total Escrow Hold:")}</span>
+                  <span>{isPerformance ? t("Total Budget Pool:") : t("Total Escrow Hold:")}</span>
                   <span className="text-[#34C759]">${budgetTotal.toLocaleString()}</span>
                 </div>
               </div>

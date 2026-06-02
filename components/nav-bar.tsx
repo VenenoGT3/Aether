@@ -102,10 +102,12 @@ export function NavBar() {
                     {t("Campaigns")}
                   </Link>
                   <Link
-                    href="#"
-                    className="px-3 py-1.5 rounded-full transition-all hover:text-foreground"
+                    href="/business/moderation"
+                    className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
+                      pathname === "/business/moderation" ? "bg-secondary text-foreground" : ""
+                    }`}
                   >
-                    {t("Discover")}
+                    {t("Clips")}
                   </Link>
                 </>
               ) : (
@@ -133,6 +135,14 @@ export function NavBar() {
                     }`}
                   >
                     {t("My Campaigns")}
+                  </Link>
+                  <Link
+                    href="/creator/clips"
+                    className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
+                      pathname === "/creator/clips" ? "bg-secondary text-foreground" : ""
+                    }`}
+                  >
+                    {t("Clips & Earnings")}
                   </Link>
                 </>
               )}

@@ -1,0 +1,433 @@
+import { useCallback, useEffect, useState } from "react";
+import { supabase, isMockMode, getMockUser } from "./client";
+import { apiPost } from "@/lib/api/client";
+
+/**
+ * Data layer for the performance-clipping UI (Phase 6).
+ *
+ * Mock mode persists everything in localStorage (matching lib/supabase/metrics.ts);
+ * real mode reads clips/earnings/payouts via Supabase (RLS-scoped) and mutates
+ * through the Phase 2/3 API routes (/api/clips, /api/clips/[id]/approve|reject).
+ *
+ * Status mapping (DB -> creator-facing meaning):
+ *   pending      -> awaiting brand review
+ *   tracking     -> approved & accruing views/earnings
+ *   rejected     -> declined by brand
+ *   disqualified -> blocked (fraud / rule violation)
+ * Earnings status (DB -> UI bucket):
+ *   accrued  -> "In holdback" (pending settle window)
+ *   approved -> "Ready for payout"
+ *   paid     -> "Paid"
+ */
+
+export type ClipStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "tracking"
+  | "disqualified";
+
+export interface CreatorClip {
+  id: string;
+  campaign_id: string;
+  campaignTitle: string;
+  platform: string;
+  post_url: string;
+  status: ClipStatus;
+  current_views: number;
+  estimated_earnings: number;
+  submitted_at: string;
+}
+
+export interface EarningsBreakdown {
+  inHoldback: number; // db 'accrued'
+  readyForPayout: number; // db 'approved'
+  paid: number; // db 'paid'
+}
+
+export interface PayoutRecord {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+  stripe_transfer_id?: string | null;
+}
+
+export interface ModerationClip {
+  id: string;
+  campaign_id: string;
+  campaignTitle: string;
+  creatorName: string;
+  platform: string;
+  post_url: string;
+  status: ClipStatus;
+  current_views: number;
+  submitted_at: string;
+}
+
+const CLIPS_LS_KEY = "aether-mock-clips";
+const EARNINGS_LS_KEY = "aether-mock-clip-earnings";
+const PAYOUTS_LS_KEY = "aether-mock-clip-payouts";
+const DEFAULT_CPM = 2.5;
+
+const SEED_CLIPS: CreatorClip[] = [
+  {
+    id: "clip_seed_1",
+    campaign_id: "camp_perf_1",
+    campaignTitle: "Aether Clip Challenge — Earn Per View",
+    platform: "tiktok",
+    post_url: "https://tiktok.com/@marcusv.tiktok/video/seed1",
+    status: "tracking",
+    current_views: 184000,
+    estimated_earnings: 460,
+    submitted_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+  },
+  {
+    id: "clip_seed_2",
+    campaign_id: "camp_perf_1",
+    campaignTitle: "Aether Clip Challenge — Earn Per View",
+    platform: "instagram",
+    post_url: "https://instagram.com/reel/seed2",
+    status: "tracking",
+    current_views: 52000,
+    estimated_earnings: 130,
+    submitted_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: "clip_seed_3",
+    campaign_id: "camp_perf_1",
+    campaignTitle: "Aether Clip Challenge — Earn Per View",
+    platform: "youtube",
+    post_url: "https://youtube.com/shorts/seed3",
+    status: "pending",
+    current_views: 0,
+    estimated_earnings: 0,
+    submitted_at: new Date(Date.now() - 86400000 * 0.3).toISOString(),
+  },
+];
+
+const SEED_EARNINGS: EarningsBreakdown = {
+  inHoldback: 280,
+  readyForPayout: 310,
+  paid: 920,
+};
+
+const SEED_PAYOUTS: PayoutRecord[] = [
+  {
+    id: "payout_seed_1",
+    amount: 540,
+    status: "paid",
+    created_at: new Date(Date.now() - 86400000 * 9).toISOString(),
+    stripe_transfer_id: "tr_mock_seed1",
+  },
+  {
+    id: "payout_seed_2",
+    amount: 380,
+    status: "paid",
+    created_at: new Date(Date.now() - 86400000 * 23).toISOString(),
+    stripe_transfer_id: "tr_mock_seed2",
+  },
+];
+
+function readLs<T>(key: string, seed: T): T {
+  if (typeof window === "undefined") return seed;
+  const stored = localStorage.getItem(key);
+  if (!stored) {
+    localStorage.setItem(key, JSON.stringify(seed));
+    return seed;
+  }
+  try {
+    return JSON.parse(stored) as T;
+  } catch {
+    return seed;
+  }
+}
+
+function writeLs<T>(key: string, value: T): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(value));
+  window.dispatchEvent(new Event("aether-clips-update"));
+}
+
+function detectPlatform(url: string): string {
+  const lower = url.toLowerCase();
+  if (lower.includes("tiktok.com")) return "tiktok";
+  if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
+  return "instagram";
+}
+
+/** Creator: list + submit clips. */
+export function useCreatorClips() {
+  const [clips, setClips] = useState<CreatorClip[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (isMockMode) {
+      setClips(readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS));
+      setLoading(false);
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const { data } = await supabase
+      .from("clips")
+      .select(
+        "id, campaign_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title, cpm_rate)"
+      )
+      .eq("creator_id", user.id)
+      .order("created_at", { ascending: false });
+
+    type Row = {
+      id: string;
+      campaign_id: string;
+      platform: string;
+      post_url: string;
+      status: ClipStatus;
+      current_views: number | null;
+      created_at: string;
+      campaign: { title?: string; cpm_rate?: number | null } | null;
+    };
+    const rows = (data ?? []) as unknown as Row[];
+    setClips(
+      rows.map((r) => {
+        const views = Number(r.current_views ?? 0);
+        const cpm = Number(r.campaign?.cpm_rate ?? DEFAULT_CPM);
+        return {
+          id: r.id,
+          campaign_id: r.campaign_id,
+          campaignTitle: r.campaign?.title ?? "Campaign",
+          platform: r.platform,
+          post_url: r.post_url,
+          status: r.status,
+          current_views: views,
+          estimated_earnings: Math.round(((views * cpm) / 1000) * 100) / 100,
+          submitted_at: r.created_at,
+        };
+      })
+    );
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
+    load();
+    if (typeof window === "undefined") return;
+    const handler = () => load();
+    window.addEventListener("aether-clips-update", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("aether-clips-update", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, [load]);
+
+  const submitClip = useCallback(
+    async (campaignId: string, postUrl: string, campaignTitle?: string) => {
+      const platform = detectPlatform(postUrl);
+      if (isMockMode) {
+        const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+        if (list.some((c) => c.post_url === postUrl)) {
+          return { ok: false, error: "This clip has already been submitted." };
+        }
+        list.unshift({
+          id: "clip_" + Math.random().toString(36).substring(2, 9),
+          campaign_id: campaignId,
+          campaignTitle: campaignTitle || "Performance Campaign",
+          platform,
+          post_url: postUrl,
+          status: "pending",
+          current_views: 0,
+          estimated_earnings: 0,
+          submitted_at: new Date().toISOString(),
+        });
+        writeLs(CLIPS_LS_KEY, list);
+        return { ok: true };
+      }
+      try {
+        await apiPost("/api/clips", { campaign_id: campaignId, post_url: postUrl });
+        await load();
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Could not submit clip.",
+        };
+      }
+    },
+    [load]
+  );
+
+  return { clips, loading, refresh: load, submitClip };
+}
+
+/** Creator: earnings breakdown + payout history. */
+export function useCreatorEarnings() {
+  const [breakdown, setBreakdown] = useState<EarningsBreakdown>({
+    inHoldback: 0,
+    readyForPayout: 0,
+    paid: 0,
+  });
+  const [payouts, setPayouts] = useState<PayoutRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (isMockMode) {
+      setBreakdown(readLs<EarningsBreakdown>(EARNINGS_LS_KEY, SEED_EARNINGS));
+      setPayouts(readLs<PayoutRecord[]>(PAYOUTS_LS_KEY, SEED_PAYOUTS));
+      setLoading(false);
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const [{ data: earnings }, { data: payoutRows }] = await Promise.all([
+      supabase.from("earnings").select("amount, status").eq("creator_id", user.id),
+      supabase
+        .from("payouts")
+        .select("id, amount, status, created_at, stripe_transfer_id")
+        .eq("creator_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    const next: EarningsBreakdown = { inHoldback: 0, readyForPayout: 0, paid: 0 };
+    ((earnings ?? []) as { amount: number | string; status: string }[]).forEach((e) => {
+      const amt = Number(e.amount) || 0;
+      if (e.status === "accrued") next.inHoldback += amt;
+      else if (e.status === "approved") next.readyForPayout += amt;
+      else if (e.status === "paid") next.paid += amt;
+    });
+    setBreakdown(next);
+    setPayouts((payoutRows ?? []) as PayoutRecord[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
+    load();
+    if (typeof window === "undefined") return;
+    const handler = () => load();
+    window.addEventListener("aether-clips-update", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("aether-clips-update", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, [load]);
+
+  return { breakdown, payouts, loading, refresh: load };
+}
+
+/** Brand: pending clips to moderate + approve/reject. */
+export function useBrandModeration(campaignId?: string) {
+  const [clips, setClips] = useState<ModerationClip[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (isMockMode) {
+      const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+      const mockUser = getMockUser();
+      setClips(
+        list
+          .filter((c) => c.status === "pending")
+          .filter((c) => !campaignId || c.campaign_id === campaignId)
+          .map((c) => ({
+            id: c.id,
+            campaign_id: c.campaign_id,
+            campaignTitle: c.campaignTitle,
+            creatorName: mockUser.full_name || "Creator",
+            platform: c.platform,
+            post_url: c.post_url,
+            status: c.status,
+            current_views: c.current_views,
+            submitted_at: c.submitted_at,
+          }))
+      );
+      setLoading(false);
+      return;
+    }
+    let query = supabase
+      .from("clips")
+      .select(
+        "id, campaign_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title), creator:creator_id(email)"
+      )
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+    if (campaignId) query = query.eq("campaign_id", campaignId);
+
+    const { data } = await query;
+    type Row = {
+      id: string;
+      campaign_id: string;
+      platform: string;
+      post_url: string;
+      status: ClipStatus;
+      current_views: number | null;
+      created_at: string;
+      campaign: { title?: string } | null;
+      creator: { email?: string } | null;
+    };
+    const rows = (data ?? []) as unknown as Row[];
+    setClips(
+      rows.map((r) => ({
+        id: r.id,
+        campaign_id: r.campaign_id,
+        campaignTitle: r.campaign?.title ?? "Campaign",
+        creatorName: r.creator?.email ?? "Creator",
+        platform: r.platform,
+        post_url: r.post_url,
+        status: r.status,
+        current_views: Number(r.current_views ?? 0),
+        submitted_at: r.created_at,
+      }))
+    );
+    setLoading(false);
+  }, [campaignId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
+    load();
+    if (typeof window === "undefined") return;
+    const handler = () => load();
+    window.addEventListener("aether-clips-update", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("aether-clips-update", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, [load]);
+
+  const moderate = useCallback(
+    async (clipId: string, action: "approve" | "reject", reason?: string) => {
+      if (isMockMode) {
+        const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+        const idx = list.findIndex((c) => c.id === clipId);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            status: action === "approve" ? "tracking" : "rejected",
+          };
+          writeLs(CLIPS_LS_KEY, list);
+        }
+        return { ok: true };
+      }
+      try {
+        await apiPost(`/api/clips/${clipId}/${action}`, reason ? { reason } : {});
+        await load();
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Moderation failed.",
+        };
+      }
+    },
+    [load]
+  );
+
+  return { clips, loading, refresh: load, moderate };
+}

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { getMockUser, getMockRole } from "@/lib/supabase/client";
 import { Profile } from "@/types";
-import { LayoutDashboard, Compass, Layers, FileText } from "lucide-react";
+import { LayoutDashboard, Compass, Layers, Film } from "lucide-react";
 
 export function MobileTabBar() {
   const pathname = usePathname();
@@ -44,9 +44,9 @@ export function MobileTabBar() {
       icon: Layers,
     },
     {
-      label: "Contracts",
-      href: "/campaigns",
-      icon: FileText,
+      label: "Clips",
+      href: "/business/moderation",
+      icon: Film,
     },
   ];
 
@@ -67,9 +67,9 @@ export function MobileTabBar() {
       icon: Layers,
     },
     {
-      label: "Contracts",
-      href: "/campaigns",
-      icon: FileText,
+      label: "Clips",
+      href: "/creator/clips",
+      icon: Film,
     },
   ];
 
