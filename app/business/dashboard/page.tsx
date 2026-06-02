@@ -471,7 +471,9 @@ export default function BusinessDashboard() {
   const recruitedCreatorsCount = campaigns
     .filter(c => c.status === "in_progress" || c.status === "completed" || c.status === "released")
     .reduce((acc, c) => acc + (c.influencer ? 1 : 0), 0);
-  const creatorsRecruited = nonDraftCampaigns.length > 0 ? recruitedCreatorsCount + 9 : 0;
+  // The +9 is a demo seed so the mock dashboard looks populated; real mode shows the true count.
+  const creatorsRecruited =
+    nonDraftCampaigns.length > 0 ? recruitedCreatorsCount + (isMockMode ? 9 : 0) : 0;
 
   // Smart ROI calculations
   const totalSpendVal = Object.values(campaignMetrics).reduce((sum, m) => sum + (m.budget_spent || 0), 0);
@@ -584,7 +586,7 @@ export default function BusinessDashboard() {
             <div className="space-y-1">
               <h4 className="text-xs font-bold text-foreground">{t("Payment Wallet Connection Required")}</h4>
               <p className="text-[11px] text-muted-foreground leading-normal">
-                {t("Connect your checking account via Stripe Connect simulator to fund campaign escrows and match with micro-influencers.")}
+                {t("Link your account via Stripe to fund campaign budgets and pay out creators.")}
               </p>
             </div>
           </div>
@@ -625,7 +627,10 @@ export default function BusinessDashboard() {
       </button>
 
       {showLegacy && (
-      <>
+      <div className="rounded-3xl border border-border/15 bg-secondary/[0.04] p-4 sm:p-6 relative z-10">
+      <p className="text-[11px] text-muted-foreground/60 mb-6 max-w-2xl leading-relaxed">
+        {t("These tools support legacy fixed-fee escrow campaigns (apply → approve → escrow → release). They will be retired as the platform moves fully to performance, pay-per-view campaigns.")}
+      </p>
       {/* Segmented Control / Apple Pill Tabs */}
       <div className="flex justify-center sm:justify-start mb-8 relative z-10">
         <div className="bg-secondary/40 border border-border/20 p-1.5 rounded-full flex gap-1 relative max-w-xl w-full sm:w-auto">
@@ -1319,7 +1324,7 @@ export default function BusinessDashboard() {
 
         </AnimatePresence>
       )}
-      </>
+      </div>
       )}
     </div>
   );

@@ -436,7 +436,10 @@ export default function InfluencerDashboard() {
       </button>
 
       {showLegacy && (
-      <>
+      <div className="rounded-3xl border border-border/15 bg-secondary/[0.04] p-4 sm:p-6">
+      <p className="text-[11px] text-muted-foreground/60 mb-6 max-w-2xl leading-relaxed">
+        {t("Your legacy profile analytics and fixed-fee wallet activity. Your performance clipping earnings live in the section above and on the Clips & Earnings page.")}
+      </p>
       {/* Segmented Control / Apple Pill Tabs */}
       <div className="flex justify-center sm:justify-start mb-8">
         <div className="bg-secondary/40 border border-border/20 p-1.5 rounded-full flex gap-1 relative max-w-lg w-full sm:w-auto">
@@ -590,10 +593,11 @@ export default function InfluencerDashboard() {
               animate="visible"
               className="grid grid-cols-1 lg:grid-cols-3 gap-8"
             >
-              {/* Earnings Chart */}
+              {/* Earnings Chart (spans full width in real mode, where the
+                  legacy invites card beside it is hidden) */}
               <motion.div 
                 variants={cardVariants}
-                className="lg:col-span-2 p-8 apple-card flex flex-col justify-between min-h-[380px]"
+                className={`${isMockMode ? "lg:col-span-2" : "lg:col-span-3"} p-8 apple-card flex flex-col justify-between min-h-[380px]`}
               >
                 <div>
                   <h2 className="text-xl font-bold tracking-tight mb-1">{t("Earnings Progress")}</h2>
@@ -644,7 +648,9 @@ export default function InfluencerDashboard() {
                 </div>
               </motion.div>
 
-              {/* Brand Offers */}
+              {/* Campaign Invites (legacy fixed-fee) — mock-only; the
+                  performance model uses open joining, so there are no invites. */}
+              {isMockMode && (
               <motion.div 
                 variants={cardVariants}
                 className="p-8 apple-card flex flex-col justify-between"
@@ -654,12 +660,7 @@ export default function InfluencerDashboard() {
                   <p className="text-xs text-muted-foreground mb-8">{t("Review sponsorship terms and lock deposits.")}</p>
                   
                   <div className="space-y-4">
-                    {!isMockMode && (
-                      <p className="text-xs text-muted-foreground">
-                        {t("No campaign invites. Find open campaigns in Discover.")}
-                      </p>
-                    )}
-                    {(isMockMode ? mockInvites : []).map((invite) => (
+                    {mockInvites.map((invite) => (
                       <motion.div 
                         key={invite.id}
                         whileHover={{ scale: 1.015, x: 2 }}
@@ -697,6 +698,7 @@ export default function InfluencerDashboard() {
                   </Button>
                 </Link>
               </motion.div>
+              )}
             </motion.div>
 
             {/* Social verification (mock OAuth) + mock developer mailbox are
@@ -879,7 +881,7 @@ export default function InfluencerDashboard() {
 
             {/* Performance Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 p-8 apple-card min-h-[380px] flex flex-col justify-between">
+              <div className={`${isMockMode ? "lg:col-span-2" : "lg:col-span-3"} p-8 apple-card min-h-[380px] flex flex-col justify-between`}>
                 <div>
                   <h3 className="text-lg font-bold tracking-tight mb-1">Reach & Engagement Trends</h3>
                   <p className="text-xs text-muted-foreground mb-8">Performance metrics tracked over completed campaigns.</p>
@@ -923,6 +925,9 @@ export default function InfluencerDashboard() {
                 </div>
               </div>
 
+              {/* AI Creator Insights — hardcoded demo recommendations; mock-only
+                  so real mode doesn't show fabricated guidance. */}
+              {isMockMode && (
               <div className="p-8 apple-card flex flex-col justify-between">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#FF9500] tracking-wider bg-[#FF9500]/10 px-2 py-0.5 rounded-full">AI Creator Insights</span>
@@ -948,6 +953,7 @@ export default function InfluencerDashboard() {
                   Last updated: Just now
                 </div>
               </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -962,7 +968,7 @@ export default function InfluencerDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-      </>
+      </div>
       )}
 
       {/* Platform OAuth Mock Popup Modal */}
