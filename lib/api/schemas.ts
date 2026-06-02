@@ -199,8 +199,10 @@ export const ClipSubmitBodySchema = z.object({
   _hp: honeypot,
 });
 
-// Brand moderation (Phase 3)
+// Brand moderation (Phase 3 + quality control)
 export const ApproveClipBodySchema = z.object({
+  // Optional 1–10 quality rating recorded on approval.
+  quality_score: z.number().int().min(1).max(10).optional(),
   _hp: honeypot,
 });
 
@@ -210,6 +212,17 @@ export const RejectClipBodySchema = z.object({
     .trim()
     .max(1000, "Reason is too long (max 1000 characters).")
     .optional(),
+  _hp: honeypot,
+});
+
+/** Request changes: the brand MUST say what to fix so the creator can resubmit. */
+export const RequestChangesClipBodySchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Tell the creator what to change.")
+    .max(1000, "Feedback is too long (max 1000 characters)."),
+  quality_score: z.number().int().min(1).max(10).optional(),
   _hp: honeypot,
 });
 
@@ -235,4 +248,5 @@ export type CampaignFundingBody = z.infer<typeof CampaignFundingBodySchema>;
 export type ClipSubmitBody = z.infer<typeof ClipSubmitBodySchema>;
 export type ApproveClipBody = z.infer<typeof ApproveClipBodySchema>;
 export type RejectClipBody = z.infer<typeof RejectClipBodySchema>;
+export type RequestChangesClipBody = z.infer<typeof RequestChangesClipBodySchema>;
 export type CampaignSearchQuery = z.infer<typeof CampaignSearchQuerySchema>;

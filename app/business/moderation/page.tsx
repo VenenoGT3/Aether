@@ -11,6 +11,8 @@ import {
   Layers,
   TrendingUp,
   ExternalLink,
+  Play,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -43,12 +45,24 @@ function money(n: number | null | undefined): string {
   return `$${Math.round(Number(n ?? 0)).toLocaleString()}`;
 }
 
+/** Extract a YouTube video id so it can be played inline in the review queue. */
+function getYouTubeId(url?: string): string | null {
+  if (!url) return null;
+  const m = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/
+  );
+  return m ? m[1] : null;
+}
+
 export default function BrandModerationPage() {
   const { t } = useTranslation();
   const [campaigns, setCampaigns] = useState<PerfCampaign[]>([]);
   const [allClips, setAllClips] = useState<BrandClip[]>([]);
   const { clips: pending, loading, moderate } = useBrandModeration();
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Per-clip review inputs.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [scores, setScores] = useState<Record<string, number>>({});
 
   const loadCampaigns = useCallback(async () => {
     if (isMockMode) {
@@ -93,12 +107,26 @@ export default function BrandModerationPage() {
     };
   }, [loadCampaigns, loadClips]);
 
-  const handleModerate = async (clipId: string, action: "approve" | "reject") => {
+  const handleModerate = async (
+    clipId: string,
+    action: "approve" | "reject" | "request_changes"
+  ) => {
+    const reason = notes[clipId]?.trim();
+    if (action === "request_changes" && (!reason || reason.length < 3)) {
+      toast.error(t("Add feedback so the creator knows what to change."));
+      return;
+    }
     setBusyId(clipId);
-    const res = await moderate(clipId, action);
+    const res = await moderate(clipId, action, { reason, score: scores[clipId] });
     setBusyId(null);
     if (res.ok) {
-      toast.success(action === "approve" ? t("Clip approved — now tracking") : t("Clip rejected"));
+      toast.success(
+        action === "approve"
+          ? t("Clip approved — now tracking")
+          : action === "request_changes"
+          ? t("Changes requested — sent back to the creator")
+          : t("Clip rejected")
+      );
       loadClips();
     } else {
       toast.error(res.error || t("Action failed"));
@@ -166,17 +194,19 @@ export default function BrandModerationPage() {
               <p className="text-xs mt-1">{t("No clips waiting for review.")}</p>
             </div>
           ) : (
-            pending.map((clip) => (
+            pending.map((clip) => {
+              const ytId = getYouTubeId(clip.post_url);
+              return (
               <motion.div
                 key={clip.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-5 apple-card flex flex-col sm:flex-row sm:items-center gap-4"
+                className="p-5 apple-card space-y-4"
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20 uppercase tracking-wide">
-                      {t("Pending")}
+                      {t("Pending review")}
                     </span>
                     <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
                     {clip.creatorCpm != null && (
@@ -197,35 +227,98 @@ export default function BrandModerationPage() {
                     )}
                   </div>
                   <p className="text-sm font-semibold truncate">{clip.creatorName} · {clip.campaignTitle}</p>
+                </div>
+
+                {/* Watch the actual content */}
+                {ytId ? (
+                  <div className="rounded-2xl overflow-hidden border border-border/15 bg-black aspect-video">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${ytId}`}
+                      title="Clip preview"
+                      className="w-full h-full"
+                      allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
                   <a
                     href={clip.post_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] text-primary hover:underline truncate flex items-center gap-1 max-w-full"
+                    className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-secondary/25 border border-border/10 hover:bg-secondary/40 transition-colors group"
                   >
-                    <ExternalLink size={10} /> {clip.post_url}
+                    <span className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                      <span className="p-2 rounded-xl bg-primary/10 text-primary"><Play size={14} /></span>
+                      {t("Watch the video")} <span className="capitalize text-muted-foreground">· {clip.platform}</span>
+                    </span>
+                    <ExternalLink size={14} className="text-muted-foreground group-hover:text-foreground" />
                   </a>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    onClick={() => handleModerate(clip.id, "approve")}
-                    disabled={busyId === clip.id}
-                    className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0 h-auto"
-                  >
-                    {busyId === clip.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                    {t("Approve")}
-                  </Button>
-                  <Button
-                    onClick={() => handleModerate(clip.id, "reject")}
-                    disabled={busyId === clip.id}
-                    variant="outline"
-                    className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer border-border hover:bg-destructive/10 hover:text-destructive text-foreground h-auto"
-                  >
-                    <X size={13} /> {t("Reject")}
-                  </Button>
+                )}
+                <a
+                  href={clip.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-muted-foreground hover:text-primary hover:underline truncate block max-w-full"
+                >
+                  {clip.post_url}
+                </a>
+
+                {/* Feedback (required to request changes, optional reason for reject) */}
+                <textarea
+                  rows={2}
+                  placeholder={t("Feedback for the creator — required to request changes, optional when rejecting…")}
+                  value={notes[clip.id] ?? ""}
+                  onChange={(e) => setNotes((n) => ({ ...n, [clip.id]: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-xs rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 transition-all resize-none placeholder:text-muted-foreground/45"
+                />
+
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    {t("Quality score")}
+                    <select
+                      value={scores[clip.id] ?? ""}
+                      onChange={(e) =>
+                        setScores((s) => ({ ...s, [clip.id]: Number(e.target.value) }))
+                      }
+                      className="px-2 py-1 rounded-lg border border-border/30 bg-background text-[11px] font-semibold text-foreground cursor-pointer"
+                    >
+                      <option value="">{t("—")}</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      onClick={() => handleModerate(clip.id, "approve")}
+                      disabled={busyId === clip.id}
+                      className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0 h-auto"
+                    >
+                      {busyId === clip.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      {t("Approve")}
+                    </Button>
+                    <Button
+                      onClick={() => handleModerate(clip.id, "request_changes")}
+                      disabled={busyId === clip.id}
+                      variant="outline"
+                      className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer border-border hover:bg-[#FF9500]/10 hover:text-[#FF9500] text-foreground h-auto"
+                    >
+                      <MessageSquare size={13} /> {t("Request changes")}
+                    </Button>
+                    <Button
+                      onClick={() => handleModerate(clip.id, "reject")}
+                      disabled={busyId === clip.id}
+                      variant="outline"
+                      className="rounded-full px-4 py-4 text-xs font-bold gap-1.5 cursor-pointer border-border hover:bg-destructive/10 hover:text-destructive text-foreground h-auto"
+                    >
+                      <X size={13} /> {t("Reject")}
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
-            ))
+              );
+            })
           )}
         </div>
 

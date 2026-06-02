@@ -11,14 +11,18 @@ export type ClipModerationResult =
   | { ok: true; clip: ModeratedClip }
   | { ok: false; error: string; status: number };
 
-type ModerationAction = "approve" | "reject";
+type ModerationAction = "approve" | "reject" | "request_changes";
 
 /**
- * Approving makes the clip eligible for the view-sync worker, which only
- * processes clips in 'tracking' (see record_clip_earning). So approval
- * transitions pending/rejected -> 'tracking'. ('approved' stays a reserved
- * status; collapsing it into 'tracking' keeps a single "eligible to earn"
- * source of truth.)
+ * Quality control: a brand decision moves both the operational `status` and the
+ * `quality_status` together, preserving the invariant tracking <=> approved:
+ *   approve         -> status=tracking,  quality_status=approved   (earns)
+ *   reject          -> status=rejected,  quality_status=rejected   (terminal)
+ *   request_changes -> status=pending,   quality_status=changes_requested
+ *                      (leaves the brand queue; creator resubmits an improved clip)
+ *
+ * The worker only pays 'tracking' clips, and record_clip_earning also guards on
+ * quality_status='approved', so only quality-approved clips ever earn.
  */
 const APPROVABLE_FROM = ["pending", "rejected"];
 const REJECTABLE_FROM = ["pending", "approved", "tracking"];
@@ -29,7 +33,8 @@ async function moderateClip(
   clipId: string,
   brandUserId: string,
   action: ModerationAction,
-  note?: string
+  note?: string,
+  qualityScore?: number
 ): Promise<ClipModerationResult> {
   const supabase = await createClient();
 
@@ -91,26 +96,32 @@ async function moderateClip(
     };
   }
 
-  // State-transition guard.
+  // State-transition guard + status/quality_status mapping per action.
   let nextStatus: string;
+  let nextQuality: string;
   if (action === "approve") {
     if (!APPROVABLE_FROM.includes(clip.status)) {
-      return {
-        ok: false,
-        error: `Cannot approve a clip in '${clip.status}' state.`,
-        status: 409,
-      };
+      return { ok: false, error: `Cannot approve a clip in '${clip.status}' state.`, status: 409 };
     }
     nextStatus = "tracking";
-  } else {
-    if (!REJECTABLE_FROM.includes(clip.status)) {
+    nextQuality = "approved";
+  } else if (action === "request_changes") {
+    // Only a not-yet-tracking clip can be sent back for changes.
+    if (clip.status !== "pending") {
       return {
         ok: false,
-        error: `Cannot reject a clip in '${clip.status}' state.`,
+        error: `Cannot request changes on a clip in '${clip.status}' state.`,
         status: 409,
       };
     }
+    nextStatus = "pending"; // stays out of tracking; creator resubmits
+    nextQuality = "changes_requested";
+  } else {
+    if (!REJECTABLE_FROM.includes(clip.status)) {
+      return { ok: false, error: `Cannot reject a clip in '${clip.status}' state.`, status: 409 };
+    }
     nextStatus = "rejected";
+    nextQuality = "rejected";
   }
 
   const nowIso = new Date().toISOString();
@@ -120,11 +131,16 @@ async function moderateClip(
       status: nextStatus,
       reviewed_at: nowIso,
       reviewed_by: brandUserId,
-      review_note: action === "reject" ? note ?? null : null,
-      // Explicit brand decision → record the timestamp and mark it non-automatic.
+      review_note: action === "approve" ? null : note ?? null,
       approved_at: action === "approve" ? nowIso : null,
       rejected_at: action === "reject" ? nowIso : null,
       auto_approved: false,
+      // Quality control fields.
+      quality_status: nextQuality,
+      quality_reviewed_at: nowIso,
+      quality_reviewed_by: brandUserId,
+      quality_notes: action === "approve" ? null : note ?? null,
+      quality_score: qualityScore ?? null,
     })
     .eq("id", clipId)
     .select("id, status, reviewed_at, reviewed_by")
@@ -144,9 +160,10 @@ async function moderateClip(
 /** Approve a clip → 'tracking' (eligible for the view-sync worker). */
 export function approveClip(
   clipId: string,
-  brandUserId: string
+  brandUserId: string,
+  qualityScore?: number
 ): Promise<ClipModerationResult> {
-  return moderateClip(clipId, brandUserId, "approve");
+  return moderateClip(clipId, brandUserId, "approve", undefined, qualityScore);
 }
 
 /** Reject a clip → 'rejected' (no longer accrues earnings). */
@@ -156,4 +173,14 @@ export function rejectClip(
   reason?: string
 ): Promise<ClipModerationResult> {
   return moderateClip(clipId, brandUserId, "reject", reason);
+}
+
+/** Request changes → 'changes_requested' (creator resubmits an improved clip). */
+export function requestChangesClip(
+  clipId: string,
+  brandUserId: string,
+  reason: string,
+  qualityScore?: number
+): Promise<ClipModerationResult> {
+  return moderateClip(clipId, brandUserId, "request_changes", reason, qualityScore);
 }

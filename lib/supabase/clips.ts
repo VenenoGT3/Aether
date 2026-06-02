@@ -40,6 +40,13 @@ export type ClipStatus =
   | "tracking"
   | "disqualified";
 
+/** Brand quality-review decision (sits on top of the operational status). */
+export type QualityStatus =
+  | "pending_review"
+  | "approved"
+  | "changes_requested"
+  | "rejected";
+
 export interface CreatorClip {
   id: string;
   campaign_id: string;
@@ -56,6 +63,10 @@ export interface CreatorClip {
   approval_deadline?: string | null;
   /** Reached tracking without an explicit brand review (trust or deadline lapse). */
   auto_approved?: boolean;
+  /** Brand quality-review decision + feedback. */
+  quality_status?: QualityStatus;
+  quality_notes?: string | null;
+  quality_score?: number | null;
 }
 
 export interface EarningsBreakdown {
@@ -124,14 +135,24 @@ function mockClipsWithApproval(): CreatorClip[] {
       addBusinessDays(new Date(c.submitted_at), APPROVAL_WINDOW_BUSINESS_DAYS).toISOString();
     let status = c.status;
     let auto = c.auto_approved ?? false;
-    if (status === "pending" && new Date(deadline).getTime() <= now) {
+    let quality: QualityStatus =
+      c.quality_status ??
+      (status === "tracking" ? "approved" : status === "rejected" ? "rejected" : "pending_review");
+    // Only never-reviewed clips auto-approve on deadline (not changes_requested).
+    if (status === "pending" && quality === "pending_review" && new Date(deadline).getTime() <= now) {
       status = "tracking";
       auto = true;
+      quality = "approved";
     }
-    if (c.approval_deadline !== deadline || status !== c.status || auto !== c.auto_approved) {
+    if (
+      c.approval_deadline !== deadline ||
+      status !== c.status ||
+      auto !== c.auto_approved ||
+      quality !== c.quality_status
+    ) {
       changed = true;
     }
-    return { ...c, approval_deadline: deadline, status, auto_approved: auto };
+    return { ...c, approval_deadline: deadline, status, auto_approved: auto, quality_status: quality };
   });
   if (changed && typeof window !== "undefined") {
     localStorage.setItem(CLIPS_LS_KEY, JSON.stringify(next));
@@ -346,7 +367,7 @@ export function useCreatorClips() {
     const { data } = await supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, campaign:campaign_id(title, cpm_rate), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, campaign:campaign_id(title, cpm_rate), participation:participation_id(creator_cpm_rate)"
       )
       .eq("creator_id", user.id)
       .order("created_at", { ascending: false });
@@ -362,6 +383,9 @@ export function useCreatorClips() {
       submitted_at: string | null;
       approval_deadline: string | null;
       auto_approved: boolean | null;
+      quality_status: QualityStatus | null;
+      quality_notes: string | null;
+      quality_score: number | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
       participation: { creator_cpm_rate?: number | null } | null;
     };
@@ -386,6 +410,9 @@ export function useCreatorClips() {
           submitted_at: r.submitted_at ?? r.created_at,
           approval_deadline: r.approval_deadline,
           auto_approved: r.auto_approved ?? false,
+          quality_status: r.quality_status ?? "pending_review",
+          quality_notes: r.quality_notes,
+          quality_score: r.quality_score,
         };
       })
     );
@@ -461,6 +488,8 @@ export function useCreatorClips() {
             APPROVAL_WINDOW_BUSINESS_DAYS
           ).toISOString(),
           auto_approved: trusted,
+          quality_status: trusted ? "approved" : "pending_review",
+          quality_notes: null,
         });
         writeLs(CLIPS_LS_KEY, list);
         return { ok: true };
@@ -598,7 +627,8 @@ export function useBrandModeration(campaignId?: string) {
       const mockUser = getMockUser();
       setClips(
         list
-          .filter((c) => c.status === "pending")
+          // Awaiting first review only — changes_requested clips wait on the creator.
+          .filter((c) => c.status === "pending" && (c.quality_status ?? "pending_review") === "pending_review")
           .filter((c) => !campaignId || c.campaign_id === campaignId)
           .map((c) => ({
             id: c.id,
@@ -623,6 +653,7 @@ export function useBrandModeration(campaignId?: string) {
         "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
       )
       .eq("status", "pending")
+      .eq("quality_status", "pending_review")
       .order("created_at", { ascending: false });
     if (campaignId) query = query.eq("campaign_id", campaignId);
 
@@ -696,21 +727,33 @@ export function useBrandModeration(campaignId?: string) {
   }, [load]);
 
   const moderate = useCallback(
-    async (clipId: string, action: "approve" | "reject", reason?: string) => {
+    async (
+      clipId: string,
+      action: "approve" | "reject" | "request_changes",
+      opts?: { reason?: string; score?: number }
+    ) => {
       if (isMockMode) {
         const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
         const idx = list.findIndex((c) => c.id === clipId);
         if (idx !== -1) {
-          list[idx] = {
-            ...list[idx],
-            status: action === "approve" ? "tracking" : "rejected",
-          };
+          if (action === "approve") {
+            list[idx] = { ...list[idx], status: "tracking", quality_status: "approved", quality_notes: null, quality_score: opts?.score ?? null };
+          } else if (action === "reject") {
+            list[idx] = { ...list[idx], status: "rejected", quality_status: "rejected", quality_notes: opts?.reason ?? null };
+          } else {
+            // request_changes: stays pending, flagged back to the creator.
+            list[idx] = { ...list[idx], status: "pending", quality_status: "changes_requested", quality_notes: opts?.reason ?? null, quality_score: opts?.score ?? null };
+          }
           writeLs(CLIPS_LS_KEY, list);
         }
         return { ok: true };
       }
       try {
-        await apiPost(`/api/clips/${clipId}/${action}`, reason ? { reason } : {});
+        const route = action === "request_changes" ? "request-changes" : action;
+        const body: Record<string, unknown> = {};
+        if (opts?.reason) body.reason = opts.reason;
+        if (opts?.score) body.quality_score = opts.score;
+        await apiPost(`/api/clips/${clipId}/${route}`, body);
         await load();
         return { ok: true };
       } catch (err) {

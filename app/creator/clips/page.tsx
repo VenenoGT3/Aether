@@ -246,11 +246,17 @@ export default function CreatorClipsPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style.cls}`}>
-                        {t(style.label)}
-                      </span>
+                      {clip.quality_status === "changes_requested" ? (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20">
+                          {t("Changes requested")}
+                        </span>
+                      ) : (
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style.cls}`}>
+                          {t(style.label)}
+                        </span>
+                      )}
                       <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
-                      {clip.status === "pending" && (
+                      {clip.status === "pending" && clip.quality_status !== "changes_requested" && (
                         <span className="text-[9px] font-bold text-[#FF9500] flex items-center gap-1">
                           <Clock size={9} /> {t(approvalCountdownLabel(clip.approval_deadline))}
                         </span>
@@ -270,6 +276,23 @@ export default function CreatorClipsPage() {
                     >
                       {clip.post_url}
                     </a>
+                    {clip.quality_notes &&
+                      (clip.quality_status === "changes_requested" ||
+                        clip.quality_status === "rejected") && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-[#FF9500]/5 border border-[#FF9500]/15 text-[11px] text-foreground leading-normal">
+                          <span className="font-bold text-[#FF9500]">
+                            {clip.quality_status === "changes_requested"
+                              ? t("Changes requested:")
+                              : t("Rejected:")}
+                          </span>{" "}
+                          {clip.quality_notes}
+                          {clip.quality_status === "changes_requested" && (
+                            <span className="block text-muted-foreground mt-1">
+                              {t("Submit an improved clip below to try again.")}
+                            </span>
+                          )}
+                        </div>
+                      )}
                   </div>
                   <div className="flex gap-6 shrink-0">
                     <div className="text-right">
