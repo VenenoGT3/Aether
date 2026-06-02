@@ -181,6 +181,11 @@ export const CampaignJoinBodySchema = z.object({
   _hp: honeypot,
 });
 
+/** Pool-funding admin actions (reconcile / cancel) take no body fields. */
+export const CampaignFundingBodySchema = z.object({
+  _hp: honeypot,
+});
+
 export const ClipSubmitBodySchema = z.object({
   campaign_id: uuid,
   post_url: socialPostUrl,
@@ -220,6 +225,7 @@ export type AiDiscoverBody = z.infer<typeof AiDiscoverBodySchema>;
 export type CampaignApplyBody = z.infer<typeof CampaignApplyBodySchema>;
 export type PostSubmitBody = z.infer<typeof PostSubmitBodySchema>;
 export type CampaignJoinBody = z.infer<typeof CampaignJoinBodySchema>;
+export type CampaignFundingBody = z.infer<typeof CampaignFundingBodySchema>;
 export type ClipSubmitBody = z.infer<typeof ClipSubmitBodySchema>;
 export type ApproveClipBody = z.infer<typeof ApproveClipBodySchema>;
 export type RejectClipBody = z.infer<typeof RejectClipBodySchema>;

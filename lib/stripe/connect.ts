@@ -170,3 +170,76 @@ export async function releaseEscrowPayment(
     throw error;
   }
 }
+
+/**
+ * Reads the live status of a PaymentIntent (used to reconcile pool funding when
+ * the webhook is missed). Returns null if Stripe can't be reached.
+ */
+export async function retrievePaymentIntentStatus(
+  paymentIntentId: string
+): Promise<{ status: string } | null> {
+  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
+    return { status: "succeeded" };
+  }
+  try {
+    const pi = await stripeServer.paymentIntents.retrieve(paymentIntentId);
+    return { status: pi.status };
+  } catch (error) {
+    console.error("Error retrieving PaymentIntent:", error);
+    return null;
+  }
+}
+
+export interface RefundResult {
+  refunded: boolean;
+  refundId?: string;
+  alreadyRefunded?: boolean;
+  cancelled?: boolean;
+}
+
+/**
+ * Refunds a pool-funding PaymentIntent (cancel-with-refund of a draft campaign).
+ * Idempotent + safe:
+ *  - if the charge is already refunded → no-op (alreadyRefunded).
+ *  - if succeeded → create a refund with a deterministic idempotency key, so a
+ *    retry returns the SAME refund instead of charging again.
+ *  - if not yet captured (requires_*) → cancel the PaymentIntent (nothing to refund).
+ *  - if processing/canceled → no-op.
+ */
+export async function refundPoolPayment(
+  paymentIntentId: string,
+  idempotencyKey: string
+): Promise<RefundResult> {
+  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
+    return { refunded: true, refundId: "re_mock_" + Math.random().toString(36).substring(2, 11) };
+  }
+
+  const pi = await stripeServer.paymentIntents.retrieve(paymentIntentId, {
+    expand: ["latest_charge"],
+  });
+
+  const charge = pi.latest_charge;
+  if (charge && typeof charge !== "string" && charge.refunded) {
+    return { refunded: false, alreadyRefunded: true };
+  }
+
+  if (pi.status === "succeeded") {
+    const refund = await stripeServer.refunds.create(
+      { payment_intent: paymentIntentId },
+      { idempotencyKey }
+    );
+    return { refunded: true, refundId: refund.id };
+  }
+
+  if (
+    pi.status === "requires_payment_method" ||
+    pi.status === "requires_confirmation" ||
+    pi.status === "requires_action"
+  ) {
+    await stripeServer.paymentIntents.cancel(paymentIntentId);
+    return { refunded: false, cancelled: true };
+  }
+
+  // "processing" (cannot refund yet) or "canceled" (nothing to do).
+  return { refunded: false };
+}
