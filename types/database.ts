@@ -94,6 +94,16 @@ export const CampaignSchema = z.object({
   timeline: z.record(z.string(), z.any()).default({}),
   status: CampaignStatusSchema.default("draft"),
   embedding: z.array(z.number()).length(1536).nullable().optional(),
+  // Performance-clipping fields (Phase 1, additive — fixed campaigns leave these unset)
+  campaign_type: z.enum(["fixed", "performance"]).default("fixed").optional(),
+  cpm_rate: z.number().nonnegative().nullable().optional(),
+  budget_pool: z.number().nonnegative().nullable().optional(),
+  budget_reserved: z.number().nonnegative().default(0).optional(),
+  budget_paid: z.number().nonnegative().default(0).optional(),
+  max_payout_per_creator: z.number().nonnegative().nullable().optional(),
+  min_payout_threshold: z.number().nonnegative().default(10).optional(),
+  platforms: z.array(z.string()).default([]).optional(),
+  view_holdback_hours: z.number().int().nonnegative().default(48).optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });
@@ -105,9 +115,15 @@ export const ParticipationSchema = z.object({
   campaign_id: z.string().uuid(),
   influencer_id: z.string().uuid(),
   status: ParticipationStatusSchema.default("applied"),
-  proposed_payout: z.number().positive(),
+  // Nullable for performance/open-join campaigns (no negotiated fee).
+  proposed_payout: z.number().nonnegative().nullable().default(0).optional(),
   actual_payout: z.number().nonnegative().default(0.00),
   performance_data: z.record(z.string(), z.any()).default({}),
+  // Performance-clipping rollups (Phase 1, additive)
+  total_views: z.number().int().nonnegative().default(0).optional(),
+  total_earned: z.number().nonnegative().default(0).optional(),
+  total_paid: z.number().nonnegative().default(0).optional(),
+  joined_at: z.union([z.date(), z.string()]).optional(),
   applied_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });
@@ -180,3 +196,94 @@ export const RatingSchema = z.object({
   created_at: z.union([z.date(), z.string()]),
 });
 export type DbRating = z.infer<typeof RatingSchema>;
+
+
+// ---------------------------------------------------------------------------
+// Performance-Clipping schemas (Phase 1)
+// ---------------------------------------------------------------------------
+
+export const ClipStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+  "tracking",
+  "disqualified",
+]);
+export type ClipStatus = z.infer<typeof ClipStatusSchema>;
+
+export const EarningStatusSchema = z.enum([
+  "accrued",
+  "approved",
+  "paid",
+  "reversed",
+]);
+export type EarningStatus = z.infer<typeof EarningStatusSchema>;
+
+export const PayoutStatusSchema = z.enum([
+  "pending",
+  "processing",
+  "paid",
+  "failed",
+]);
+export type PayoutStatus = z.infer<typeof PayoutStatusSchema>;
+
+// Clips Schema — individual content submissions (many per participation)
+export const ClipSchema = z.object({
+  id: z.string().uuid(),
+  campaign_id: z.string().uuid(),
+  participation_id: z.string().uuid(),
+  creator_id: z.string().uuid(),
+  platform: z.string(),
+  post_url: z.string().url("Must be a valid URL"),
+  external_post_id: z.string().nullable().optional(),
+  ayrshare_ref: z.record(z.string(), z.any()).default({}),
+  status: ClipStatusSchema.default("pending"),
+  counted_views: z.number().int().nonnegative().default(0),
+  current_views: z.number().int().nonnegative().default(0),
+  last_synced_at: z.union([z.date(), z.string()]).nullable().optional(),
+  created_at: z.union([z.date(), z.string()]),
+  updated_at: z.union([z.date(), z.string()]),
+});
+export type DbClip = z.infer<typeof ClipSchema>;
+
+// View Snapshots Schema — append-only time series for deltas + fraud detection
+export const ViewSnapshotSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  clip_id: z.string().uuid(),
+  views: z.number().int().nonnegative().default(0),
+  likes: z.number().int().nonnegative().default(0),
+  comments: z.number().int().nonnegative().default(0),
+  shares: z.number().int().nonnegative().default(0),
+  source: z.string().default("ayrshare"),
+  captured_at: z.union([z.date(), z.string()]),
+});
+export type DbViewSnapshot = z.infer<typeof ViewSnapshotSchema>;
+
+// Earnings Schema — immutable record of each views -> money accrual
+export const EarningSchema = z.object({
+  id: z.string().uuid(),
+  clip_id: z.string().uuid(),
+  participation_id: z.string().uuid(),
+  campaign_id: z.string().uuid(),
+  creator_id: z.string().uuid(),
+  billable_views: z.number().int().nonnegative(),
+  effective_cpm: z.number().nonnegative(),
+  amount: z.number().nonnegative(),
+  status: EarningStatusSchema.default("accrued"),
+  payout_id: z.string().uuid().nullable().optional(),
+  accrued_at: z.union([z.date(), z.string()]),
+});
+export type DbEarning = z.infer<typeof EarningSchema>;
+
+// Payouts Schema — batched transfers to a creator
+export const PayoutSchema = z.object({
+  id: z.string().uuid(),
+  creator_id: z.string().uuid(),
+  amount: z.number().positive(),
+  status: PayoutStatusSchema.default("pending"),
+  stripe_transfer_id: z.string().nullable().optional(),
+  idempotency_key: z.string(),
+  created_at: z.union([z.date(), z.string()]),
+  updated_at: z.union([z.date(), z.string()]),
+});
+export type DbPayout = z.infer<typeof PayoutSchema>;

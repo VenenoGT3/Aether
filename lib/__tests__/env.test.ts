@@ -93,7 +93,7 @@ describe("lib/env", () => {
 
   it("validateProductionSafety allows mock mode for local next build", async () => {
     delete process.env.VERCEL_ENV;
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string>).NODE_ENV = "production";
     process.env.AETHER_MOCK_MODE = "true";
     const { validateProductionSafety } = await loadEnv();
     expect(() => validateProductionSafety()).not.toThrow();
