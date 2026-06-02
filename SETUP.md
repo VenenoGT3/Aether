@@ -101,6 +101,8 @@ npm run payouts:once     # one payout batch (no Redis)
 
 > The worker reads `process.env` directly and uses the Supabase **service role** (bypasses RLS). Deploy it somewhere it can hold that key securely. It must **not** run in the Vercel app runtime.
 
+**Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), and **repeated views-provider errors** in one window (`views.provider.repeated_errors`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
+
 ---
 
 ## Environment variable reference
@@ -123,6 +125,8 @@ npm run payouts:once     # one payout batch (no Redis)
 | `VIEW_SYNC_INTERVAL_MINUTES` | worker | View-sync cadence (default 10) |
 | `VIEW_SYNC_BATCH_SIZE` | worker | Max clips per sync (default 200) |
 | `WORKER_LOG_DEBUG` | worker | `true` enables verbose per-clip/per-job debug logs (default off) |
+| `WORKER_HEARTBEAT_MINUTES` | worker | Heartbeat cadence — queue depths + counters (default 5) |
+| `WORKER_PROVIDER_ERROR_ALERT_THRESHOLD` | worker | Provider errors per heartbeat window before an `[ALERT]` (default 5) |
 | `VIEW_HOLDBACK_HOURS` | worker | Fallback holdback (per-campaign value overrides; default 48) |
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |

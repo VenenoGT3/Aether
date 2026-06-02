@@ -89,3 +89,18 @@ export function getPayoutBatchIntervalMinutes(): number {
   const raw = Number(process.env.PAYOUT_BATCH_INTERVAL);
   return Number.isFinite(raw) && raw > 0 ? raw : 360;
 }
+
+/** How often the worker emits a heartbeat (queue depths + counters), minutes. */
+export function getHeartbeatIntervalMinutes(): number {
+  const raw = Number(process.env.WORKER_HEARTBEAT_MINUTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5;
+}
+
+/**
+ * Views-provider errors within a single heartbeat window at or above this count
+ * fire a [ALERT] (signals the provider — Ayrshare/simulated — is degraded).
+ */
+export function getProviderErrorAlertThreshold(): number {
+  const raw = Number(process.env.WORKER_PROVIDER_ERROR_ALERT_THRESHOLD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5;
+}

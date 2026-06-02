@@ -12,16 +12,26 @@ import {
   runEarningsCalc,
 } from "./processors";
 import { runPayoutBatch } from "./payout";
+import { getServiceClient } from "./supabase";
 import { QUEUE_NAMES, JOB_NAMES } from "./types";
 import type { SyncClipJob, CalcEarningJob } from "./types";
 import {
+  getHeartbeatIntervalMinutes,
   getPayoutBatchIntervalMinutes,
+  getProviderErrorAlertThreshold,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
   isMockMode,
   shouldSimulateViews,
 } from "./env";
 import { log, errMessage } from "./logger";
+import {
+  recordCompleted,
+  recordExhausted,
+  recordFailed,
+  takeWindow,
+  totals,
+} from "./metrics";
 
 /**
  * Worker entrypoint (standalone Node process, run with `npm run worker`).
@@ -156,22 +166,126 @@ function attachListeners(worker: Worker, queue: string): void {
   worker.on("failed", (job, err) => {
     const attempt = job?.attemptsMade ?? 0;
     const max = (job?.opts?.attempts as number | undefined) ?? 1;
+    const exhausted = attempt >= max;
+    recordFailed();
     log.warn("job.failed", {
       queue,
       jobId: job?.id,
       name: job?.name,
       attempt,
       maxAttempts: max,
-      willRetry: attempt < max,
+      willRetry: !exhausted,
       error: err.message,
     });
+    // Exhausted all retries → critical. This is the "failed more than X times"
+    // alert; nothing else will retry it automatically.
+    if (exhausted) {
+      recordExhausted();
+      log.alert("job.exhausted", {
+        queue,
+        jobId: job?.id,
+        name: job?.name,
+        attempts: attempt,
+        clipId: (job?.data as { clipId?: string } | undefined)?.clipId,
+        error: err.message,
+      });
+    }
   });
   worker.on("completed", (job) => {
+    recordCompleted();
     log.debug("job.completed", { queue, jobId: job.id, name: job.name });
   });
   worker.on("error", (err) => {
     log.error("worker.error", { queue, error: errMessage(err) });
   });
+}
+
+interface PoolRow {
+  id: string;
+  title: string;
+  budget_pool: number | null;
+  budget_reserved: number | null;
+  budget_paid: number | null;
+}
+
+// Campaigns we've already alerted on, so we don't re-page every heartbeat.
+// Cleared per-campaign when its pool is topped back up.
+const exhaustedPoolAlerts = new Set<string>();
+
+/** Scan active performance campaigns for an exhausted budget pool and alert once. */
+async function scanPoolExhaustion(): Promise<void> {
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("id, title, budget_pool, budget_reserved, budget_paid")
+    .eq("campaign_type", "performance")
+    .in("status", ["open", "in_progress"]);
+  if (error) {
+    log.warn("heartbeat.pool_scan_error", { error: error.message });
+    return;
+  }
+  for (const c of (data ?? []) as PoolRow[]) {
+    const remaining =
+      Number(c.budget_pool || 0) - Number(c.budget_reserved || 0) - Number(c.budget_paid || 0);
+    if (remaining <= 0) {
+      if (!exhaustedPoolAlerts.has(c.id)) {
+        exhaustedPoolAlerts.add(c.id);
+        log.alert("campaign.pool_exhausted", {
+          campaignId: c.id,
+          title: c.title,
+          pool: c.budget_pool,
+          reserved: c.budget_reserved,
+          paid: c.budget_paid,
+        });
+      }
+    } else {
+      exhaustedPoolAlerts.delete(c.id); // topped up → re-arm the alert
+    }
+  }
+}
+
+/**
+ * Periodic "worker is alive" beat: queue depths + the counters accrued since the
+ * last beat, plus the threshold-based alerts (repeated provider errors, pool
+ * exhaustion). Failures here are logged, never thrown — the beat must not die.
+ */
+async function emitHeartbeat(): Promise<void> {
+  try {
+    const [vs, ec, pb] = await Promise.all([
+      viewSyncQueue.getJobCounts(),
+      earningsCalcQueue.getJobCounts(),
+      payoutBatchQueue.getJobCounts(),
+    ]);
+    const w = takeWindow();
+    const t = totals();
+    const depth = (c: Record<string, number>) =>
+      `${c.waiting ?? 0}w/${c.active ?? 0}a/${c.delayed ?? 0}d/${c.failed ?? 0}f`;
+    log.info("heartbeat", {
+      uptimeSec: t.uptimeSec,
+      // Activity since the previous heartbeat.
+      completed: w.jobsCompleted,
+      failed: w.jobsFailed,
+      exhausted: w.jobsExhausted,
+      providerErrors: w.providerErrors,
+      // Queue depths (waiting/active/delayed/failed).
+      viewSync: depth(vs),
+      earnings: depth(ec),
+      payout: depth(pb),
+    });
+
+    const provThreshold = getProviderErrorAlertThreshold();
+    if (w.providerErrors >= provThreshold) {
+      log.alert("views.provider.repeated_errors", {
+        errors: w.providerErrors,
+        threshold: provThreshold,
+        windowMin: getHeartbeatIntervalMinutes(),
+      });
+    }
+
+    await scanPoolExhaustion();
+  } catch (err) {
+    log.error("heartbeat.error", { error: errMessage(err) });
+  }
 }
 
 async function main(): Promise<void> {
@@ -191,10 +305,16 @@ async function main(): Promise<void> {
   workers.forEach(([w, q]) => attachListeners(w, q));
 
   await startSchedulers();
-  log.info("ready");
+
+  // Heartbeat: one shortly after startup, then on a fixed interval.
+  const heartbeatMs = getHeartbeatIntervalMinutes() * 60_000;
+  void emitHeartbeat();
+  const heartbeatTimer = setInterval(() => void emitHeartbeat(), heartbeatMs);
+  log.info("ready", { heartbeatEveryMin: getHeartbeatIntervalMinutes() });
 
   const shutdown = async () => {
     log.info("shutdown.begin");
+    clearInterval(heartbeatTimer);
     await Promise.all(workers.map(([w]) => w.close()));
     await closeQueues();
     log.info("shutdown.done");

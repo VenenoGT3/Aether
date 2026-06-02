@@ -3,6 +3,7 @@ import { getServiceClient } from "./supabase";
 import { transferToCreator } from "./stripe";
 import { getMinPayoutThreshold, getViewHoldbackHours } from "./env";
 import { log, errMessage } from "./logger";
+import { recordPayoutFailures } from "./metrics";
 import {
   selectPayableCreators,
   type EarningAmountRow,
@@ -147,6 +148,18 @@ export async function runPayoutBatch(
         error: errMessage(err),
       });
     }
+  }
+
+  // Any failed payout in a batch is alert-worthy (creator went unpaid: no Stripe
+  // account, transfer error, or settlement failure). The claim was released so
+  // the next batch retries, but someone should look.
+  if (summary.payoutsFailed > 0) {
+    recordPayoutFailures(summary.payoutsFailed);
+    log.alert("payout.batch.failures", {
+      payoutsFailed: summary.payoutsFailed,
+      payoutsPaid: summary.payoutsPaid,
+      creatorsConsidered: summary.creatorsConsidered,
+    });
   }
 
   log.info("payout.batch.done", { ...summary, totalPaid: summary.totalPaid.toFixed(2) });

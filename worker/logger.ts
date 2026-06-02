@@ -2,11 +2,15 @@
  * Tiny structured, leveled logger for the worker. No dependencies.
  *
  * Output: `<iso> [worker][level] event key=val key=val`
- * Levels: debug (only when WORKER_LOG_DEBUG=true) / info / warn / error.
- * Keeps logs greppable and context-rich without pulling in a logging library.
+ * Levels: debug (only when WORKER_LOG_DEBUG=true) / info / warn / error / alert.
+ *
+ * `alert` is the highest severity: it renders as `[worker][ALERT]` so external
+ * monitoring (Datadog, Grafana, a `grep [ALERT]` cron, etc.) can pick critical
+ * conditions — exhausted jobs, payout failures, pool exhaustion, provider
+ * outages — straight out of stdout without any metrics backend.
  */
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error" | "alert";
 type LogContext = Record<string, unknown>;
 
 const DEBUG = (process.env.WORKER_LOG_DEBUG ?? "").trim().toLowerCase() === "true";
@@ -21,7 +25,8 @@ function format(level: LogLevel, event: string, ctx?: LogContext): string {
     }
     if (parts.length) suffix = " " + parts.join(" ");
   }
-  return `${new Date().toISOString()} [worker][${level}] ${event}${suffix}`;
+  const tag = level === "alert" ? "ALERT" : level;
+  return `${new Date().toISOString()} [worker][${tag}] ${event}${suffix}`;
 }
 
 export const log = {
@@ -36,6 +41,10 @@ export const log = {
   },
   error(event: string, ctx?: LogContext): void {
     console.error(format("error", event, ctx));
+  },
+  /** Critical condition that should page/notify someone. Tagged [ALERT]. */
+  alert(event: string, ctx?: LogContext): void {
+    console.error(format("alert", event, ctx));
   },
 };
 

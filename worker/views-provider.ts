@@ -5,6 +5,7 @@ import {
   isMockMode,
 } from "./env";
 import { log, errMessage } from "./logger";
+import { recordProviderError } from "./metrics";
 import type { ClipRow, ViewData } from "./types";
 
 /**
@@ -118,11 +119,20 @@ class AyrshareViewsProvider implements ViewsProvider {
             }),
           })
         );
-        if (!retry.ok) return lastKnown;
+        if (!retry.ok) {
+          recordProviderError();
+          log.warn("views.ayrshare.http_error", {
+            clipId: clip.id,
+            status: retry.status,
+            note: "retry failed; keeping last-known views",
+          });
+          return lastKnown;
+        }
         return parseAyrshare(await retry.json(), clip.platform);
       }
 
       if (!res.ok) {
+        recordProviderError();
         log.warn("views.ayrshare.http_error", {
           clipId: clip.id,
           status: res.status,
@@ -133,6 +143,7 @@ class AyrshareViewsProvider implements ViewsProvider {
 
       return parseAyrshare(await res.json(), clip.platform);
     } catch (err) {
+      recordProviderError();
       log.error("views.ayrshare.fetch_error", {
         clipId: clip.id,
         note: "keeping last-known views",
