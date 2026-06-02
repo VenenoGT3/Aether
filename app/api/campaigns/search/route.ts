@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("campaigns")
     .select(
-      "id, title, description, budget_total, target_niches, status, business_id, created_at",
+      "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, cpm_rate, budget_pool",
       { count: "exact" }
     )
     .eq("status", "open")

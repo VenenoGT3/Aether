@@ -89,6 +89,11 @@ export const AiDiscoverBodySchema = z.object({
         payout_speed: z.string().trim().max(50).optional(),
         days_left: z.number().int().optional(),
         image_url: z.string().max(2048).optional(),
+        // Preserve performance-model fields through AI re-ranking (Zod strips
+        // unknown keys, so they must be declared to survive the round-trip).
+        campaign_type: z.enum(["fixed", "performance"]).optional(),
+        cpm_rate: z.number().nonnegative().nullable().optional(),
+        budget_pool: z.number().nonnegative().nullable().optional(),
       })
     )
     .min(1)

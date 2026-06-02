@@ -232,13 +232,17 @@ export default function DiscoverPage() {
           target_niches: c.target_niches || [],
           deliverables: c.deliverables || [],
           timeline: c.timeline || { start_date: "", end_date: "" },
-          payout_speed: "Instant Escrow",
+          // Performance campaigns pay per view; fixed campaigns use escrow.
+          payout_speed:
+            c.campaign_type === "performance" ? "Pay per view (CPM)" : "Instant Escrow",
           days_left: 30, // Mocked days left
           image_url: c.target_niches.includes("Tech") 
             ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80" 
             : c.target_niches.includes("Fashion")
             ? "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80"
-            : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80"
+            : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80",
+          // Drives the Join (performance) vs Apply (fixed) branch on the card.
+          campaign_type: c.campaign_type,
         }));
 
         if (profile) {
