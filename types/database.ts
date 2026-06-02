@@ -110,6 +110,9 @@ export const CampaignSchema = z.object({
   content_rules: z.record(z.string(), z.any()).default({}).optional(),
   cpm_rate: z.number().nonnegative().nullable().optional(),
   budget_pool: z.number().nonnegative().nullable().optional(),
+  // Platform fee model: brand pays budget_pool; creators earn from available_pool.
+  platform_fee_pct: z.number().min(0).max(1).nullable().optional(),
+  available_pool: z.number().nonnegative().nullable().optional(),
   budget_reserved: z.number().nonnegative().default(0).optional(),
   budget_paid: z.number().nonnegative().default(0).optional(),
   max_payout_per_creator: z.number().nonnegative().nullable().optional(),

@@ -12,6 +12,7 @@ import { Loader2, Lock, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getStripePromise } from "@/lib/stripe/browser";
 import { useTranslation } from "@/lib/translations";
+import { feeBreakdown } from "@/lib/campaign-budget";
 
 const appleSpring = { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.8 };
 
@@ -31,6 +32,7 @@ function PoolPaymentInner({
   const elements = useElements();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const split = feeBreakdown(amount);
 
   const handlePay = async () => {
     if (!stripe || !elements) return;
@@ -68,9 +70,17 @@ function PoolPaymentInner({
             {campaignTitle || t("New Campaign")}
           </span>
         </div>
-        <div className="flex justify-between font-bold text-sm border-t border-border/10 pt-2.5 mt-2.5">
-          <span>{t("Total Budget Pool:")}</span>
-          <span className="text-[#34C759]">${amount.toLocaleString()}</span>
+        <div className="flex justify-between font-semibold text-muted-foreground border-t border-border/10 pt-2.5 mt-2.5">
+          <span>{t("Platform fee (10%):")}</span>
+          <span>${split.fee.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between font-semibold text-muted-foreground">
+          <span>{t("Creators can earn:")}</span>
+          <span className="text-[#34C759]">${split.creators.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between font-bold text-sm border-t border-border/10 pt-2.5 mt-1">
+          <span>{t("You pay:")}</span>
+          <span className="text-foreground">${amount.toLocaleString()}</span>
         </div>
       </div>
 

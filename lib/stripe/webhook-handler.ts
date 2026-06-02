@@ -25,25 +25,59 @@ export async function handleStripeWebhookEvent(
         };
       };
 
-      // Performance campaign pool funding: activate the campaign on payment.
+      // Performance campaign pool funding: activate the campaign on payment and
+      // record the platform fee as revenue.
       if (paymentIntent.metadata?.kind === "pool_funding") {
         const campaignId = paymentIntent.metadata?.campaignId;
-        const match = campaignId
-          ? supabase.from("campaigns").update({
-              status: "open",
-              funded_at: new Date().toISOString(),
-            }).eq("id", campaignId)
-          : supabase.from("campaigns").update({
-              status: "open",
-              funded_at: new Date().toISOString(),
-            }).eq("funding_payment_intent_id", paymentIntent.id);
 
-        const { error: campErr } = await match;
+        // Load the campaign to compute the fee (and confirm it belongs to this PI).
+        const campSel = supabase
+          .from("campaigns")
+          .select("id, business_id, budget_pool, platform_fee_pct, available_pool")
+          .limit(1);
+        const { data: camp } = await (campaignId
+          ? campSel.eq("id", campaignId)
+          : campSel.eq("funding_payment_intent_id", paymentIntent.id)
+        ).maybeSingle();
+
+        if (!camp) {
+          console.error(
+            `Pool funding PI ${paymentIntent.id}: no matching campaign to activate.`
+          );
+          break;
+        }
+
+        const { error: campErr } = await supabase
+          .from("campaigns")
+          .update({ status: "open", funded_at: new Date().toISOString() })
+          .eq("id", camp.id);
         if (campErr) {
           console.error(
-            `Error activating campaign for pool funding PI ${paymentIntent.id}:`,
+            `Error activating campaign ${camp.id} for pool funding:`,
             campErr.message
           );
+        }
+
+        // Record platform revenue (idempotent: unique on campaign_id).
+        const pool = Number((camp as { budget_pool?: number | null }).budget_pool ?? 0);
+        const feePct = Number((camp as { platform_fee_pct?: number | null }).platform_fee_pct ?? 0);
+        const fee = Math.round(pool * feePct * 100) / 100;
+        if (fee > 0) {
+          const { error: feeErr } = await supabase
+            .from("platform_transactions")
+            .upsert(
+              {
+                campaign_id: camp.id,
+                business_id: (camp as { business_id: string }).business_id,
+                amount: fee,
+                fee_pct: feePct,
+                type: "platform_fee",
+              },
+              { onConflict: "campaign_id", ignoreDuplicates: true }
+            );
+          if (feeErr) {
+            console.error(`Error recording platform fee for campaign ${camp.id}:`, feeErr.message);
+          }
         }
         break;
       }

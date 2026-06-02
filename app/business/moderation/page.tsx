@@ -26,6 +26,7 @@ interface PerfCampaign {
   title: string;
   status?: string;
   budget_pool?: number | null;
+  available_pool?: number | null;
   budget_reserved?: number | null;
   budget_paid?: number | null;
 }
@@ -61,7 +62,7 @@ export default function BrandModerationPage() {
     }
     const { data } = await supabase
       .from("campaigns")
-      .select("id, title, status, budget_pool, budget_reserved, budget_paid")
+      .select("id, title, status, budget_pool, available_pool, budget_reserved, budget_paid")
       .eq("campaign_type", "performance");
     setCampaigns((data ?? []) as PerfCampaign[]);
   }, []);
@@ -237,7 +238,8 @@ export default function BrandModerationPage() {
             ) : (
               <div className="space-y-5">
                 {campaigns.map((c) => {
-                  const pool = Number(c.budget_pool ?? 0);
+                  // Creator-earnable pool (post platform fee), legacy → full pool.
+                  const pool = Number(c.available_pool ?? c.budget_pool ?? 0);
                   const reserved = Number(c.budget_reserved ?? 0);
                   const paid = Number(c.budget_paid ?? 0);
                   const remaining = Math.max(pool - reserved - paid, 0);

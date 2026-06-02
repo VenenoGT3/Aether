@@ -38,6 +38,7 @@ import {
   CAMPAIGN_CATEGORY_DESCRIPTIONS,
   type CampaignCategory,
 } from "@/lib/campaign-category";
+import { feeBreakdown } from "@/lib/campaign-budget";
 
 // Standard niches list
 const AVAILABLE_NICHES = [
@@ -470,6 +471,9 @@ export default function NewCampaignWizard() {
     }
   };
 
+  // Platform fee split (performance pools): brand pays budgetTotal; creators earn 90%.
+  const poolSplit = feeBreakdown(budgetTotal);
+
   // Matchmaking Calculations
   const recommendedCreatorsCount = Math.max(1, Math.min(25, Math.round(budgetTotal / 250)));
   const matchingCreators = MOCK_CREATORS.filter(c => niches.includes(c.niche));
@@ -886,6 +890,27 @@ export default function NewCampaignWizard() {
 
                   {isPerformance ? (
                     <div className="space-y-6">
+                      {/* Platform fee transparency: what the brand pays vs creators earn. */}
+                      <div className="p-4 rounded-2xl bg-secondary/20 border border-border/10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-3">
+                          {t("Budget split")}
+                        </span>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("You pay")}</span>
+                            <span className="text-sm font-extrabold text-foreground">${budgetTotal.toLocaleString()}</span>
+                          </div>
+                          <div className="border-x border-border/10">
+                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("Platform fee (10%)")}</span>
+                            <span className="text-sm font-extrabold text-[#FF9500]">${poolSplit.fee.toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("Creators earn")}</span>
+                            <span className="text-sm font-extrabold text-[#34C759]">${poolSplit.creators.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Payout rate — CPM ($ per 1,000 views)")}</label>
@@ -1064,9 +1089,9 @@ export default function NewCampaignWizard() {
                         <span>
                           {t("Est. reach:")}{" "}
                           <span className="font-bold text-foreground">
-                            {cpmRate > 0 ? Math.round((budgetTotal / cpmRate) * 1000).toLocaleString() : "—"}
+                            {cpmRate > 0 ? Math.round((poolSplit.creators / cpmRate) * 1000).toLocaleString() : "—"}
                           </span>{" "}
-                          {t("paid views before the pool is exhausted.")}
+                          {t("paid views before the creator pool is exhausted.")}
                         </span>
                       </div>
                     </div>

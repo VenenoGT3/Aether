@@ -1,5 +1,6 @@
 import { supabase, isMockMode, getMockUser } from "./client";
 import { DbCampaign, CampaignStatus } from "@/types/database";
+import { PLATFORM_FEE_PCT, feeBreakdown } from "@/lib/campaign-budget";
 
 const LOCAL_STORAGE_KEY = "aether-campaigns";
 
@@ -105,6 +106,8 @@ const DEFAULT_MOCK_CAMPAIGNS = [
     description: "Open clipping campaign. Cut short-form clips from our launch footage and earn for every view. No application needed — join, post, get paid per 1,000 views.",
     budget_total: 10000,
     budget_pool: 10000,
+    platform_fee_pct: 0.1,
+    available_pool: 9000,
     budget_reserved: 1840,
     budget_paid: 920,
     cpm_rate: 2.5,
@@ -216,16 +219,21 @@ export async function createCampaignAction(campaignData: any) {
   if (isMockMode) {
     const campaigns = getMockCampaigns();
     const isPerformance = campaignData.campaign_type === "performance";
+    const mockPool = campaignData.budget_pool ?? campaignData.budget_total;
+    const mockFee = feeBreakdown(Number(mockPool));
     const newCampaign = {
       ...campaignData,
       id: "camp_" + Math.random().toString(36).substring(2, 9),
       business_id: mockUser.user_id,
       budget_allocated: 0,
       campaign_type: campaignData.campaign_type || "fixed",
-      // Performance pool accounting (starts empty).
+      // Performance pool accounting (starts empty). Platform retains 10%; creators
+      // earn from available_pool (90%).
       ...(isPerformance
         ? {
-            budget_pool: campaignData.budget_pool ?? campaignData.budget_total,
+            budget_pool: mockPool,
+            platform_fee_pct: PLATFORM_FEE_PCT,
+            available_pool: mockFee.creators,
             budget_reserved: 0,
             budget_paid: 0,
             funded_at: null,
@@ -270,6 +278,11 @@ export async function createCampaignAction(campaignData: any) {
         cpm_rate: isPerformance ? campaignData.cpm_rate ?? null : null,
         budget_pool: isPerformance
           ? campaignData.budget_pool ?? campaignData.budget_total
+          : null,
+        // Platform fee model: 10% retained; creators earn from available_pool (90%).
+        platform_fee_pct: isPerformance ? PLATFORM_FEE_PCT : null,
+        available_pool: isPerformance
+          ? feeBreakdown(Number(campaignData.budget_pool ?? campaignData.budget_total)).creators
           : null,
         max_payout_per_creator: isPerformance
           ? campaignData.max_payout_per_creator ?? null

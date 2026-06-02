@@ -14,6 +14,7 @@ interface PerfCampaign {
   title: string;
   status: string;
   budget_pool?: number | null;
+  available_pool?: number | null;
   budget_reserved?: number | null;
   budget_paid?: number | null;
   campaign_category?: "ugc" | "clipping" | null;
@@ -55,7 +56,7 @@ export function BrandPerformanceSummary() {
     const [{ data: camps }, { data: clipRows }] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, title, status, budget_pool, budget_reserved, budget_paid, campaign_category")
+        .select("id, title, status, budget_pool, available_pool, budget_reserved, budget_paid, campaign_category")
         .eq("campaign_type", "performance"),
       supabase.from("clips").select("campaign_id, status, current_views, creator_id"),
     ]);
@@ -104,7 +105,14 @@ export function BrandPerformanceSummary() {
   const trackingClips = clips.filter((c) => c.status === "tracking");
   const pendingClips = clips.filter((c) => c.status === "pending");
   const totalViews = trackingClips.reduce((s, c) => s + Number(c.current_views || 0), 0);
-  const totalPool = campaigns.reduce((s, c) => s + Number(c.budget_pool || 0), 0);
+  // Creators earn from the AVAILABLE pool (post platform fee); fall back to the
+  // full budget_pool for legacy campaigns without it.
+  const totalPool = campaigns.reduce(
+    (s, c) => s + Number(c.available_pool ?? c.budget_pool ?? 0),
+    0
+  );
+  const totalFunded = campaigns.reduce((s, c) => s + Number(c.budget_pool || 0), 0);
+  const totalFee = Math.max(Math.round((totalFunded - totalPool) * 100) / 100, 0);
   const totalReserved = campaigns.reduce((s, c) => s + Number(c.budget_reserved || 0), 0);
   const totalPaid = campaigns.reduce((s, c) => s + Number(c.budget_paid || 0), 0);
   const totalRemaining = Math.max(totalPool - totalReserved - totalPaid, 0);
@@ -215,6 +223,11 @@ export function BrandPerformanceSummary() {
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FF9500]" /> {t("Reserved")} {money(totalReserved)}</span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-secondary border border-border/40" /> {t("Remaining")} {money(totalRemaining)}</span>
         </div>
+        {totalFee > 0 && (
+          <p className="text-[10px] text-muted-foreground/70 mt-2 leading-normal">
+            {t("Funded")} {money(totalFunded)} · {t("platform fee")} {money(totalFee)} · {t("creators earn from")} {money(totalPool)}
+          </p>
+        )}
       </div>
 
       {/* Action CTA: clips awaiting moderation */}

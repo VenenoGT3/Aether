@@ -74,7 +74,7 @@ export async function submitClip(
   // record_clip_earning; this just gives creators clear, early feedback.
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("status, campaign_type, budget_pool, budget_reserved, budget_paid")
+    .select("status, campaign_type, budget_pool, available_pool, budget_reserved, budget_paid")
     .eq("id", body.campaign_id)
     .maybeSingle();
 
