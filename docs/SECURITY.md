@@ -1,7 +1,7 @@
 # Aether Security Review
 
-**Last updated:** 2026-06-01  
-**Scope:** Auth, RLS, API routes, webhooks, cron, secrets
+**Last updated:** 2026-06-02  
+**Scope:** Auth, RLS, API routes, webhooks, cron, secrets, worker
 
 ## Summary
 
@@ -14,7 +14,7 @@ Aether is **secure by default** when `AETHER_MOCK_MODE` is not `true`. Mock mode
 | Rate limiting | Added | In-memory limiter on AI, metrics, webhooks |
 | Webhook signatures | Enforced | Stripe `constructEvent` when not in mock mode |
 | Cron auth | Enforced | `Authorization: Bearer CRON_SECRET` when not in mock mode |
-| Service role key | Scoped | Supabase Edge Function by default; `createAdminClient()` only for legacy `vercel` handler |
+| Service role key | Scoped | Supabase Edge Function + standalone worker; `createAdminClient()` only for the legacy `vercel` handler — never in the Vercel app runtime |
 | Metrics API | Fixed | Requires auth + participation access (or cron bearer) |
 
 ---
@@ -38,6 +38,11 @@ Stripe webhooks
 Cron (/api/cron/metrics)
   → CRON_SECRET bearer required (non-mock)
   → Calls metrics with same secret (internal)
+
+Worker (standalone Node process — not Vercel)
+  → Supabase service role (bypasses RLS; no user JWT in a background job)
+  → Atomic SQL RPCs for earnings/payouts; idempotent Stripe transfers
+  → Not internet-facing
 ```
 
 ---
@@ -66,7 +71,7 @@ See **[SECRETS.md](./SECRETS.md)** for the full Vercel + Supabase matrix.
 | Secret | Location | Exposure |
 |--------|----------|----------|
 | `NEXT_PUBLIC_*` | Client bundle | Public by design |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function (default) | Never on Vercel Production |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function (default) + worker process | Never in the Vercel app runtime |
 | `STRIPE_WEBHOOK_SECRET` | Supabase Edge (default) | Webhook verification; Vercel only if legacy handler |
 | `CRON_SECRET` | Vercel server | Cron + internal metrics |
 | `GEMINI_API_KEY`, `SOCIAVAULT_API_KEY` | `lib/env.server.ts` | API routes |

@@ -1,6 +1,6 @@
-# Secret management — Vercel + Supabase
+# Secret management — Vercel + Supabase + Worker
 
-**Last updated:** 2026-06-01
+**Last updated:** 2026-06-02
 
 Aether splits secrets by **runtime** so the Supabase service role never ships in the main Vercel app by default.
 
@@ -13,6 +13,7 @@ Aether splits secrets by **runtime** so the Supabase service role never ships in
 | **Browser** | `NEXT_PUBLIC_*` only | Any secret key |
 | **Vercel (Next.js)** | Stripe server key, cron secret, optional AI/email keys | Service role (default) |
 | **Supabase Edge Functions** | Service role (auto), Stripe webhook secrets | — |
+| **Worker** (standalone Node process) | Service role, Stripe server key, Redis URL, optional Ayrshare key | Public/browser exposure — it is a backend job, not internet-facing |
 
 Mock mode (`AETHER_MOCK_MODE=true`) skips validation and uses placeholders.
 
@@ -48,7 +49,7 @@ Set in **Project → Settings → Environment Variables**. Mark sensitive values
 
 | Variable | Where instead |
 |----------|----------------|
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function runtime only |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function runtime **and** the standalone worker process (see [Worker](#worker-standalone-process)) |
 
 Exception: `STRIPE_WEBHOOK_HANDLER=vercel` for legacy local testing — then add service role to `.env.local` only, never Production Vercel.
 
@@ -88,6 +89,27 @@ Do **not** point production Stripe webhooks at `/api/webhooks/stripe` on Vercel 
 
 ---
 
+## Worker (standalone process)
+
+The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) runs as a **standalone Node process**, separate from the Next.js app and Vercel. It reads `process.env` directly (via `worker/env.ts`) and is the one place **outside** Supabase Edge Functions that legitimately uses the **service role**.
+
+| Secret | Why the worker needs it |
+|--------|--------------------------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Writes `view_snapshots` / `earnings` and runs payout RPCs, bypassing RLS (a background job has no user JWT) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `STRIPE_SECRET_KEY` | Creator transfers for real (non-mock) payouts |
+| `REDIS_URL` | BullMQ queues + scheduler |
+| `AYRSHARE_API_KEY` (optional) | Real view tracking; absent ⇒ simulated views |
+
+**Rules:**
+
+1. Store `SUPABASE_SERVICE_ROLE_KEY` **only where the worker runs** (its host's secret store). Never put it in the Next.js / Vercel app runtime, never prefix it `NEXT_PUBLIC_*`, and never let it reach the browser bundle.
+2. The worker must **not** be deployed into the Vercel app runtime. Run it on a host that can hold the service role securely (a small VM, container, Railway / Render / Fly, etc.).
+3. `worker/env.ts` deliberately avoids importing the app's `server-only` modules (`lib/env.server.ts`, `lib/supabase/admin.ts`) so the runtime boundary stays explicit.
+4. Even in mock mode the worker still talks to a **real** Supabase project (mock only stubs views + Stripe transfers), so it still needs the service role and URL there.
+
+---
+
 ## Validation (fail-fast)
 
 | When | What runs |
@@ -111,6 +133,7 @@ Rules:
 | `lib/env.ts` | Anywhere (client-safe flags + public URLs) |
 | `lib/env.server.ts` | Server only (`import "server-only"`) |
 | `lib/supabase/admin.ts` | Webhook legacy path only |
+| `worker/env.ts` | Worker process only (standalone Node; reads `process.env`, uses the service role) |
 
 ---
 

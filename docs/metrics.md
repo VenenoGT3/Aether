@@ -1,6 +1,7 @@
-> ⚠️ **Outdated — describes the original fixed-fee metrics/scraping approach.** View
-> tracking is now handled by the worker's provider abstraction (Ayrshare / simulated)
-> feeding the earnings pipeline. See [HANDOFF.md](../HANDOFF.md).
+> ⚠️ **Outdated — describes the original fixed-fee metrics/scraping approach (SociaVault).**
+> View tracking is now handled by the worker's provider abstraction
+> (`worker/views-provider.ts`: Ayrshare / simulated) feeding the earnings pipeline.
+> See [HANDOFF.md](../HANDOFF.md) for the model and [SETUP.md](../SETUP.md) for running the worker.
 
 # Aether Social Metrics Monitoring System
 

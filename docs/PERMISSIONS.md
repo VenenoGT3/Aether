@@ -1,7 +1,7 @@
 # Aether Permission Model
 
-**Last updated:** 2026-06-01  
-**Source of truth:** `supabase/migrations/*.sql` (especially `20260525000000_harden_security.sql` and `20260601000001_rls_permissions_hardening.sql`)
+**Last updated:** 2026-06-02  
+**Source of truth:** `supabase/migrations/*.sql` (especially `20260525000000_harden_security.sql`, `20260601000001_rls_permissions_hardening.sql`, and `20260602000000_performance_clipping_phase1.sql`)
 
 All tables use **Row Level Security (RLS)** for the `authenticated` role. The service role bypasses RLS and is reserved for verified webhooks/cron.
 
@@ -108,6 +108,41 @@ Roles live on `public.users.role`. **Users cannot self-promote to `admin`** (DB 
 | SELECT | Sender **or** participation member |
 | INSERT | Sender who is a participation member |
 | UPDATE | Participation member — **`is_read` only** (trigger `check_message_update`) |
+
+---
+
+## Performance clipping tables
+
+Added by the performance migration (`20260602000000_performance_clipping_phase1.sql`; moderation in `20260602020000_clip_moderation.sql`). **Money-moving writes never come from the browser** — they run through the **service-role worker** and atomic SQL functions (`record_clip_earning` and the payout RPCs), which bypass RLS.
+
+### `clips`
+
+| Action | Who |
+|--------|-----|
+| SELECT | Submitting creator **or** campaign business |
+| INSERT | Onboarded **active** creator, for a campaign they've joined (own `creator_id`) |
+| UPDATE | Campaign business only — and only the moderation fields (`status`, `review_*`), enforced by trigger `verify_clip_changes` → `check_clip_update()`. View/earning fields are written by the worker (service role). |
+
+### `view_snapshots`
+
+| Action | Who |
+|--------|-----|
+| SELECT | The clip's creator **or** campaign business |
+| INSERT / UPDATE / DELETE | Service role only (worker) — no `authenticated` write policy |
+
+### `earnings`
+
+| Action | Who |
+|--------|-----|
+| SELECT | The creator who earned **or** campaign business |
+| INSERT / UPDATE | Only via `record_clip_earning` + the payout worker (service role) |
+
+### `payouts`
+
+| Action | Who |
+|--------|-----|
+| SELECT | The creator being paid (`creator_id = auth.uid()`) |
+| INSERT / UPDATE | Service role only (payout worker) |
 
 ---
 

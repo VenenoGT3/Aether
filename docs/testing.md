@@ -1,3 +1,9 @@
+> ⚠️ **Partially outdated — covers the original fixed-fee escrow E2E flow** (apply →
+> approve → escrow → release), which predates the performance, pay-per-view model. For
+> the current end-to-end verification (join → submit clip → moderate → view-sync →
+> payout) use the checklist in [SETUP.md](../SETUP.md); model overview in
+> [HANDOFF.md](../HANDOFF.md).
+
 # Aether Quality Assurance - End-to-End Test Plan
 
 This document contains the E2E verification plan, manual testing checklist, and Playwright automation scripts for the complete Aether campaign workflow.
