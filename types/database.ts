@@ -78,6 +78,8 @@ export const ProfileSchema = z.object({
   company_size: z.string().nullable().optional(),
   stripe_connect_id: z.string().nullable().optional(),
   stripe_onboarding_completed: z.boolean().default(false).optional(),
+  // Ayrshare account linking for view tracking (NULL = not linked)
+  ayrshare_profile_key: z.string().nullable().optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });

@@ -37,9 +37,24 @@ export function getAyrshareApiKey(): string | undefined {
   return process.env.AYRSHARE_API_KEY?.trim() || undefined;
 }
 
-/** Use simulated views when in mock mode or when no Ayrshare key is configured. */
+/**
+ * Use the real Ayrshare provider only when we have a key AND we're not in mock
+ * mode. This is the single source of truth for provider selection — flip it on
+ * simply by setting AYRSHARE_API_KEY (with AETHER_MOCK_MODE unset/false).
+ */
+export function isAyrshareEnabled(): boolean {
+  return !isMockMode && !!getAyrshareApiKey();
+}
+
+/** Inverse of isAyrshareEnabled(): simulated views when mock mode or no key. */
 export function shouldSimulateViews(): boolean {
-  return isMockMode || !getAyrshareApiKey();
+  return !isAyrshareEnabled();
+}
+
+/** Minimum gap between Ayrshare API calls (ms) — basic client-side rate limiting. */
+export function getAyrshareMinIntervalMs(): number {
+  const raw = Number(process.env.AYRSHARE_MIN_INTERVAL_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 350;
 }
 
 /** How often the repeatable view-sync fan-out runs (minutes). */

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
-import { fetchClipViews } from "./views-provider";
+import { getViewsProvider } from "./views-provider";
 import { checkVelocity } from "./fraud";
 import { getViewSyncBatchSize } from "./env";
 import type { ClipRow, ViewSyncOutcome } from "./types";
@@ -62,7 +62,7 @@ export async function runViewSyncForClip(
     return { status: "skipped", clipId, reason: `status=${clip.status}` };
   }
 
-  const metrics = await fetchClipViews(clip);
+  const metrics = await getViewsProvider().fetchViews(clip);
 
   // Fraud / velocity guard: implausible jumps disqualify the clip (which stops
   // it accruing, since record_clip_earning only pays 'tracking' clips).

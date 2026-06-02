@@ -1,16 +1,37 @@
-import { getAyrshareApiKey, shouldSimulateViews } from "./env";
+import {
+  getAyrshareApiKey,
+  getAyrshareMinIntervalMs,
+  isAyrshareEnabled,
+  isMockMode,
+} from "./env";
 import type { ClipRow, ViewData } from "./types";
 
 /**
- * View provider abstraction. In mock mode (or when AYRSHARE_API_KEY is unset)
- * we generate deterministic-ish growing view counts so the full
- * views -> snapshot -> earnings pipeline can be exercised without Ayrshare.
+ * View-provider abstraction.
+ *
+ * CURRENT STATE: the SimulatedViewsProvider is the active default. It produces
+ * believable growing view counts so the full views -> snapshot -> earnings
+ * pipeline runs without any external API (mock mode, or no AYRSHARE_API_KEY).
+ *
+ * The AyrshareViewsProvider is REAL but UNVERIFIED — it is wired to Ayrshare's
+ * analytics endpoint and only activates when isAyrshareEnabled() is true
+ * (AYRSHARE_API_KEY set + AETHER_MOCK_MODE off). Switching to real tracking is
+ * intended to be a single env change; no worker code changes required.
+ *
+ * Account linking note: real Ayrshare scopes analytics to a creator via a
+ * "Profile-Key" (stored on profiles.ayrshare_profile_key) and a per-post id
+ * (stored on clips.external_post_id / clips.ayrshare_ref). Those are captured by
+ * the account-linking flow (placeholder today); the AyrshareViewsProvider reads
+ * clip.external_post_id and will forward the creator's profile key once linking
+ * is implemented.
  */
 
-/**
- * Simulate organic growth from the clip's current view count. Growth is a small
- * percentage plus a base, so repeated syncs produce a believable upward curve.
- */
+export interface ViewsProvider {
+  readonly name: "ayrshare" | "simulated";
+  fetchViews(clip: ClipRow): Promise<ViewData>;
+}
+
+/** Simulate organic growth from the clip's current view count. */
 export function simulateViewGrowth(currentViews: number): ViewData {
   const base = currentViews > 0 ? currentViews : 2_000 + Math.floor(Math.random() * 8_000);
   const growthPct = 0.05 + Math.random() * 0.15; // +5%..+20%
@@ -26,73 +47,143 @@ export function simulateViewGrowth(currentViews: number): ViewData {
   };
 }
 
-/**
- * Fetch live metrics for a clip from Ayrshare's analytics endpoint.
- * Stubbed for Phase 4 — real linkage (profile keys / post ids) lands with the
- * Ayrshare account-connect flow. Falls back to simulated data on any failure.
- */
-async function fetchAyrshareViews(clip: ClipRow): Promise<ViewData> {
-  const apiKey = getAyrshareApiKey();
-  if (!apiKey) return simulateViewGrowth(clip.current_views);
+class SimulatedViewsProvider implements ViewsProvider {
+  readonly name = "simulated" as const;
+  async fetchViews(clip: ClipRow): Promise<ViewData> {
+    return simulateViewGrowth(clip.current_views);
+  }
+}
 
-  try {
-    const res = await fetch("https://api.ayrshare.com/api/analytics/post", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        id: clip.external_post_id ?? clip.post_url,
-        platforms: [clip.platform],
-      }),
-    });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    if (!res.ok) {
-      console.warn(
-        `[views-provider] Ayrshare ${res.status} for clip ${clip.id}; using last-known views`
-      );
-      return {
-        views: clip.current_views,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        source: "ayrshare",
-      };
-    }
+/** Serializes Ayrshare calls with a minimum gap (basic client-side rate limiting). */
+let throttleChain: Promise<unknown> = Promise.resolve();
+function rateLimited<T>(fn: () => Promise<T>): Promise<T> {
+  const gap = getAyrshareMinIntervalMs();
+  const run = throttleChain.then(fn, fn);
+  throttleChain = run.then(
+    () => sleep(gap),
+    () => sleep(gap)
+  );
+  return run as Promise<T>;
+}
 
-    const json = (await res.json()) as Record<string, unknown>;
-    const platformData = (json[clip.platform] ?? json) as Record<string, unknown>;
-    const analytics = (platformData.analytics ?? platformData) as Record<
-      string,
-      unknown
-    >;
+class AyrshareViewsProvider implements ViewsProvider {
+  readonly name = "ayrshare" as const;
 
-    const num = (v: unknown): number =>
-      typeof v === "number" && Number.isFinite(v) ? v : 0;
+  async fetchViews(clip: ClipRow): Promise<ViewData> {
+    const apiKey = getAyrshareApiKey();
+    // Should not happen (provider selection guards this), but stay safe.
+    if (!apiKey) return simulateViewGrowth(clip.current_views);
 
-    return {
-      views: num(analytics.views ?? analytics.playCount ?? analytics.impressions),
-      likes: num(analytics.likeCount ?? analytics.likes),
-      comments: num(analytics.commentsCount ?? analytics.comments),
-      shares: num(analytics.shareCount ?? analytics.shares),
-      source: "ayrshare",
-    };
-  } catch (err) {
-    console.error(`[views-provider] Ayrshare fetch failed for clip ${clip.id}:`, err);
-    return {
+    const lastKnown: ViewData = {
       views: clip.current_views,
       likes: 0,
       comments: 0,
       shares: 0,
       source: "ayrshare",
     };
+
+    try {
+      const res = await rateLimited(() =>
+        fetch("https://api.ayrshare.com/api/analytics/post", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            id: clip.external_post_id ?? clip.post_url,
+            platforms: [clip.platform],
+          }),
+        })
+      );
+
+      // Honor rate limiting with a single backoff retry.
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get("retry-after")) || 2;
+        console.warn(
+          `[views-provider] Ayrshare 429 for clip ${clip.id}; retrying in ${retryAfter}s`
+        );
+        await sleep(retryAfter * 1000);
+        const retry = await rateLimited(() =>
+          fetch("https://api.ayrshare.com/api/analytics/post", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              id: clip.external_post_id ?? clip.post_url,
+              platforms: [clip.platform],
+            }),
+          })
+        );
+        if (!retry.ok) return lastKnown;
+        return parseAyrshare(await retry.json(), clip.platform);
+      }
+
+      if (!res.ok) {
+        console.warn(
+          `[views-provider] Ayrshare ${res.status} for clip ${clip.id}; keeping last-known views`
+        );
+        return lastKnown;
+      }
+
+      return parseAyrshare(await res.json(), clip.platform);
+    } catch (err) {
+      console.error(
+        `[views-provider] Ayrshare fetch failed for clip ${clip.id}:`,
+        err instanceof Error ? err.message : err
+      );
+      return lastKnown;
+    }
   }
 }
 
-export async function fetchClipViews(clip: ClipRow): Promise<ViewData> {
-  if (shouldSimulateViews()) {
-    return simulateViewGrowth(clip.current_views);
+/** Robustly parse an Ayrshare analytics payload into ViewData. */
+function parseAyrshare(json: unknown, platform: string): ViewData {
+  const root = (json ?? {}) as Record<string, unknown>;
+  const platformData = (root[platform] ?? root) as Record<string, unknown>;
+  const analytics = (platformData.analytics ?? platformData) as Record<string, unknown>;
+  const num = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : 0;
+
+  return {
+    views: num(analytics.views ?? analytics.playCount ?? analytics.impressions),
+    likes: num(analytics.likeCount ?? analytics.likes),
+    comments: num(analytics.commentsCount ?? analytics.comments),
+    shares: num(analytics.shareCount ?? analytics.shares),
+    source: "ayrshare",
+  };
+}
+
+let cachedProvider: ViewsProvider | null = null;
+
+/**
+ * Returns the active views provider, logging the selection once so it's obvious
+ * in the worker logs whether earnings are based on real or simulated views.
+ */
+export function getViewsProvider(): ViewsProvider {
+  if (cachedProvider) return cachedProvider;
+
+  if (isAyrshareEnabled()) {
+    cachedProvider = new AyrshareViewsProvider();
+    console.log(
+      "[views-provider] REAL Ayrshare provider active — earnings based on live views."
+    );
+  } else {
+    cachedProvider = new SimulatedViewsProvider();
+    console.log(
+      `[views-provider] SIMULATED view provider active (${
+        isMockMode ? "AETHER_MOCK_MODE=true" : "no AYRSHARE_API_KEY"
+      }) — earnings based on simulated growth, NOT real views.`
+    );
   }
-  return fetchAyrshareViews(clip);
+  return cachedProvider;
+}
+
+/** @deprecated Use getViewsProvider().fetchViews(clip). Kept for callers/tests. */
+export function fetchClipViews(clip: ClipRow): Promise<ViewData> {
+  return getViewsProvider().fetchViews(clip);
 }

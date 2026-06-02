@@ -25,6 +25,7 @@ import {
   useJoinedCampaigns,
   type ClipStatus,
 } from "@/lib/supabase/clips";
+import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder";
 
 interface PerfCampaign {
   id: string;
@@ -309,6 +310,8 @@ export default function CreatorClipsPage() {
               </>
             )}
           </div>
+
+          <AyrshareLinkPlaceholder />
 
           <div className="p-6 apple-card">
             <h3 className="text-sm font-bold mb-4">{t("Payout history")}</h3>
