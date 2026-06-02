@@ -39,6 +39,7 @@ import {
   Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandPerformanceSummary } from "@/components/brand-performance-summary";
 import { getCampaignsAction, subscribeToCampaignChanges } from "@/lib/supabase/campaigns";
 import { getClientProfile, Profile, supabase, isMockMode } from "@/lib/supabase/client";
 import { useTransactions, getCampaignMetricsAction } from "@/lib/supabase/metrics";
@@ -651,6 +652,9 @@ export default function BusinessDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Performance campaigns at a glance (new model) */}
+      <BrandPerformanceSummary />
 
       {loading ? (
         <div className="space-y-12 relative z-10">

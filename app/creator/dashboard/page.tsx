@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { getClientProfile, supabase, isMockMode } from "@/lib/supabase/client";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import WalletUI from "@/components/wallet-ui";
+import { CreatorPerformanceSummary } from "@/components/creator-performance-summary";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
@@ -465,6 +466,9 @@ export default function InfluencerDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Performance clipping earnings + clips (new model) */}
+      <CreatorPerformanceSummary />
 
       <AnimatePresence mode="wait">
         {activeTab === "overview" ? (
