@@ -18,6 +18,8 @@ import { useTranslation } from "@/lib/translations";
 import { isMockMode, supabase } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useBrandModeration } from "@/lib/supabase/clips";
+import { approvalCountdownLabel, workingDaysLeft } from "@/lib/approval";
+import { Clock } from "lucide-react";
 
 interface PerfCampaign {
   id: string;
@@ -178,6 +180,17 @@ export default function BrandModerationPage() {
                     {clip.creatorCpm != null && (
                       <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20 flex items-center gap-0.5">
                         ${Number(clip.creatorCpm).toFixed(2)} {t("CPM")}
+                      </span>
+                    )}
+                    {clip.approval_deadline && (
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                          (workingDaysLeft(clip.approval_deadline) ?? 0) <= 1
+                            ? "bg-destructive/10 text-destructive border-destructive/20"
+                            : "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20"
+                        }`}
+                      >
+                        <Clock size={9} /> {t(approvalCountdownLabel(clip.approval_deadline))}
                       </span>
                     )}
                   </div>

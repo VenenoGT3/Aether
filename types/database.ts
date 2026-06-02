@@ -72,6 +72,7 @@ export const ProfileSchema = z.object({
   availability: z.record(z.string(), z.any()).default({}),
   embedding: z.array(z.number()).length(1536).nullable().optional(), // Vector embedding representation
   onboarded: z.boolean().default(false).optional(),
+  trusted_creator: z.boolean().default(false).optional(),
   company_name: z.string().nullable().optional(),
   website: z.string().nullable().optional(),
   industry: z.string().nullable().optional(),

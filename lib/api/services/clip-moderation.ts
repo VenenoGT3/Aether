@@ -113,13 +113,18 @@ async function moderateClip(
     nextStatus = "rejected";
   }
 
+  const nowIso = new Date().toISOString();
   const { data: updated, error: updErr } = await supabase
     .from("clips")
     .update({
       status: nextStatus,
-      reviewed_at: new Date().toISOString(),
+      reviewed_at: nowIso,
       reviewed_by: brandUserId,
       review_note: action === "reject" ? note ?? null : null,
+      // Explicit brand decision → record the timestamp and mark it non-automatic.
+      approved_at: action === "approve" ? nowIso : null,
+      rejected_at: action === "reject" ? nowIso : null,
+      auto_approved: false,
     })
     .eq("id", clipId)
     .select("id, status, reviewed_at, reviewed_by")

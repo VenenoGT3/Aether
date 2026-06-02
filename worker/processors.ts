@@ -16,6 +16,24 @@ import type { ClipRow, ViewSyncOutcome } from "./types";
 const CLIP_COLUMNS =
   "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, counted_views, current_views, last_synced_at";
 
+/**
+ * Promote 'pending' clips past their 5-working-day approval deadline to
+ * 'tracking' (auto-approve on brand inaction). Idempotent — only flips clips
+ * whose deadline has lapsed on still-open performance campaigns. Returns count.
+ */
+export async function autoApproveOverdueClips(
+  client?: SupabaseClient
+): Promise<number> {
+  const supabase = client ?? getServiceClient();
+  const { data, error } = await supabase.rpc("auto_approve_overdue_clips");
+  if (error) {
+    throw new Error(`[approval] auto_approve_overdue_clips failed: ${error.message}`);
+  }
+  const count = typeof data === "number" ? data : Number(data ?? 0);
+  if (count > 0) log.info("approval.auto_approved", { clips: count });
+  return count;
+}
+
 /** Ids of 'tracking' clips due for a refresh (oldest sync first). */
 export async function fetchTrackingClipIds(
   limit = getViewSyncBatchSize(),

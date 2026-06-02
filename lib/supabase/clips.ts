@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase, isMockMode, getMockUser } from "./client";
 import { apiPost } from "@/lib/api/client";
+import { addBusinessDays, APPROVAL_WINDOW_BUSINESS_DAYS } from "@/lib/approval";
 
 /**
  * Data layer for the performance-clipping UI (Phase 6).
@@ -39,6 +40,10 @@ export interface CreatorClip {
   /** The creator's chosen CPM for this campaign (falls back to the campaign rate). Set in load(). */
   creator_cpm?: number;
   submitted_at: string;
+  /** When the brand's 5-working-day review window closes (pending clips). */
+  approval_deadline?: string | null;
+  /** Reached tracking without an explicit brand review (trust or deadline lapse). */
+  auto_approved?: boolean;
 }
 
 export interface EarningsBreakdown {
@@ -67,6 +72,8 @@ export interface ModerationClip {
   /** The creator's chosen CPM (falls back to the campaign rate). */
   creatorCpm?: number;
   submitted_at: string;
+  /** When the brand's 5-working-day review window closes. */
+  approval_deadline?: string | null;
 }
 
 const CLIPS_LS_KEY = "aether-mock-clips";
@@ -87,6 +94,37 @@ function mockCpmFor(campaignId: string): number {
   } catch {
     return DEFAULT_CPM;
   }
+}
+
+/**
+ * Mock: read clips, ensure each has an approval_deadline, and SWEEP overdue
+ * pending clips to 'tracking' (simulating the worker's auto-approve, since the
+ * worker only runs against real Supabase). Persists changes without dispatching
+ * an update event (avoids a reload loop).
+ */
+function mockClipsWithApproval(): CreatorClip[] {
+  const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+  const now = Date.now();
+  let changed = false;
+  const next = list.map((c) => {
+    const deadline =
+      c.approval_deadline ??
+      addBusinessDays(new Date(c.submitted_at), APPROVAL_WINDOW_BUSINESS_DAYS).toISOString();
+    let status = c.status;
+    let auto = c.auto_approved ?? false;
+    if (status === "pending" && new Date(deadline).getTime() <= now) {
+      status = "tracking";
+      auto = true;
+    }
+    if (c.approval_deadline !== deadline || status !== c.status || auto !== c.auto_approved) {
+      changed = true;
+    }
+    return { ...c, approval_deadline: deadline, status, auto_approved: auto };
+  });
+  if (changed && typeof window !== "undefined") {
+    localStorage.setItem(CLIPS_LS_KEY, JSON.stringify(next));
+  }
+  return next;
 }
 // Start un-joined so the Join flow is visible/testable; joining is recorded here.
 const SEED_JOINED: string[] = [];
@@ -273,10 +311,10 @@ export function useCreatorClips() {
 
   const load = useCallback(async () => {
     if (isMockMode) {
-      // Recompute the estimate from the creator's chosen CPM (falls back to the
-      // default). For the seeds this reproduces their hand-set values exactly.
+      // Sweep overdue approvals, then recompute the estimate from the creator's
+      // chosen CPM (for the seeds this reproduces their hand-set values exactly).
       setClips(
-        readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS).map((c) => {
+        mockClipsWithApproval().map((c) => {
           const cpm = mockCpmFor(c.campaign_id);
           return {
             ...c,
@@ -296,7 +334,7 @@ export function useCreatorClips() {
     const { data } = await supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title, cpm_rate), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, campaign:campaign_id(title, cpm_rate), participation:participation_id(creator_cpm_rate)"
       )
       .eq("creator_id", user.id)
       .order("created_at", { ascending: false });
@@ -309,6 +347,9 @@ export function useCreatorClips() {
       status: ClipStatus;
       current_views: number | null;
       created_at: string;
+      submitted_at: string | null;
+      approval_deadline: string | null;
+      auto_approved: boolean | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
       participation: { creator_cpm_rate?: number | null } | null;
     };
@@ -330,7 +371,9 @@ export function useCreatorClips() {
           current_views: views,
           estimated_earnings: Math.round(((views * cpm) / 1000) * 100) / 100,
           creator_cpm: cpm,
-          submitted_at: r.created_at,
+          submitted_at: r.submitted_at ?? r.created_at,
+          approval_deadline: r.approval_deadline,
+          auto_approved: r.auto_approved ?? false,
         };
       })
     );
@@ -358,16 +401,26 @@ export function useCreatorClips() {
         if (list.some((c) => c.post_url === postUrl)) {
           return { ok: false, error: "This clip has already been submitted." };
         }
+        // Trusted creators auto-approve on submit; everyone else starts pending
+        // with a 5-working-day approval deadline (mirrors the DB insert trigger).
+        const trusted =
+          (getMockUser() as { trusted_creator?: boolean }).trusted_creator === true;
+        const submittedAt = new Date().toISOString();
         list.unshift({
           id: "clip_" + Math.random().toString(36).substring(2, 9),
           campaign_id: campaignId,
           campaignTitle: campaignTitle || "Performance Campaign",
           platform,
           post_url: postUrl,
-          status: "pending",
+          status: trusted ? "tracking" : "pending",
           current_views: 0,
           estimated_earnings: 0,
-          submitted_at: new Date().toISOString(),
+          submitted_at: submittedAt,
+          approval_deadline: addBusinessDays(
+            new Date(submittedAt),
+            APPROVAL_WINDOW_BUSINESS_DAYS
+          ).toISOString(),
+          auto_approved: trusted,
         });
         writeLs(CLIPS_LS_KEY, list);
         return { ok: true };
@@ -455,7 +508,8 @@ export function useBrandModeration(campaignId?: string) {
 
   const load = useCallback(async () => {
     if (isMockMode) {
-      const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
+      // Sweep first so overdue clips leave the queue (auto-approved).
+      const list = mockClipsWithApproval();
       const mockUser = getMockUser();
       setClips(
         list
@@ -472,6 +526,7 @@ export function useBrandModeration(campaignId?: string) {
             current_views: c.current_views,
             creatorCpm: mockCpmFor(c.campaign_id),
             submitted_at: c.submitted_at,
+            approval_deadline: c.approval_deadline,
           }))
       );
       setLoading(false);
@@ -480,7 +535,7 @@ export function useBrandModeration(campaignId?: string) {
     let query = supabase
       .from("clips")
       .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
       )
       .eq("status", "pending")
       .order("created_at", { ascending: false });
@@ -496,6 +551,8 @@ export function useBrandModeration(campaignId?: string) {
       status: ClipStatus;
       current_views: number | null;
       created_at: string;
+      submitted_at: string | null;
+      approval_deadline: string | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
       creator: { email?: string } | null;
       participation: { creator_cpm_rate?: number | null } | null;
@@ -533,7 +590,8 @@ export function useBrandModeration(campaignId?: string) {
         creatorCpm: Number(
           r.participation?.creator_cpm_rate ?? r.campaign?.cpm_rate ?? DEFAULT_CPM
         ),
-        submitted_at: r.created_at,
+        submitted_at: r.submitted_at ?? r.created_at,
+        approval_deadline: r.approval_deadline,
       }))
     );
     setLoading(false);

@@ -25,6 +25,8 @@ export interface Profile {
   full_name: string;
   avatar_url: string;
   onboarded: boolean;
+  /** Trusted creators have their clips auto-approved on submit. */
+  trusted_creator?: boolean;
   email?: string;
   
   // Business fields

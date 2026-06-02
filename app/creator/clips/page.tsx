@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
-import { isMockMode, supabase } from "@/lib/supabase/client";
+import { isMockMode, supabase, getClientProfile } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import {
   useCreatorClips,
@@ -25,7 +25,9 @@ import {
   useJoinedCampaigns,
   type ClipStatus,
 } from "@/lib/supabase/clips";
+import { approvalCountdownLabel } from "@/lib/approval";
 import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder";
+import { ShieldCheck } from "lucide-react";
 
 interface PerfCampaign {
   id: string;
@@ -53,6 +55,7 @@ export default function CreatorClipsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinCpm, setJoinCpm] = useState(2.5);
+  const [trusted, setTrusted] = useState(false);
 
   const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
   const selectedOfferedCpm =
@@ -81,6 +84,9 @@ export default function CreatorClipsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadCampaigns();
+    getClientProfile()
+      .then((p) => setTrusted(p?.trusted_creator === true))
+      .catch(() => {});
   }, [loadCampaigns]);
 
   // Default the join CPM to the selected campaign's offered rate.
@@ -153,6 +159,21 @@ export default function CreatorClipsPage() {
         </p>
       </div>
 
+      {/* Trusted Creator banner — clips skip the review window. */}
+      {trusted && (
+        <div className="mb-8 p-4 rounded-2xl bg-[#34C759]/5 border border-[#34C759]/20 flex items-center gap-3">
+          <span className="p-2 rounded-xl bg-[#34C759]/10 text-[#34C759] shrink-0">
+            <ShieldCheck size={16} />
+          </span>
+          <div>
+            <h4 className="text-xs font-bold text-foreground">{t("You're a Trusted Creator")}</h4>
+            <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">
+              {t("Your clips are approved instantly and start tracking right away — no 5-day review wait.")}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Earnings summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <motion.div whileHover={{ y: -3 }} className="p-6 apple-card">
@@ -218,11 +239,21 @@ export default function CreatorClipsPage() {
                   className="p-5 apple-card flex flex-col sm:flex-row sm:items-center gap-4"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style.cls}`}>
                         {t(style.label)}
                       </span>
                       <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
+                      {clip.status === "pending" && (
+                        <span className="text-[9px] font-bold text-[#FF9500] flex items-center gap-1">
+                          <Clock size={9} /> {t(approvalCountdownLabel(clip.approval_deadline))}
+                        </span>
+                      )}
+                      {clip.status === "tracking" && clip.auto_approved && (
+                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-secondary text-muted-foreground border-border/30 uppercase tracking-wide">
+                          {trusted ? t("Auto-approved · Trusted") : t("Auto-approved")}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm font-semibold truncate">{clip.campaignTitle}</p>
                     <a

@@ -8,6 +8,7 @@ import {
   closeQueues,
 } from "./queues";
 import {
+  autoApproveOverdueClips,
   fetchTrackingClipIds,
   runViewSyncForClip,
   runEarningsCalc,
@@ -87,8 +88,16 @@ function startViewSyncWorker(): Worker {
       const attempt = job.attemptsMade + 1;
       try {
         if (job.name === JOB_NAMES.fanOut) {
+          // Auto-approve clips whose review window lapsed (best-effort — never
+          // block view-sync if the sweep fails).
+          let autoApproved = 0;
+          try {
+            autoApproved = await autoApproveOverdueClips();
+          } catch (err) {
+            log.error("approval.sweep_error", { jobId: job.id, error: errMessage(err) });
+          }
           const clipIds = await fetchTrackingClipIds();
-          log.info("viewsync.fanout", { jobId: job.id, clips: clipIds.length });
+          log.info("viewsync.fanout", { jobId: job.id, autoApproved, clips: clipIds.length });
           if (clipIds.length > 0) {
             await viewSyncQueue.addBulk(
               clipIds.map((clipId) => ({
