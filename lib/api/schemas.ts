@@ -183,6 +183,20 @@ export const ClipSubmitBodySchema = z.object({
   _hp: honeypot,
 });
 
+// Brand moderation (Phase 3)
+export const ApproveClipBodySchema = z.object({
+  _hp: honeypot,
+});
+
+export const RejectClipBodySchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(1000, "Reason is too long (max 1000 characters).")
+    .optional(),
+  _hp: honeypot,
+});
+
 export const CampaignSearchQuerySchema = z.object({
   q: searchQuery,
   niche: z
@@ -202,4 +216,6 @@ export type CampaignApplyBody = z.infer<typeof CampaignApplyBodySchema>;
 export type PostSubmitBody = z.infer<typeof PostSubmitBodySchema>;
 export type CampaignJoinBody = z.infer<typeof CampaignJoinBodySchema>;
 export type ClipSubmitBody = z.infer<typeof ClipSubmitBodySchema>;
+export type ApproveClipBody = z.infer<typeof ApproveClipBodySchema>;
+export type RejectClipBody = z.infer<typeof RejectClipBodySchema>;
 export type CampaignSearchQuery = z.infer<typeof CampaignSearchQuerySchema>;

@@ -244,6 +244,10 @@ export const ClipSchema = z.object({
   counted_views: z.number().int().nonnegative().default(0),
   current_views: z.number().int().nonnegative().default(0),
   last_synced_at: z.union([z.date(), z.string()]).nullable().optional(),
+  // Brand moderation metadata (Phase 3)
+  reviewed_at: z.union([z.date(), z.string()]).nullable().optional(),
+  reviewed_by: z.string().uuid().nullable().optional(),
+  review_note: z.string().nullable().optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });
