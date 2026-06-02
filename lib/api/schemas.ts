@@ -169,6 +169,20 @@ export const PostSubmitBodySchema = z.object({
   _hp: honeypot,
 });
 
+// --- Performance clipping: open join + clip submission (Phase 2) ---
+
+/** Joining a performance campaign needs no pitch/fee — just a clean request. */
+export const CampaignJoinBodySchema = z.object({
+  _hp: honeypot,
+});
+
+export const ClipSubmitBodySchema = z.object({
+  campaign_id: uuid,
+  post_url: socialPostUrl,
+  platform: z.enum(["instagram", "tiktok", "youtube"]).optional(),
+  _hp: honeypot,
+});
+
 export const CampaignSearchQuerySchema = z.object({
   q: searchQuery,
   niche: z
@@ -186,4 +200,6 @@ export type AiPitchBody = z.infer<typeof AiPitchBodySchema>;
 export type AiDiscoverBody = z.infer<typeof AiDiscoverBodySchema>;
 export type CampaignApplyBody = z.infer<typeof CampaignApplyBodySchema>;
 export type PostSubmitBody = z.infer<typeof PostSubmitBodySchema>;
+export type CampaignJoinBody = z.infer<typeof CampaignJoinBodySchema>;
+export type ClipSubmitBody = z.infer<typeof ClipSubmitBodySchema>;
 export type CampaignSearchQuery = z.infer<typeof CampaignSearchQuerySchema>;

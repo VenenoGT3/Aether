@@ -292,7 +292,8 @@ CREATE POLICY "Read clips"
     );
 
 -- Insert: an onboarded creator may submit a clip only for a campaign they have
--- actively joined.
+-- joined. (Phase 2 tightens this to require status = 'active' once that
+-- participation_status enum value exists — see 20260602010000.)
 DROP POLICY IF EXISTS "Creator submits clip" ON public.clips;
 CREATE POLICY "Creator submits clip"
     ON public.clips FOR INSERT TO authenticated
@@ -304,7 +305,6 @@ CREATE POLICY "Creator submits clip"
             WHERE p.id = participation_id
               AND p.influencer_id = auth.uid()
               AND p.campaign_id = clips.campaign_id
-              AND p.status = 'active'
         )
     );
 

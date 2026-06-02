@@ -20,6 +20,9 @@ export const ParticipationStatusSchema = z.enum([
   "declined",
   "completed",
   "cancelled",
+  // Performance-clipping open-join states (Phase 2)
+  "active",
+  "banned",
 ]);
 export type ParticipationStatus = z.infer<typeof ParticipationStatusSchema>;
 
