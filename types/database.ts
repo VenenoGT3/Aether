@@ -101,6 +101,10 @@ export const CampaignSchema = z.object({
   embedding: z.array(z.number()).length(1536).nullable().optional(),
   // Performance-clipping fields (Phase 1, additive — fixed campaigns leave these unset)
   campaign_type: z.enum(["fixed", "performance"]).default("fixed").optional(),
+  // Performance sub-type: ugc (original from a brief) vs clipping (cut from source).
+  campaign_category: z.enum(["ugc", "clipping"]).nullable().optional(),
+  category_meta: z.record(z.string(), z.any()).default({}).optional(),
+  content_rules: z.record(z.string(), z.any()).default({}).optional(),
   cpm_rate: z.number().nonnegative().nullable().optional(),
   budget_pool: z.number().nonnegative().nullable().optional(),
   budget_reserved: z.number().nonnegative().default(0).optional(),

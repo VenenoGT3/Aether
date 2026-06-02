@@ -7,6 +7,7 @@ import { Eye, Layers, Zap, ArrowRight, Megaphone, Clock } from "lucide-react";
 import { isMockMode, supabase } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useTranslation } from "@/lib/translations";
+import { campaignCategoryLabel } from "@/lib/campaign-category";
 
 interface PerfCampaign {
   id: string;
@@ -15,6 +16,7 @@ interface PerfCampaign {
   budget_pool?: number | null;
   budget_reserved?: number | null;
   budget_paid?: number | null;
+  campaign_category?: "ugc" | "clipping" | null;
 }
 
 interface BrandClipLite {
@@ -53,7 +55,7 @@ export function BrandPerformanceSummary() {
     const [{ data: camps }, { data: clipRows }] = await Promise.all([
       supabase
         .from("campaigns")
-        .select("id, title, status, budget_pool, budget_reserved, budget_paid")
+        .select("id, title, status, budget_pool, budget_reserved, budget_paid, campaign_category")
         .eq("campaign_type", "performance"),
       supabase.from("clips").select("campaign_id, status, current_views, creator_id"),
     ]);
@@ -233,6 +235,11 @@ export function BrandPerformanceSummary() {
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm font-semibold truncate">{c.title}</span>
+                    {campaignCategoryLabel(c.campaign_category) && (
+                      <span className="text-[8px] font-bold uppercase tracking-wide bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full shrink-0">
+                        {t(campaignCategoryLabel(c.campaign_category)!)}
+                      </span>
+                    )}
                     <span className="text-[8px] font-bold uppercase tracking-wide bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 px-1.5 py-0.5 rounded-full shrink-0">
                       {t("Performance")}
                     </span>

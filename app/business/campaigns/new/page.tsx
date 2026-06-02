@@ -22,7 +22,9 @@ import {
   CreditCard,
   CheckCircle2,
   Zap,
-  Eye
+  Eye,
+  FileText,
+  Scissors
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -32,6 +34,10 @@ import { fundCampaignPoolAction } from "@/lib/stripe/actions";
 import { PoolPaymentModal } from "@/components/pool-payment-modal";
 import { generateCampaignBriefAction } from "@/lib/actions/ai";
 import { useTranslation } from "@/lib/translations";
+import {
+  CAMPAIGN_CATEGORY_DESCRIPTIONS,
+  type CampaignCategory,
+} from "@/lib/campaign-category";
 
 // Standard niches list
 const AVAILABLE_NICHES = [
@@ -102,6 +108,36 @@ export default function NewCampaignWizard() {
   const [viewHoldbackHours, setViewHoldbackHours] = useState(48);
   const [contentRules, setContentRules] = useState("");
   const isPerformance = campaignType === "performance";
+
+  // UGC vs Clipping (performance sub-type) + the type-specific brief fields.
+  const [campaignCategory, setCampaignCategory] = useState<CampaignCategory>("clipping");
+  const isUgc = campaignCategory === "ugc";
+  // UGC fields
+  const [creativeDirection, setCreativeDirection] = useState("");
+  const [references, setReferences] = useState("");
+  const [dos, setDos] = useState("");
+  const [donts, setDonts] = useState("");
+  // Clipping fields
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [clipMinSec, setClipMinSec] = useState(10);
+  const [clipMaxSec, setClipMaxSec] = useState(60);
+  const [clipRequirements, setClipRequirements] = useState("");
+
+  // Type-specific brief, persisted to campaigns.category_meta (performance only).
+  const buildCategoryMeta = () =>
+    isUgc
+      ? {
+          creative_direction: creativeDirection.trim(),
+          references: references.trim(),
+          dos: dos.trim(),
+          donts: donts.trim(),
+        }
+      : {
+          source_url: sourceUrl.trim(),
+          min_duration_sec: clipMinSec,
+          max_duration_sec: clipMaxSec,
+          requirements: clipRequirements.trim(),
+        };
 
   const togglePlatform = (p: string) =>
     setPlatforms((prev) =>
@@ -241,6 +277,8 @@ export default function NewCampaignWizard() {
         timeline: { startDate, endDate, draftDueDate },
         status: "draft",
         campaign_type: "performance",
+        campaign_category: campaignCategory,
+        category_meta: buildCategoryMeta(),
         cpm_rate: cpmRate,
         budget_pool: budgetTotal,
         max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
@@ -314,6 +352,8 @@ export default function NewCampaignWizard() {
         campaign_type: campaignType,
         ...(isPerformance
           ? {
+              campaign_category: campaignCategory,
+              category_meta: buildCategoryMeta(),
               cpm_rate: cpmRate,
               budget_pool: budgetTotal,
               max_payout_per_creator:
@@ -547,6 +587,47 @@ export default function NewCampaignWizard() {
                       </button>
                     </div>
                   </div>
+
+                  {/* UGC vs Clipping sub-type (performance campaigns only). */}
+                  {isPerformance && (
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Content Type")}</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setCampaignCategory("clipping")}
+                          className={`text-left p-4 rounded-2xl border transition-all ${
+                            !isUgc
+                              ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
+                              : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <Scissors size={14} className="text-primary" /> {t("Clipping")}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
+                            {t(CAMPAIGN_CATEGORY_DESCRIPTIONS.clipping)}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCampaignCategory("ugc")}
+                          className={`text-left p-4 rounded-2xl border transition-all ${
+                            isUgc
+                              ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
+                              : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <FileText size={14} className="text-[#FF9500]" /> {t("UGC")}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
+                            {t(CAMPAIGN_CATEGORY_DESCRIPTIONS.ugc)}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Campaign Title")}</label>
@@ -878,6 +959,106 @@ export default function NewCampaignWizard() {
                         />
                       </div>
 
+                      {/* Type-specific requirements: Clipping vs UGC */}
+                      <div className="rounded-2xl border border-border/15 bg-secondary/[0.04] p-5 space-y-4">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                          {isUgc ? <FileText size={13} className="text-[#FF9500]" /> : <Scissors size={13} className="text-primary" />}
+                          {isUgc ? t("UGC brief") : t("Clipping spec")}
+                        </span>
+
+                        {isUgc ? (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Creative direction")}</label>
+                              <textarea
+                                rows={2}
+                                placeholder={t("Concept, mood, framing, what the content should feel like...")}
+                                value={creativeDirection}
+                                onChange={(e) => setCreativeDirection(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("References (links)")}</label>
+                              <input
+                                type="text"
+                                placeholder={t("Links to example posts / a moodboard")}
+                                value={references}
+                                onChange={(e) => setReferences(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/45"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider block">{t("Do's")}</label>
+                                <textarea
+                                  rows={2}
+                                  placeholder={t("Show the product in use, natural lighting...")}
+                                  value={dos}
+                                  onChange={(e) => setDos(e.target.value)}
+                                  className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-destructive uppercase tracking-wider block">{t("Don'ts")}</label>
+                                <textarea
+                                  rows={2}
+                                  placeholder={t("No competing brands, no profanity...")}
+                                  value={donts}
+                                  onChange={(e) => setDonts(e.target.value)}
+                                  className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Source video / footage link")}</label>
+                              <input
+                                type="text"
+                                placeholder={t("https://drive.google.com/... or a YouTube/stream link to clip from")}
+                                value={sourceUrl}
+                                onChange={(e) => setSourceUrl(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/45"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Min clip length (sec)")}</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={clipMinSec}
+                                  onChange={(e) => setClipMinSec(Number(e.target.value))}
+                                  className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Max clip length (sec)")}</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={clipMaxSec}
+                                  onChange={(e) => setClipMaxSec(Number(e.target.value))}
+                                  className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Clip requirements")}</label>
+                              <textarea
+                                rows={2}
+                                placeholder={t("Which moments to clip, captions/subtitles, aspect ratio...")}
+                                value={clipRequirements}
+                                onChange={(e) => setClipRequirements(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
                         <Eye size={14} className="shrink-0 text-primary" />
                         <span>
@@ -967,6 +1148,17 @@ export default function NewCampaignWizard() {
                       <div>
                         <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Title")}</span>
                         <p className="text-sm font-bold text-foreground mt-0.5">{title || t("Untitled Campaign")}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border ${isPerformance ? "bg-primary/10 text-primary border-primary/20" : "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20"}`}>
+                            {isPerformance ? t("Performance") : t("Fixed fee")}
+                          </span>
+                          {isPerformance && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border bg-secondary text-muted-foreground border-border/30 flex items-center gap-1">
+                              {isUgc ? <FileText size={9} /> : <Scissors size={9} />}
+                              {isUgc ? t("UGC") : t("Clipping")}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Target Niches")}</span>

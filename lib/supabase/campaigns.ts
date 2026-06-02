@@ -111,6 +111,13 @@ const DEFAULT_MOCK_CAMPAIGNS = [
     max_payout_per_creator: 1500,
     view_holdback_hours: 48,
     platforms: ["tiktok", "instagram", "youtube"],
+    campaign_category: "clipping",
+    category_meta: {
+      source_url: "https://drive.google.com/aether-launch-footage",
+      min_duration_sec: 10,
+      max_duration_sec: 60,
+      requirements: "Hook in first 2s, vertical 9:16, tag @aether.",
+    },
     content_rules: { notes: "Hook in first 2s, tag @aether, no competing brands, keep it vertical." },
     target_niches: ["Tech", "Design", "Lifestyle"],
     target_audience: { location: "Global", ageRange: "18-34", gender: "All", minimumFollowers: 0 },
@@ -255,6 +262,11 @@ export async function createCampaignAction(campaignData: any) {
         status: isPerformance ? "draft" : campaignData.status || "draft",
         // Performance-clipping fields (Phase 6)
         campaign_type: campaignData.campaign_type || "fixed",
+        // UGC vs Clipping sub-type (performance only); fixed campaigns stay NULL.
+        campaign_category: isPerformance
+          ? campaignData.campaign_category ?? "clipping"
+          : null,
+        category_meta: isPerformance ? campaignData.category_meta ?? {} : {},
         cpm_rate: isPerformance ? campaignData.cpm_rate ?? null : null,
         budget_pool: isPerformance
           ? campaignData.budget_pool ?? campaignData.budget_total

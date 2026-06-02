@@ -92,6 +92,7 @@ export const AiDiscoverBodySchema = z.object({
         // Preserve performance-model fields through AI re-ranking (Zod strips
         // unknown keys, so they must be declared to survive the round-trip).
         campaign_type: z.enum(["fixed", "performance"]).optional(),
+        campaign_category: z.enum(["ugc", "clipping"]).nullable().optional(),
         cpm_rate: z.number().nonnegative().nullable().optional(),
         budget_pool: z.number().nonnegative().nullable().optional(),
       })

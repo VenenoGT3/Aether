@@ -18,8 +18,10 @@ import {
   Megaphone,
   Briefcase,
   X,
-  FileText
+  FileText,
+  Scissors
 } from "lucide-react";
+import { CAMPAIGN_CATEGORY_LABELS } from "@/lib/campaign-category";
 import { Button } from "@/components/ui/button";
 import { 
   Dialog, 
@@ -52,6 +54,7 @@ interface Campaign {
   matchScore?: number;
   matchingReason?: string;
   campaign_type?: "fixed" | "performance";
+  campaign_category?: "ugc" | "clipping" | null;
 }
 
 const initialMockCampaigns: Campaign[] = [
@@ -67,7 +70,23 @@ const initialMockCampaigns: Campaign[] = [
     payout_speed: "Pay per view (CPM)",
     days_left: 28,
     image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
-    campaign_type: "performance"
+    campaign_type: "performance",
+    campaign_category: "clipping"
+  },
+  {
+    id: "camp_perf_ugc",
+    title: "Aether Desk Shelf — UGC Showcase",
+    description: "Open UGC campaign. Film your own short-form take on the Aether desk shelf from our brief and earn per view. Original creator content, no source footage.",
+    businessName: "Aether Labs",
+    budget_total: 6000,
+    target_niches: ["Tech", "Design", "Minimalism"],
+    deliverables: [{ type: "ugc_video", quantity: 1, description: "Original short-form vertical video from the brief." }],
+    timeline: { start_date: "2026-05-28", end_date: "2026-06-28" },
+    payout_speed: "Pay per view (CPM)",
+    days_left: 26,
+    image_url: "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=800&q=80",
+    campaign_type: "performance",
+    campaign_category: "ugc"
   },
   {
     id: "camp_2",
@@ -153,6 +172,7 @@ export default function DiscoverPage() {
   const [selectedBudget, setSelectedBudget] = useState<string>("All");
   const [selectedSpeed, setSelectedSpeed] = useState<string>("All");
   const [selectedType, setSelectedType] = useState<string>("All");
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
   // Dialog State
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -243,6 +263,7 @@ export default function DiscoverPage() {
             : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80",
           // Drives the Join (performance) vs Apply (fixed) branch on the card.
           campaign_type: c.campaign_type,
+          campaign_category: c.campaign_category,
         }));
 
         if (profile) {
@@ -566,6 +587,12 @@ export default function DiscoverPage() {
       if (selectedSpeed === "standard" && c.payout_speed === "Instant Escrow") return false;
     }
 
+    // 6. Content Type (UGC vs Clipping) — applies to performance campaigns; a
+    // specific category excludes fixed campaigns (which have no category).
+    if (selectedCategory !== "All" && c.campaign_category !== selectedCategory) {
+      return false;
+    }
+
     return true;
   });
 
@@ -805,6 +832,17 @@ export default function DiscoverPage() {
                   <option value="standard">Standard Payout</option>
                 </select>
 
+                {/* Content Type Filter (UGC vs Clipping) */}
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="px-3.5 py-2.5 rounded-2xl bg-secondary/30 border border-border/20 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
+                >
+                  <option value="All">{t("All Content Types")}</option>
+                  <option value="clipping">{t("Clipping")}</option>
+                  <option value="ugc">{t("UGC")}</option>
+                </select>
+
                 {/* Deliverable Type Filter */}
                 <select
                   value={selectedType}
@@ -819,13 +857,14 @@ export default function DiscoverPage() {
                 </select>
 
                 {/* Clear Filters Button */}
-                {(selectedNiche !== "All" || selectedBudget !== "All" || selectedSpeed !== "All" || selectedType !== "All" || searchQuery) && (
+                {(selectedNiche !== "All" || selectedBudget !== "All" || selectedSpeed !== "All" || selectedType !== "All" || selectedCategory !== "All" || searchQuery) && (
                   <button
                     onClick={() => {
                       setSelectedNiche("All");
                       setSelectedBudget("All");
                       setSelectedSpeed("All");
                       setSelectedType("All");
+                      setSelectedCategory("All");
                       setSearchQuery("");
                     }}
                     className="px-3 py-2 text-[10px] font-bold text-destructive hover:bg-destructive/10 rounded-xl flex items-center gap-1 cursor-pointer transition-all"
@@ -899,6 +938,18 @@ export default function DiscoverPage() {
 
                         {/* Content */}
                         <div className="p-5 space-y-4">
+                          {camp.campaign_category && (
+                            <span
+                              className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+                                camp.campaign_category === "ugc"
+                                  ? "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20"
+                                  : "bg-primary/10 text-primary border-primary/20"
+                              }`}
+                            >
+                              {camp.campaign_category === "ugc" ? <FileText size={9} /> : <Scissors size={9} />}
+                              {t(CAMPAIGN_CATEGORY_LABELS[camp.campaign_category])}
+                            </span>
+                          )}
                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[36px]">
                             {camp.description}
                           </p>
