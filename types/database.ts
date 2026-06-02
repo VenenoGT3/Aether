@@ -10,6 +10,8 @@ export const CampaignStatusSchema = z.enum([
   "in_progress",
   "completed",
   "cancelled",
+  // Performance pool fully consumed → auto-closed to new earnings.
+  "exhausted",
 ]);
 export type CampaignStatus = z.infer<typeof CampaignStatusSchema>;
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase, isMockMode, getMockUser } from "./client";
 import { apiPost } from "@/lib/api/client";
 import { addBusinessDays, APPROVAL_WINDOW_BUSINESS_DAYS } from "@/lib/approval";
+import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
+import { getCampaignsAction } from "./campaigns";
 
 /**
  * Data layer for the performance-clipping UI (Phase 6).
@@ -397,6 +399,34 @@ export function useCreatorClips() {
     async (campaignId: string, postUrl: string, campaignTitle?: string) => {
       const platform = detectPlatform(postUrl);
       if (isMockMode) {
+        // Budget gate (mirrors the API): closed or >= 90% used → block.
+        try {
+          const { campaigns } = await getCampaignsAction();
+          const camp = (campaigns || []).find(
+            (c: { id?: string }) => c.id === campaignId
+          ) as
+            | {
+                status?: string;
+                campaign_type?: string;
+                budget_pool?: number;
+                budget_reserved?: number;
+                budget_paid?: number;
+              }
+            | undefined;
+          if (camp) {
+            if (camp.status && camp.status !== "open" && camp.status !== "in_progress") {
+              return { ok: false, error: "This campaign is closed and is not accepting new clips." };
+            }
+            if (camp.campaign_type === "performance" && isNearlyFull(budgetUsage(camp))) {
+              return {
+                ok: false,
+                error: "This campaign has used most of its budget and is no longer accepting new clips.",
+              };
+            }
+          }
+        } catch {
+          /* best-effort budget gate */
+        }
         const list = readLs<CreatorClip[]>(CLIPS_LS_KEY, SEED_CLIPS);
         if (list.some((c) => c.post_url === postUrl)) {
           return { ok: false, error: "This clip has already been submitted." };

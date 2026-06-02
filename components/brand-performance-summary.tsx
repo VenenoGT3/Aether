@@ -109,6 +109,8 @@ export function BrandPerformanceSummary() {
   const totalPaid = campaigns.reduce((s, c) => s + Number(c.budget_paid || 0), 0);
   const totalRemaining = Math.max(totalPool - totalReserved - totalPaid, 0);
   const poolPct = (v: number) => (totalPool > 0 ? Math.min((v / totalPool) * 100, 100) : 0);
+  const usedPct = totalPool > 0 ? ((totalReserved + totalPaid) / totalPool) * 100 : 0;
+  const anyExhausted = campaigns.some((c) => c.status === "exhausted");
   const activeCount = campaigns.filter(
     (c) => c.status === "open" || c.status === "in_progress"
   ).length;
@@ -152,6 +154,29 @@ export function BrandPerformanceSummary() {
         </Link>
       </div>
 
+      {/* Threshold warning / closed notice */}
+      {anyExhausted ? (
+        <div className="mb-4 p-4 rounded-2xl bg-destructive/5 border border-destructive/20 flex items-center gap-3">
+          <span className="p-2 rounded-xl bg-destructive/10 text-destructive shrink-0">
+            <Clock size={15} />
+          </span>
+          <p className="text-[11px] text-foreground leading-normal">
+            <span className="font-bold">{t("A campaign hit 100% of its budget and was closed.")}</span>{" "}
+            {t("Top up the pool with a new campaign to keep collecting clips.")}
+          </p>
+        </div>
+      ) : usedPct >= 90 ? (
+        <div className="mb-4 p-4 rounded-2xl bg-[#FF9500]/5 border border-[#FF9500]/25 flex items-center gap-3">
+          <span className="p-2 rounded-xl bg-[#FF9500]/10 text-[#FF9500] shrink-0">
+            <Clock size={15} />
+          </span>
+          <p className="text-[11px] text-foreground leading-normal">
+            <span className="font-bold">{t("You've used 90%+ of your pooled budget.")}</span>{" "}
+            {t("New clip submissions are paused near the limit, and campaigns close automatically at 100%.")}
+          </p>
+        </div>
+      ) : null}
+
       {/* Headline budget burn-down across all performance campaigns */}
       <div className="p-5 apple-card mb-4">
         <div className="flex justify-between items-baseline mb-2">
@@ -160,21 +185,29 @@ export function BrandPerformanceSummary() {
           </span>
           <span className="text-xs font-semibold text-foreground">
             {money(totalRemaining)} {t("remaining")}{" "}
-            <span className="text-muted-foreground font-medium">/ {money(totalPool)} {t("pool")}</span>
+            <span className="text-muted-foreground font-medium">/ {money(totalPool)} {t("pool")} · {Math.round(usedPct)}%</span>
           </span>
         </div>
-        <div className="h-3 rounded-full bg-secondary/40 overflow-hidden flex">
-          <motion.div
-            className="h-full bg-[#007AFF]"
-            initial={{ width: 0 }}
-            animate={{ width: `${poolPct(totalPaid)}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          />
-          <motion.div
-            className="h-full bg-[#FF9500]"
-            initial={{ width: 0 }}
-            animate={{ width: `${poolPct(totalReserved)}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
+        <div className="relative">
+          <div className="h-3 rounded-full bg-secondary/40 overflow-hidden flex">
+            <motion.div
+              className="h-full bg-[#007AFF]"
+              initial={{ width: 0 }}
+              animate={{ width: `${poolPct(totalPaid)}%` }}
+              transition={{ type: "spring", stiffness: 120, damping: 20 }}
+            />
+            <motion.div
+              className="h-full bg-[#FF9500]"
+              initial={{ width: 0 }}
+              animate={{ width: `${poolPct(totalReserved)}%` }}
+              transition={{ type: "spring", stiffness: 120, damping: 20 }}
+            />
+          </div>
+          {/* 90% submission-block marker */}
+          <span
+            className="absolute -top-1 -bottom-1 w-0.5 bg-foreground/40"
+            style={{ left: "90%" }}
+            title="90% — new submissions blocked"
           />
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5 text-[10px] font-semibold text-muted-foreground">
@@ -243,18 +276,27 @@ export function BrandPerformanceSummary() {
                     <span className="text-[8px] font-bold uppercase tracking-wide bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 px-1.5 py-0.5 rounded-full shrink-0">
                       {t("Performance")}
                     </span>
+                    {c.status === "exhausted" && (
+                      <span className="text-[8px] font-bold uppercase tracking-wide bg-destructive/10 text-destructive border border-destructive/20 px-1.5 py-0.5 rounded-full shrink-0">
+                        {t("Closed")}
+                      </span>
+                    )}
                   </div>
                   <span className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1">
                     <Eye size={11} /> {viewsByCampaign(c.id).toLocaleString()}
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-secondary/40 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-[#007AFF] to-[#34C759]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${pct}%` }}
-                    transition={{ type: "spring", stiffness: 120, damping: 20 }}
-                  />
+                <div className="relative">
+                  <div className="h-2 rounded-full bg-secondary/40 overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-[#007AFF] to-[#34C759]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ type: "spring", stiffness: 120, damping: 20 }}
+                    />
+                  </div>
+                  {/* 90% marker */}
+                  <span className="absolute -top-0.5 -bottom-0.5 w-px bg-foreground/40" style={{ left: "90%" }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5 font-medium">
                   <span>{money(used)} {t("used")}</span>

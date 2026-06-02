@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ClipSubmitBody } from "@/lib/api/schemas";
+import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
 
 function detectPlatform(
   postUrl: string,
@@ -66,6 +67,33 @@ export async function submitClip(
       error: "Your participation in this campaign is not active.",
       status: 409,
     };
+  }
+
+  // Budget threshold gate (soft, best-effort): refuse new clips once a campaign
+  // is closed or has used >= 90% of its pool. The hard overspend guard lives in
+  // record_clip_earning; this just gives creators clear, early feedback.
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("status, campaign_type, budget_pool, budget_reserved, budget_paid")
+    .eq("id", body.campaign_id)
+    .maybeSingle();
+
+  if (campaign) {
+    if (campaign.status !== "open" && campaign.status !== "in_progress") {
+      return {
+        ok: false,
+        error: "This campaign is closed and is not accepting new clips.",
+        status: 409,
+      };
+    }
+    if (campaign.campaign_type === "performance" && isNearlyFull(budgetUsage(campaign))) {
+      return {
+        ok: false,
+        error:
+          "This campaign has used most of its budget and is no longer accepting new clips. Try another campaign.",
+        status: 409,
+      };
+    }
   }
 
   // Anti-fraud: the same post can't be reused across campaigns to double-dip a

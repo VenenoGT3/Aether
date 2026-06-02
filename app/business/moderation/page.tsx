@@ -24,6 +24,7 @@ import { Clock } from "lucide-react";
 interface PerfCampaign {
   id: string;
   title: string;
+  status?: string;
   budget_pool?: number | null;
   budget_reserved?: number | null;
   budget_paid?: number | null;
@@ -60,7 +61,7 @@ export default function BrandModerationPage() {
     }
     const { data } = await supabase
       .from("campaigns")
-      .select("id, title, budget_pool, budget_reserved, budget_paid")
+      .select("id, title, status, budget_pool, budget_reserved, budget_paid")
       .eq("campaign_type", "performance");
     setCampaigns((data ?? []) as PerfCampaign[]);
   }, []);
@@ -243,13 +244,23 @@ export default function BrandModerationPage() {
                   const pct = (v: number) => (pool > 0 ? (v / pool) * 100 : 0);
                   return (
                     <div key={c.id}>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-xs font-semibold truncate max-w-[140px]">{c.title}</span>
-                        <span className="text-[10px] text-muted-foreground">{money(pool)} {t("pool")}</span>
+                      <div className="flex justify-between items-center mb-1.5 gap-2">
+                        <span className="text-xs font-semibold truncate max-w-[120px] flex items-center gap-1.5">
+                          {c.title}
+                          {c.status === "exhausted" && (
+                            <span className="text-[8px] font-bold uppercase tracking-wide bg-destructive/10 text-destructive border border-destructive/20 px-1.5 py-0.5 rounded-full shrink-0">
+                              {t("Closed")}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{money(pool)} {t("pool")}</span>
                       </div>
-                      <div className="h-2.5 rounded-full bg-secondary/40 overflow-hidden flex">
-                        <div className="h-full bg-[#007AFF]" style={{ width: `${pct(paid)}%` }} title="Paid" />
-                        <div className="h-full bg-[#FF9500]" style={{ width: `${pct(reserved)}%` }} title="Reserved" />
+                      <div className="relative">
+                        <div className="h-2.5 rounded-full bg-secondary/40 overflow-hidden flex">
+                          <div className="h-full bg-[#007AFF]" style={{ width: `${pct(paid)}%` }} title="Paid" />
+                          <div className="h-full bg-[#FF9500]" style={{ width: `${pct(reserved)}%` }} title="Reserved" />
+                        </div>
+                        <span className="absolute -top-0.5 -bottom-0.5 w-px bg-foreground/40" style={{ left: "90%" }} title="90%" />
                       </div>
                       <div className="flex justify-between text-[9px] font-semibold mt-1.5 text-muted-foreground">
                         <span className="text-[#007AFF]">{t("Paid")} {money(paid)}</span>
