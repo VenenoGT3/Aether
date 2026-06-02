@@ -140,7 +140,7 @@ export function CreatorPerformanceSummary() {
         <Info size={13} className="shrink-0 mt-0.5 text-primary" />
         <span>
           {t(
-            "Earnings clear the holdback window automatically, then pay out to your connected Stripe account once you pass the minimum threshold — no manual withdrawal needed."
+            "Earnings clear the holdback window automatically, then become available to withdraw from your Creator Wallet to your connected Stripe account."
           )}
         </span>
       </div>

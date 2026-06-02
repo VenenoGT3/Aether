@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,13 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Pre-select the role from the landing-page CTA (?role=business|influencer).
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("role");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read-once-on-mount
+    if (r === "influencer" || r === "business") setRole(r);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
