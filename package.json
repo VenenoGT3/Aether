@@ -10,6 +10,7 @@
     "lint": "eslint",
     "worker": "tsx worker/index.ts",
     "worker:once": "tsx worker/run-once.ts",
+    "payouts:once": "tsx worker/run-payouts-once.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts"

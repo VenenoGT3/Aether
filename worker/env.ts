@@ -53,3 +53,24 @@ export function getViewSyncBatchSize(): number {
   const raw = Number(process.env.VIEW_SYNC_BATCH_SIZE);
   return Number.isFinite(raw) && raw > 0 ? raw : 200;
 }
+
+/**
+ * Default settle delay before accrued earnings become payable. Used as a
+ * fallback only — each campaign carries its own view_holdback_hours.
+ */
+export function getViewHoldbackHours(): number {
+  const raw = Number(process.env.VIEW_HOLDBACK_HOURS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 48;
+}
+
+/** Minimum approved balance (per creator) before a payout is issued. */
+export function getMinPayoutThreshold(): number {
+  const raw = Number(process.env.MIN_PAYOUT_THRESHOLD);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 10;
+}
+
+/** How often the payout-batch job runs (minutes). Default 6h. */
+export function getPayoutBatchIntervalMinutes(): number {
+  const raw = Number(process.env.PAYOUT_BATCH_INTERVAL);
+  return Number.isFinite(raw) && raw > 0 ? raw : 360;
+}

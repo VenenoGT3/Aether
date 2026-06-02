@@ -3,6 +3,7 @@ import {
   connection,
   viewSyncQueue,
   earningsCalcQueue,
+  payoutBatchQueue,
   closeQueues,
 } from "./queues";
 import {
@@ -10,9 +11,11 @@ import {
   runViewSyncForClip,
   runEarningsCalc,
 } from "./processors";
+import { runPayoutBatch } from "./payout";
 import { QUEUE_NAMES, JOB_NAMES } from "./types";
 import type { SyncClipJob, CalcEarningJob } from "./types";
 import {
+  getPayoutBatchIntervalMinutes,
   getViewSyncIntervalMinutes,
   isMockMode,
   shouldSimulateViews,
@@ -31,16 +34,25 @@ import {
  * view provider.
  */
 
-const SCHEDULER_ID = "view-sync-scheduler";
+const VIEW_SYNC_SCHEDULER_ID = "view-sync-scheduler";
+const PAYOUT_SCHEDULER_ID = "payout-batch-scheduler";
 
-async function startScheduler(): Promise<void> {
-  const minutes = getViewSyncIntervalMinutes();
+async function startSchedulers(): Promise<void> {
+  const syncMinutes = getViewSyncIntervalMinutes();
   await viewSyncQueue.upsertJobScheduler(
-    SCHEDULER_ID,
-    { every: minutes * 60_000 },
+    VIEW_SYNC_SCHEDULER_ID,
+    { every: syncMinutes * 60_000 },
     { name: JOB_NAMES.fanOut, data: {} }
   );
-  console.log(`[worker] view-sync scheduled every ${minutes}m`);
+  console.log(`[worker] view-sync scheduled every ${syncMinutes}m`);
+
+  const payoutMinutes = getPayoutBatchIntervalMinutes();
+  await payoutBatchQueue.upsertJobScheduler(
+    PAYOUT_SCHEDULER_ID,
+    { every: payoutMinutes * 60_000 },
+    { name: JOB_NAMES.runPayouts, data: {} }
+  );
+  console.log(`[worker] payout-batch scheduled every ${payoutMinutes}m`);
 }
 
 function startViewSyncWorker(): Worker {
@@ -94,12 +106,14 @@ function startEarningsWorker(): Worker {
 }
 
 function startPayoutWorker(): Worker {
-  // Scaffold for Phase 5: settle 'approved' earnings into batched Stripe transfers.
+  // Single-instance (concurrency 1) — payout batching must not run in parallel.
   return new Worker(
     QUEUE_NAMES.payoutBatch,
     async (job: Job) => {
-      console.log(`[worker] payout-batch '${job.name}' received (not implemented yet)`);
-      return { skipped: true };
+      if (job.name === JOB_NAMES.runPayouts) {
+        return await runPayoutBatch();
+      }
+      return { ignored: job.name };
     },
     { connection, concurrency: 1 }
   );
@@ -122,7 +136,7 @@ async function main(): Promise<void> {
     });
   }
 
-  await startScheduler();
+  await startSchedulers();
   console.log("[worker] ready");
 
   const shutdown = async () => {
