@@ -101,7 +101,10 @@ export async function createStripeExpressAccount(
 }
 
 /**
- * Creates a PaymentIntent for campaign escrow funding
+ * Creates a Stripe PaymentIntent. Used for BOTH models:
+ *  - Fixed-fee escrow funding (legacy): metadata carries participationId/transactionId.
+ *  - Performance budget-pool funding (new): metadata carries { campaignId, kind: 'pool_funding' }.
+ * The webhook routes the succeeded event based on that metadata.
  */
 export async function createEscrowPaymentIntent(
   amount: number,

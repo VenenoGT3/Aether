@@ -36,10 +36,16 @@ interface Transaction {
 
 /**
  * Legacy fixed-fee escrow wallet. It shows escrow funding, contract releases,
- * and manual withdrawals. Performance-clipping earnings & payouts (which carry a
- * payout_id) live on the creator's "Clips & Earnings" page and are surfaced here
- * as positive "earnings payout" history rather than withdrawals.
+ * and manual withdrawals only. Performance-clipping earnings & payouts (which
+ * carry a payout_id) belong to the new model and are intentionally hidden here —
+ * they live on the creator's "Clips & Earnings" page (see banner + the payout_id
+ * filter in loadLedger).
  */
+
+// Mock ledger seeds a $2,500 'payout' (withdrawal) transaction. Add it back into
+// "Gross Earnings" so that figure reflects total earned (available + pending +
+// already-paid-out). Real mode derives gross from the live ledger instead.
+const MOCK_GROSS_PAYOUT_OFFSET = 2500;
 
 export default function WalletUI() {
   const [loading, setLoading] = useState(false);
@@ -108,7 +114,12 @@ export default function WalletUI() {
         setTransactions(defaultMockTransactions);
         calculateMockBalances(defaultMockTransactions);
       } else {
-        setTransactions(res.transactions as any || []);
+        // Legacy fixed-fee wallet: hide performance-clipping payouts (they carry
+        // a payout_id and are surfaced on the creator's "Clips & Earnings" page).
+        const fixedFeeTx = ((res.transactions as Transaction[]) || []).filter(
+          (tx) => !tx.payout_id
+        );
+        setTransactions(fixedFeeTx);
         setAvailableBalance(res.availableBalance || 0);
         setPendingBalance(res.pendingBalance || 0);
       }
@@ -381,7 +392,7 @@ export default function WalletUI() {
                 {ledgerLoading ? (
                   <span className="h-9 w-32 bg-secondary/60 animate-pulse rounded-lg block" />
                 ) : (
-                  formatCurrency(availableBalance + pendingBalance + (isMock ? 2500 : 0)) // Available + Pending + Payouts
+                  formatCurrency(availableBalance + pendingBalance + (isMock ? MOCK_GROSS_PAYOUT_OFFSET : 0))
                 )}
               </h2>
             </div>
@@ -450,10 +461,10 @@ export default function WalletUI() {
                     variants={itemVariants}
                     className="hover:bg-secondary/15 transition-colors"
                   >
-                    {/* Title — performance payouts (payout_id) are earnings, not withdrawals */}
+                    {/* Title (fixed-fee only — performance payouts are filtered out above) */}
                     <td className="py-4 pr-4 font-semibold text-foreground">
                       {tx.type === "payout" ? (
-                        <span>{tx.payout_id ? "Clipping earnings payout" : "Bank Withdrawal Transfer"}</span>
+                        <span>Bank Withdrawal Transfer</span>
                       ) : (
                         <span>{tx.campaignTitle || "Campaign Contract Payout"}</span>
                       )}
@@ -495,12 +506,11 @@ export default function WalletUI() {
                       {formatDate(tx.created_at)}
                     </td>
 
-                    {/* Amount — a clipping earnings payout (payout_id) is money IN (+),
-                        a legacy bank withdrawal is money OUT (-). */}
+                    {/* Amount — fixed-fee withdrawals are money out (-), everything else in (+). */}
                     <td className={`py-4 pl-4 text-right font-bold text-sm ${
-                      tx.type === "payout" && !tx.payout_id ? "text-destructive/80" : "text-foreground"
+                      tx.type === "payout" ? "text-destructive/80" : "text-foreground"
                     }`}>
-                      {tx.type === "payout" && !tx.payout_id ? "-" : "+"}
+                      {tx.type === "payout" ? "-" : "+"}
                       {formatCurrency(tx.amount)}
                     </td>
                   </motion.tr>

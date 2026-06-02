@@ -1,5 +1,15 @@
 import type { UserRole } from "@/types";
 
+/**
+ * Authorization + verification helpers.
+ *
+ * - The escrow asserts below (fund / release / approve) belong to the LEGACY
+ *   fixed-fee model and are still used by that flow (and reused by performance
+ *   pool funding, which also requires the business role).
+ * - verifyCronAuth / verifyStripeWebhookSignature are shared infrastructure used
+ *   by BOTH models (metrics cron + Stripe webhooks).
+ */
+
 export type ParticipationStatus =
   | "applied"
   | "approved"
