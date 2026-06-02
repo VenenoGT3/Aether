@@ -3,6 +3,7 @@ import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
 import { checkVelocity } from "./fraud";
 import { getViewSyncBatchSize } from "./env";
+import { log } from "./logger";
 import type { ClipRow, ViewSyncOutcome } from "./types";
 
 /**
@@ -76,7 +77,13 @@ export async function runViewSyncForClip(
         last_synced_at: new Date().toISOString(),
       })
       .eq("id", clipId);
-    console.warn(`[view-sync] disqualified clip ${clipId}: ${velocity.reason}`);
+    log.warn("viewsync.disqualified", {
+      clipId,
+      campaignId: clip.campaign_id,
+      reason: velocity.reason,
+      prevViews: clip.current_views,
+      newViews: metrics.views,
+    });
     return { status: "disqualified", clipId, reason: velocity.reason ?? "velocity" };
   }
 
@@ -106,6 +113,13 @@ export async function runViewSyncForClip(
     throw new Error(`[view-sync] clip update failed for ${clipId}: ${updErr.message}`);
   }
 
+  log.info("viewsync.synced", {
+    clipId,
+    campaignId: clip.campaign_id,
+    views: nextViews,
+    delta: nextViews - clip.counted_views,
+    source: metrics.source,
+  });
   return { status: "synced", clipId, views: nextViews };
 }
 
@@ -134,11 +148,10 @@ export async function runEarningsCalc(
 
   const amount = typeof data === "number" ? data : Number(data ?? 0);
   if (amount > 0) {
-    console.log(`[earnings] clip ${clipId} accrued $${amount.toFixed(2)}`);
+    log.info("earnings.accrued", { clipId, views, amount: amount.toFixed(2) });
   } else {
-    console.log(
-      `[earnings] clip ${clipId}: no accrual (no new billable views, or pool/cap exhausted)`
-    );
+    // Expected steady-state outcome (no new billable views, or pool/cap hit) — debug only.
+    log.debug("earnings.no_accrual", { clipId, views });
   }
   return amount;
 }

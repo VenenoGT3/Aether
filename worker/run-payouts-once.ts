@@ -1,5 +1,6 @@
 import { runPayoutBatch } from "./payout";
 import { isMockMode } from "./env";
+import { log, errMessage } from "./logger";
 
 /**
  * One-shot payout batch WITHOUT Redis (run with `npm run payouts:once`).
@@ -8,13 +9,13 @@ import { isMockMode } from "./env";
  * reserved -> paid, audit transaction) runs for real against Supabase.
  */
 async function main(): Promise<void> {
-  console.log(`[payouts:once] running one payout batch (mock=${isMockMode})`);
-  const summary = await runPayoutBatch();
-  console.log("[payouts:once] done:", summary);
+  log.info("payouts.once.start", { mock: isMockMode });
+  // runPayoutBatch emits its own structured summary (payout.batch.done).
+  await runPayoutBatch();
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error("[payouts:once] fatal:", err);
+  log.error("payouts.once.fatal", { error: errMessage(err) });
   process.exit(1);
 });

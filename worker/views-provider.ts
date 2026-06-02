@@ -4,6 +4,7 @@ import {
   isAyrshareEnabled,
   isMockMode,
 } from "./env";
+import { log, errMessage } from "./logger";
 import type { ClipRow, ViewData } from "./types";
 
 /**
@@ -102,9 +103,7 @@ class AyrshareViewsProvider implements ViewsProvider {
       // Honor rate limiting with a single backoff retry.
       if (res.status === 429) {
         const retryAfter = Number(res.headers.get("retry-after")) || 2;
-        console.warn(
-          `[views-provider] Ayrshare 429 for clip ${clip.id}; retrying in ${retryAfter}s`
-        );
+        log.warn("views.ayrshare.rate_limited", { clipId: clip.id, retryAfterSec: retryAfter });
         await sleep(retryAfter * 1000);
         const retry = await rateLimited(() =>
           fetch("https://api.ayrshare.com/api/analytics/post", {
@@ -124,18 +123,21 @@ class AyrshareViewsProvider implements ViewsProvider {
       }
 
       if (!res.ok) {
-        console.warn(
-          `[views-provider] Ayrshare ${res.status} for clip ${clip.id}; keeping last-known views`
-        );
+        log.warn("views.ayrshare.http_error", {
+          clipId: clip.id,
+          status: res.status,
+          note: "keeping last-known views",
+        });
         return lastKnown;
       }
 
       return parseAyrshare(await res.json(), clip.platform);
     } catch (err) {
-      console.error(
-        `[views-provider] Ayrshare fetch failed for clip ${clip.id}:`,
-        err instanceof Error ? err.message : err
-      );
+      log.error("views.ayrshare.fetch_error", {
+        clipId: clip.id,
+        note: "keeping last-known views",
+        error: errMessage(err),
+      });
       return lastKnown;
     }
   }
@@ -169,16 +171,17 @@ export function getViewsProvider(): ViewsProvider {
 
   if (isAyrshareEnabled()) {
     cachedProvider = new AyrshareViewsProvider();
-    console.log(
-      "[views-provider] REAL Ayrshare provider active — earnings based on live views."
-    );
+    log.info("views.provider", {
+      provider: "ayrshare",
+      note: "REAL — earnings based on live views",
+    });
   } else {
     cachedProvider = new SimulatedViewsProvider();
-    console.log(
-      `[views-provider] SIMULATED view provider active (${
-        isMockMode ? "AETHER_MOCK_MODE=true" : "no AYRSHARE_API_KEY"
-      }) — earnings based on simulated growth, NOT real views.`
-    );
+    log.info("views.provider", {
+      provider: "simulated",
+      reason: isMockMode ? "AETHER_MOCK_MODE=true" : "no AYRSHARE_API_KEY",
+      note: "earnings based on simulated growth, NOT real views",
+    });
   }
   return cachedProvider;
 }

@@ -122,6 +122,7 @@ npm run payouts:once     # one payout batch (no Redis)
 | `AYRSHARE_MIN_INTERVAL_MS` | worker | Rate-limit gap between Ayrshare calls (default 350) |
 | `VIEW_SYNC_INTERVAL_MINUTES` | worker | View-sync cadence (default 10) |
 | `VIEW_SYNC_BATCH_SIZE` | worker | Max clips per sync (default 200) |
+| `WORKER_LOG_DEBUG` | worker | `true` enables verbose per-clip/per-job debug logs (default off) |
 | `VIEW_HOLDBACK_HOURS` | worker | Fallback holdback (per-campaign value overrides; default 48) |
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |

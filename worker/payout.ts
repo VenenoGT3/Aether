@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { transferToCreator } from "./stripe";
 import { getMinPayoutThreshold, getViewHoldbackHours } from "./env";
+import { log, errMessage } from "./logger";
 import {
   selectPayableCreators,
   type EarningAmountRow,
@@ -44,10 +45,14 @@ export async function runPayoutBatch(
     totalPaid: 0,
   };
 
+  const threshold = getMinPayoutThreshold();
+  const holdback = getViewHoldbackHours();
+  log.info("payout.batch.start", { threshold, holdbackHours: holdback });
+
   // 1. Promote earnings past their holdback window.
   const { data: promoted, error: promoteErr } = await supabase.rpc(
     "promote_due_earnings",
-    { p_default_holdback_hours: getViewHoldbackHours() }
+    { p_default_holdback_hours: holdback }
   );
   if (promoteErr) {
     throw new Error(`[payout] promote_due_earnings failed: ${promoteErr.message}`);
@@ -64,9 +69,12 @@ export async function runPayoutBatch(
     throw new Error(`[payout] failed to load approved earnings: ${rowsErr.message}`);
   }
 
-  const threshold = getMinPayoutThreshold();
   const payable = selectPayableCreators((rows ?? []) as EarningAmountRow[], threshold);
   summary.creatorsConsidered = payable.length;
+  log.info("payout.candidates", {
+    promoted: summary.promoted,
+    payableCreators: payable.length,
+  });
 
   for (const { creatorId } of payable) {
     // 3. Atomically claim this creator's earnings into a payout.
@@ -75,7 +83,7 @@ export async function runPayoutBatch(
       { p_creator_id: creatorId, p_min_threshold: threshold }
     );
     if (claimErr) {
-      console.error(`[payout] claim failed for ${creatorId}: ${claimErr.message}`);
+      log.error("payout.claim.error", { creatorId, error: claimErr.message });
       continue;
     }
 
@@ -103,9 +111,7 @@ export async function runPayoutBatch(
       // Can't pay without a payout account — release the claim to retry later.
       await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
       summary.payoutsFailed += 1;
-      console.warn(
-        `[payout] creator ${creatorId} has no Stripe account; payout released`
-      );
+      log.warn("payout.no_account", { creatorId, payoutId, amount });
       continue;
     }
 
@@ -124,19 +130,25 @@ export async function runPayoutBatch(
       }
       summary.payoutsPaid += 1;
       summary.totalPaid += amount;
-      console.log(
-        `[payout] paid ${creatorId} $${amount.toFixed(2)}${mock ? " (mock)" : ""} -> ${transferId}`
-      );
+      log.info("payout.paid", {
+        creatorId,
+        payoutId,
+        amount: amount.toFixed(2),
+        transferId,
+        mock,
+      });
     } catch (err) {
       await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
       summary.payoutsFailed += 1;
-      console.error(
-        `[payout] transfer/settle failed for ${creatorId}:`,
-        err instanceof Error ? err.message : err
-      );
+      log.error("payout.transfer.error", {
+        creatorId,
+        payoutId,
+        amount: amount.toFixed(2),
+        error: errMessage(err),
+      });
     }
   }
 
-  console.log("[payout] batch complete:", summary);
+  log.info("payout.batch.done", { ...summary, totalPaid: summary.totalPaid.toFixed(2) });
   return summary;
 }
