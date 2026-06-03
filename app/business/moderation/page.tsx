@@ -25,6 +25,10 @@ import { approvalCountdownLabel, workingDaysLeft } from "@/lib/approval";
 import { Clock } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  CAMPAIGN_CATEGORY_LABELS,
+  type CampaignCategory,
+} from "@/lib/campaign-category";
 
 interface PerfCampaign {
   id: string;
@@ -236,6 +240,11 @@ export default function BrandModerationPage() {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <StatusBadge tone="warning">{t("Pending review")}</StatusBadge>
                     <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
+                    {clip.campaignCategory && (
+                      <StatusBadge tone="purple">
+                        {t(CAMPAIGN_CATEGORY_LABELS[clip.campaignCategory as CampaignCategory])}
+                      </StatusBadge>
+                    )}
                     {clip.creatorCpm != null && (
                       <StatusBadge tone="info">
                         ${Number(clip.creatorCpm).toFixed(2)} {t("CPM")}

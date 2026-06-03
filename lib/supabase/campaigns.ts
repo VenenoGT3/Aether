@@ -1,6 +1,9 @@
 import { supabase, isMockMode, getMockUser } from "./client";
 import { CampaignStatus } from "@/types/database";
 import { PLATFORM_FEE_PCT, feeBreakdown } from "@/lib/campaign-budget";
+import { isCampaignCategory } from "@/lib/campaign-category";
+import { validateCategoryMeta } from "@/lib/campaign-category-meta";
+import { apiLog } from "@/lib/api/trace-log";
 
 const LOCAL_STORAGE_KEY = "aether-campaigns";
 
@@ -263,6 +266,32 @@ export async function createCampaignAction(campaignData: CampaignInput) {
     };
   }
 
+  let normalizedCategory: "ugc" | "clipping" | null = null;
+  let normalizedMeta: Record<string, unknown> = {};
+  if (isPerformance) {
+    const categoryRaw = campaignData.campaign_category;
+    if (!isCampaignCategory(categoryRaw)) {
+      apiLog("alert", "campaign.create.category_missing", {
+        campaignType: campaignData.campaign_type,
+        category: categoryRaw,
+      });
+      return {
+        success: false,
+        error: "Choose UGC or Clipping for this performance campaign.",
+      };
+    }
+    const metaCheck = validateCategoryMeta(categoryRaw, campaignData.category_meta);
+    if (!metaCheck.ok) {
+      apiLog("alert", "campaign.create.category_meta_invalid", {
+        category: categoryRaw,
+        error: metaCheck.error,
+      });
+      return { success: false, error: metaCheck.error };
+    }
+    normalizedCategory = metaCheck.category;
+    normalizedMeta = metaCheck.meta;
+  }
+
   if (isMockMode) {
     const campaigns = getMockCampaigns();
     const mockPool = campaignData.budget_pool ?? campaignData.budget_total;
@@ -283,6 +312,8 @@ export async function createCampaignAction(campaignData: CampaignInput) {
             budget_reserved: 0,
             budget_paid: 0,
             funded_at: null,
+            campaign_category: normalizedCategory,
+            category_meta: normalizedMeta,
             // Brand-set CPM is the single source of truth; keep cpm_rate in sync.
             brand_cpm_rate: brandCpm,
             cpm_rate: brandCpm,
@@ -319,10 +350,8 @@ export async function createCampaignAction(campaignData: CampaignInput) {
         // Performance-clipping fields (Phase 6)
         campaign_type: campaignData.campaign_type || "fixed",
         // UGC vs Clipping sub-type (performance only); fixed campaigns stay NULL.
-        campaign_category: isPerformance
-          ? campaignData.campaign_category ?? "clipping"
-          : null,
-        category_meta: isPerformance ? campaignData.category_meta ?? {} : {},
+        campaign_category: normalizedCategory,
+        category_meta: isPerformance ? normalizedMeta : {},
         // Brand-set CPM is the single source of truth; cpm_rate kept in sync.
         brand_cpm_rate: isPerformance ? brandCpm : null,
         cpm_rate: isPerformance ? brandCpm : null,

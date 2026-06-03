@@ -270,7 +270,12 @@ export default function DiscoverPage() {
           // Drives the Join (performance) vs Apply (fixed) branch on the card.
           campaign_type: c.campaign_type,
           campaign_category: c.campaign_category,
-          cpm_rate: c.cpm_rate != null ? Number(c.cpm_rate) : null,
+          cpm_rate:
+            c.brand_cpm_rate != null
+              ? Number(c.brand_cpm_rate)
+              : c.cpm_rate != null
+                ? Number(c.cpm_rate)
+                : null,
         }));
 
         if (profile) {

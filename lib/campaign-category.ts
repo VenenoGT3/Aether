@@ -19,9 +19,14 @@ export const CAMPAIGN_CATEGORY_DESCRIPTIONS: Record<CampaignCategory, string> = 
   clipping: "Creators cut short clips from your source footage to spec — source link, duration limits, rules.",
 };
 
+/** Type guard for campaign_category column values. */
+export function isCampaignCategory(
+  value: string | null | undefined
+): value is CampaignCategory {
+  return value === "ugc" || value === "clipping";
+}
+
 /** Returns the display label for a category value, or null when not categorized. */
 export function campaignCategoryLabel(category?: string | null): string | null {
-  return category === "ugc" || category === "clipping"
-    ? CAMPAIGN_CATEGORY_LABELS[category]
-    : null;
+  return isCampaignCategory(category) ? CAMPAIGN_CATEGORY_LABELS[category] : null;
 }

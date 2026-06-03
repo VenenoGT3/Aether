@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   });
   if (!guarded.ok) return guarded.response;
 
-  const { q, niche, page, limit } = guarded.ctx.data;
+  const { q, niche, category, page, limit } = guarded.ctx.data;
   const offset = (page - 1) * limit;
 
   if (isMockMode) {
@@ -33,10 +33,11 @@ export async function GET(request: Request) {
   let query = supabase
     .from("campaigns")
     .select(
-      "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, campaign_category, cpm_rate, budget_pool",
+      "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, campaign_category, brand_cpm_rate, cpm_rate, budget_pool, platforms",
       { count: "exact" }
     )
     .eq("status", "open")
+    .eq("campaign_type", "performance")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -46,6 +47,10 @@ export async function GET(request: Request) {
 
   if (niche) {
     query = query.contains("target_niches", [niche]);
+  }
+
+  if (category) {
+    query = query.eq("campaign_category", category);
   }
 
   const { data, error, count } = await query;

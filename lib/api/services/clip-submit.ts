@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { ClipSubmitBody } from "@/lib/api/schemas";
 import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
+import { apiLog } from "@/lib/api/trace-log";
 
 function detectPlatform(
   postUrl: string,
@@ -35,6 +37,7 @@ export async function submitClip(
   userId: string,
   body: ClipSubmitBody
 ): Promise<ClipSubmitResult> {
+  const traceId = randomUUID();
   const supabase = await createClient();
 
   // The creator must already participate in this campaign.
@@ -74,9 +77,13 @@ export async function submitClip(
   // record_clip_earning; this just gives creators clear, early feedback.
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("status, campaign_type, budget_pool, available_pool, budget_reserved, budget_paid")
+    .select(
+      "status, campaign_type, campaign_category, platforms, budget_pool, available_pool, budget_reserved, budget_paid"
+    )
     .eq("id", body.campaign_id)
     .maybeSingle();
+
+  const platform = detectPlatform(body.post_url, body.platform);
 
   if (campaign) {
     if (campaign.status !== "open" && campaign.status !== "in_progress") {
@@ -91,6 +98,25 @@ export async function submitClip(
         ok: false,
         error:
           "This campaign has used most of its budget and is no longer accepting new clips. Try another campaign.",
+        status: 409,
+      };
+    }
+    const allowedPlatforms = (campaign.platforms as string[] | null) ?? [];
+    if (
+      campaign.campaign_type === "performance" &&
+      allowedPlatforms.length > 0 &&
+      !allowedPlatforms.includes(platform)
+    ) {
+      apiLog("warn", "clip.submit.platform_rejected", {
+        traceId,
+        campaignId: body.campaign_id,
+        platform,
+        allowed: allowedPlatforms,
+        category: campaign.campaign_category,
+      });
+      return {
+        ok: false,
+        error: `This campaign only accepts clips on: ${allowedPlatforms.join(", ")}.`,
         status: 409,
       };
     }
@@ -118,8 +144,6 @@ export async function submitClip(
       status: 409,
     };
   }
-
-  const platform = detectPlatform(body.post_url, body.platform);
 
   const { data: clip, error: insertErr } = await supabase
     .from("clips")
@@ -159,7 +183,27 @@ export async function submitClip(
           status: 409,
         };
       }
+      if (msg.includes("platform is not allowed")) {
+        return {
+          ok: false,
+          error: "This clip platform is not allowed for this campaign.",
+          status: 409,
+        };
+      }
+      if (msg.includes("not configured for clip")) {
+        return {
+          ok: false,
+          error: "This campaign is not configured for clip submissions.",
+          status: 409,
+        };
+      }
     }
+    apiLog("alert", "clip.submit.failed", {
+      traceId,
+      campaignId: body.campaign_id,
+      code: insertErr.code,
+      error: insertErr.message,
+    });
     return {
       ok: false,
       error: insertErr.message || "Could not submit your clip.",
@@ -167,5 +211,11 @@ export async function submitClip(
     };
   }
 
+  apiLog("info", "clip.submit.ok", {
+    traceId,
+    clipId: clip.id,
+    campaignId: body.campaign_id,
+    platform,
+  });
   return { ok: true, clip };
 }

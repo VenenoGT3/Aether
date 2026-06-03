@@ -235,6 +235,8 @@ export const CampaignSearchQuerySchema = z.object({
     .optional()
     .default("")
     .transform(sanitizeSearchQuery),
+  /** Filter performance campaigns by UGC vs Clipping sub-type. */
+  category: z.enum(["ugc", "clipping"]).optional(),
   page: z.coerce.number().int().min(1).max(100).optional().default(1),
   limit: z.coerce.number().int().min(1).max(30).optional().default(20),
 });

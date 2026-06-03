@@ -87,6 +87,7 @@ export interface ModerationClip {
   id: string;
   campaign_id: string;
   campaignTitle: string;
+  campaignCategory?: "ugc" | "clipping" | null;
   creatorName: string;
   platform: string;
   post_url: string;
@@ -374,7 +375,11 @@ export function useCreatorClips() {
       quality_status: QualityStatus | null;
       quality_notes: string | null;
       quality_score: number | null;
-      campaign: { title?: string; cpm_rate?: number | null } | null;
+      campaign: {
+        title?: string;
+        cpm_rate?: number | null;
+        campaign_category?: "ugc" | "clipping" | null;
+      } | null;
     };
     const rows = (data ?? []) as unknown as Row[];
     setClips(
@@ -672,7 +677,11 @@ export function useBrandModeration(campaignId?: string) {
       approval_deadline?: string | null;
       fraud_score?: number | null;
       fraud_reasons?: string[] | null;
-      campaign: { title?: string; cpm_rate?: number | null } | null;
+      campaign: {
+        title?: string;
+        cpm_rate?: number | null;
+        campaign_category?: "ugc" | "clipping" | null;
+      } | null;
       creator: { email?: string } | null;
     };
 
@@ -680,7 +689,7 @@ export function useBrandModeration(campaignId?: string) {
     let pendingQuery = supabase
       .from("clips")
       .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate, campaign_category), creator:creator_id(email)"
       )
       .eq("status", "pending")
       .eq("quality_status", "pending_review")
@@ -688,7 +697,7 @@ export function useBrandModeration(campaignId?: string) {
     let flaggedQuery = supabase
       .from("clips")
       .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, fraud_score, fraud_reasons, campaign:campaign_id(title, cpm_rate), creator:creator_id(email)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, fraud_score, fraud_reasons, campaign:campaign_id(title, cpm_rate, campaign_category), creator:creator_id(email)"
       )
       .eq("status", "tracking")
       .eq("fraud_flagged", true)
@@ -726,6 +735,7 @@ export function useBrandModeration(campaignId?: string) {
       id: r.id,
       campaign_id: r.campaign_id,
       campaignTitle: r.campaign?.title ?? "Campaign",
+      campaignCategory: r.campaign?.campaign_category ?? null,
       creatorName: nameById.get(r.creator_id) || r.creator?.email || "Unknown creator",
       platform: r.platform,
       post_url: r.post_url,

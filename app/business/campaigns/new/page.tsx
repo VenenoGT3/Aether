@@ -38,6 +38,7 @@ import {
   CAMPAIGN_CATEGORY_DESCRIPTIONS,
   type CampaignCategory,
 } from "@/lib/campaign-category";
+import { validateCategoryMeta } from "@/lib/campaign-category-meta";
 import { feeBreakdown } from "@/lib/campaign-budget";
 
 // Standard niches list
@@ -268,6 +269,13 @@ export default function NewCampaignWizard() {
   const startPerformancePublish = async () => {
     setPoolPublishing(true);
     try {
+      const metaCheck = validateCategoryMeta(campaignCategory, buildCategoryMeta());
+      if (!metaCheck.ok) {
+        toast.error(t("Complete the campaign brief"), { description: metaCheck.error });
+        setPoolPublishing(false);
+        return;
+      }
+
       const payload = {
         title,
         description,
@@ -278,8 +286,8 @@ export default function NewCampaignWizard() {
         timeline: { startDate, endDate, draftDueDate },
         status: "draft",
         campaign_type: "performance",
-        campaign_category: campaignCategory,
-        category_meta: buildCategoryMeta(),
+        campaign_category: metaCheck.category,
+        category_meta: metaCheck.meta,
         // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
         brand_cpm_rate: cpmRate,
         cpm_rate: cpmRate,
@@ -340,6 +348,20 @@ export default function NewCampaignWizard() {
   const handleConfirmPayment = async () => {
     setPaying(true);
     try {
+      let perfCategoryMeta: {
+        category: CampaignCategory;
+        meta: Record<string, unknown>;
+      } | null = null;
+      if (isPerformance) {
+        const metaCheck = validateCategoryMeta(campaignCategory, buildCategoryMeta());
+        if (!metaCheck.ok) {
+          toast.error(t("Complete the campaign brief"), { description: metaCheck.error });
+          setPaying(false);
+          return;
+        }
+        perfCategoryMeta = { category: metaCheck.category, meta: metaCheck.meta };
+      }
+
       // Simulate PaymentIntent verification delay
       await new Promise((resolve) => setTimeout(resolve, 2000));
       
@@ -353,10 +375,10 @@ export default function NewCampaignWizard() {
         timeline: { startDate, endDate, draftDueDate },
         status: "open", // transition from draft to open after payment
         campaign_type: campaignType,
-        ...(isPerformance
+        ...(isPerformance && perfCategoryMeta
           ? {
-              campaign_category: campaignCategory,
-              category_meta: buildCategoryMeta(),
+              campaign_category: perfCategoryMeta.category,
+              category_meta: perfCategoryMeta.meta,
               // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
               brand_cpm_rate: cpmRate,
               cpm_rate: cpmRate,
