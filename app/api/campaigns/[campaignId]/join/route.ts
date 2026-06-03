@@ -38,11 +38,7 @@ export async function POST(
     });
   }
 
-  const result = await joinCampaign(
-    campaignId,
-    guarded.ctx.auth!.userId,
-    guarded.ctx.data.creator_cpm_rate
-  );
+  const result = await joinCampaign(campaignId, guarded.ctx.auth!.userId);
   if (!result.ok) {
     return jsonError(result.error, result.status);
   }

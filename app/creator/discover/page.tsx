@@ -185,7 +185,6 @@ export default function DiscoverPage() {
   const [joiningId, setJoiningId] = useState<string | null>(null);
   // Performance join modal (creator sets their CPM before joining).
   const [joinModalCampaign, setJoinModalCampaign] = useState<Campaign | null>(null);
-  const [joinCpm, setJoinCpm] = useState<number>(2.5);
   
   // Application Form State
   const [proposedPayout, setProposedPayout] = useState<number>(0);
@@ -404,7 +403,7 @@ export default function DiscoverPage() {
     if (!joinModalCampaign) return;
     const campaign = joinModalCampaign;
     setJoiningId(campaign.id);
-    const res = await join(campaign.id, joinCpm > 0 ? joinCpm : undefined);
+    const res = await join(campaign.id);
     setJoiningId(null);
     if (res.ok) {
       setJoinModalCampaign(null);
@@ -422,8 +421,6 @@ export default function DiscoverPage() {
   // OPEN DETAILED APPLY MODAL (or the open-join modal for performance campaigns)
   const openApplyModal = (campaign: Campaign) => {
     if (campaign.campaign_type === "performance") {
-      const offered = campaign.cpm_rate && campaign.cpm_rate > 0 ? campaign.cpm_rate : 2.5;
-      setJoinCpm(offered);
       setJoinModalCampaign(campaign);
       return;
     }
@@ -1189,43 +1186,30 @@ export default function DiscoverPage() {
               {joinModalCampaign?.title}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-              {t("Set your pay-per-view rate, then join to start submitting clips.")}
+              {t("Join to start submitting clips. The brand sets the pay-per-view rate.")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
             <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
-              {t("Your CPM — $ per 1,000 views")}
+              {t("Payout rate (set by brand)")}
             </label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max={joinModalCampaign?.cpm_rate ?? undefined}
-                value={joinCpm}
-                onChange={(e) => setJoinCpm(Number(e.target.value))}
-                className="w-full pl-9 pr-4 py-3 rounded-2xl bg-secondary/35 border border-border/25 text-sm font-bold focus:outline-none focus:border-primary/45 transition-colors"
-              />
+            <div className="flex items-baseline gap-2 px-4 py-3 rounded-2xl bg-secondary/35 border border-border/25">
+              <DollarSign className="text-[#34C759]" size={16} />
+              <span className="text-lg font-bold tracking-tight">
+                {Number(joinModalCampaign?.cpm_rate ?? 0).toFixed(2)}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{t("CPM · per 1,000 views")}</span>
             </div>
-            <p className="text-[10px] text-muted-foreground font-medium">
-              {joinModalCampaign?.cpm_rate
-                ? t("The brand offers up to ${rate} per 1,000 views. Bid at or below to be competitive.").replace(
-                    "{rate}",
-                    Number(joinModalCampaign.cpm_rate).toFixed(2)
-                  )
-                : t("Pay per 1,000 views.")}
-            </p>
           </div>
 
-          {/* Estimated earnings preview */}
+          {/* Estimated earnings preview at the brand's rate */}
           <div className="flex items-center justify-between p-4 rounded-2xl bg-[#34C759]/5 border border-[#34C759]/15 text-xs">
             <span className="text-muted-foreground font-semibold flex items-center gap-1.5">
               <Eye size={13} /> {t("Est. per 100k views")}
             </span>
             <span className="font-extrabold text-[#34C759]">
-              ${Math.round(Math.max(joinCpm, 0) * 100).toLocaleString()}
+              ${Math.round(Math.max(Number(joinModalCampaign?.cpm_rate ?? 0), 0) * 100).toLocaleString()}
             </span>
           </div>
 
@@ -1239,7 +1223,7 @@ export default function DiscoverPage() {
             </button>
             <Button
               onClick={confirmJoin}
-              disabled={joiningId === joinModalCampaign?.id || joinCpm <= 0}
+              disabled={joiningId === joinModalCampaign?.id}
               className="rounded-2xl text-xs px-5 py-3 cursor-pointer shadow-sm bg-[#34C759] hover:bg-[#2fb350] text-white border-0"
             >
               {joiningId === joinModalCampaign?.id ? t("Joining...") : t("Join Campaign")}

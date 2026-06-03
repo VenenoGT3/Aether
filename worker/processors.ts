@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
@@ -320,6 +321,9 @@ export async function runEarningsCalc(
     return 0;
   }
 
+  // Trace id correlates the worker log with the DB-side RAISE LOG lines (which
+  // carry clip/campaign ids) for a single accrual attempt.
+  const traceId = randomUUID();
   const supabase = client ?? getServiceClient();
   const { data, error } = await supabase.rpc("record_clip_earning", {
     p_clip_id: clipId,
@@ -327,17 +331,26 @@ export async function runEarningsCalc(
   });
 
   if (error) {
+    // The atomic function rolled back (no partial ledger/pool writes). Surface it
+    // as a critical condition; BullMQ will retry per the configured backoff.
+    log.alert("earnings.rpc_failed", {
+      traceId,
+      clipId,
+      views,
+      code: (error as { code?: string }).code,
+      error: error.message,
+    });
     throw new Error(
-      `[earnings] record_clip_earning failed for ${clipId}: ${error.message}`
+      `[earnings] record_clip_earning failed for ${clipId} (trace ${traceId}): ${error.message}`
     );
   }
 
   const amount = typeof data === "number" ? data : Number(data ?? 0);
   if (amount > 0) {
-    log.info("earnings.accrued", { clipId, views, amount: amount.toFixed(2) });
+    log.info("earnings.accrued", { traceId, clipId, views, amount: amount.toFixed(2) });
   } else {
     // Expected steady-state outcome (no new billable views, or pool/cap hit) — debug only.
-    log.debug("earnings.no_accrual", { clipId, views });
+    log.debug("earnings.no_accrual", { traceId, clipId, views });
   }
   return amount;
 }

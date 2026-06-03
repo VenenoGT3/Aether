@@ -280,6 +280,8 @@ export default function NewCampaignWizard() {
         campaign_type: "performance",
         campaign_category: campaignCategory,
         category_meta: buildCategoryMeta(),
+        // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
+        brand_cpm_rate: cpmRate,
         cpm_rate: cpmRate,
         budget_pool: budgetTotal,
         max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
@@ -355,6 +357,8 @@ export default function NewCampaignWizard() {
           ? {
               campaign_category: campaignCategory,
               category_meta: buildCategoryMeta(),
+              // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
+              brand_cpm_rate: cpmRate,
               cpm_rate: cpmRate,
               budget_pool: budgetTotal,
               max_payout_per_creator:
@@ -913,7 +917,7 @@ export default function NewCampaignWizard() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Payout rate — CPM ($ per 1,000 views)")}</label>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("CPM you set — $ per 1,000 views (creators are paid this rate)")}</label>
                           <div className="relative">
                             <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground font-bold text-sm">$</span>
                             <input

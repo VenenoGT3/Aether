@@ -106,20 +106,14 @@ const CLIPS_LS_KEY = "aether-mock-clips";
 const EARNINGS_LS_KEY = "aether-mock-clip-earnings";
 const PAYOUTS_LS_KEY = "aether-mock-clip-payouts";
 const JOINED_LS_KEY = "aether-mock-joined-campaigns";
-// Mock only: creator's chosen CPM per campaign id ({ [campaignId]: number }).
-const CREATOR_CPM_LS_KEY = "aether-mock-creator-cpm";
 const DEFAULT_CPM = 2.5;
 
-/** Mock helper: the creator's chosen CPM for a campaign, or the default. */
-function mockCpmFor(campaignId: string): number {
-  if (typeof window === "undefined") return DEFAULT_CPM;
-  try {
-    const map = JSON.parse(localStorage.getItem(CREATOR_CPM_LS_KEY) || "{}");
-    const v = Number(map?.[campaignId]);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_CPM;
-  } catch {
-    return DEFAULT_CPM;
-  }
+/**
+ * Mock helper: the brand CPM for a campaign. Brand-set model — payouts use the
+ * campaign's brand rate (the seeded performance campaign uses DEFAULT_CPM).
+ */
+function mockCpmFor(): number {
+  return DEFAULT_CPM;
 }
 
 /**
@@ -301,19 +295,10 @@ export function useJoinedCampaigns() {
     };
   }, [load]);
 
+  // Brand-set CPM model: joining takes no creator rate (payout = brand rate).
   const join = useCallback(
-    async (campaignId: string, creatorCpmRate?: number | null): Promise<JoinResult> => {
+    async (campaignId: string): Promise<JoinResult> => {
       if (isMockMode) {
-        // Persist the creator's chosen CPM for this campaign (mock only).
-        if (creatorCpmRate != null && creatorCpmRate > 0 && typeof window !== "undefined") {
-          try {
-            const map = JSON.parse(localStorage.getItem(CREATOR_CPM_LS_KEY) || "{}");
-            map[campaignId] = creatorCpmRate;
-            localStorage.setItem(CREATOR_CPM_LS_KEY, JSON.stringify(map));
-          } catch {
-            /* ignore */
-          }
-        }
         const list = readLs<string[]>(JOINED_LS_KEY, SEED_JOINED);
         if (list.includes(campaignId)) return { ok: true, alreadyJoined: true };
         list.push(campaignId);
@@ -323,7 +308,7 @@ export function useJoinedCampaigns() {
       try {
         const res = await apiPost<{ alreadyJoined?: boolean }>(
           `/api/campaigns/${campaignId}/join`,
-          creatorCpmRate != null ? { creator_cpm_rate: creatorCpmRate } : {}
+          {}
         );
         await load();
         return { ok: true, alreadyJoined: res.alreadyJoined };
@@ -351,7 +336,7 @@ export function useCreatorClips() {
       // chosen CPM (for the seeds this reproduces their hand-set values exactly).
       setClips(
         mockClipsWithApproval().map((c) => {
-          const cpm = mockCpmFor(c.campaign_id);
+          const cpm = mockCpmFor();
           return {
             ...c,
             creator_cpm: cpm,
@@ -370,7 +355,7 @@ export function useCreatorClips() {
     const { data } = await supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, campaign:campaign_id(title, cpm_rate), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, campaign:campaign_id(title, cpm_rate)"
       )
       .eq("creator_id", user.id)
       .order("created_at", { ascending: false });
@@ -390,16 +375,13 @@ export function useCreatorClips() {
       quality_notes: string | null;
       quality_score: number | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
-      participation: { creator_cpm_rate?: number | null } | null;
     };
     const rows = (data ?? []) as unknown as Row[];
     setClips(
       rows.map((r) => {
         const views = Number(r.current_views ?? 0);
-        // Creator's chosen CPM wins; fall back to the campaign base, then default.
-        const cpm = Number(
-          r.participation?.creator_cpm_rate ?? r.campaign?.cpm_rate ?? DEFAULT_CPM
-        );
+        // Brand-set CPM: pay the campaign rate (kept in sync with brand_cpm_rate).
+        const cpm = Number(r.campaign?.cpm_rate ?? DEFAULT_CPM);
         return {
           id: r.id,
           campaign_id: r.campaign_id,
@@ -643,7 +625,7 @@ export function useBrandModeration(campaignId?: string) {
             post_url: c.post_url,
             status: c.status,
             current_views: c.current_views,
-            creatorCpm: mockCpmFor(c.campaign_id),
+            creatorCpm: mockCpmFor(),
             submitted_at: c.submitted_at,
             approval_deadline: c.approval_deadline,
           }))
@@ -667,7 +649,7 @@ export function useBrandModeration(campaignId?: string) {
             post_url: c.post_url,
             status: c.status,
             current_views: c.current_views,
-            creatorCpm: mockCpmFor(c.campaign_id),
+            creatorCpm: mockCpmFor(),
             submitted_at: c.submitted_at,
             fraud_score: (c as { fraud_score?: number }).fraud_score,
             fraud_reasons: (c as { fraud_reasons?: string[] }).fraud_reasons,
@@ -692,14 +674,13 @@ export function useBrandModeration(campaignId?: string) {
       fraud_reasons?: string[] | null;
       campaign: { title?: string; cpm_rate?: number | null } | null;
       creator: { email?: string } | null;
-      participation: { creator_cpm_rate?: number | null } | null;
     };
 
     // Pending review queue + fraud-flagged tracking clips, in parallel.
     let pendingQuery = supabase
       .from("clips")
       .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, campaign:campaign_id(title, cpm_rate), creator:creator_id(email)"
       )
       .eq("status", "pending")
       .eq("quality_status", "pending_review")
@@ -707,7 +688,7 @@ export function useBrandModeration(campaignId?: string) {
     let flaggedQuery = supabase
       .from("clips")
       .select(
-        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, fraud_score, fraud_reasons, campaign:campaign_id(title, cpm_rate), creator:creator_id(email), participation:participation_id(creator_cpm_rate)"
+        "id, campaign_id, creator_id, platform, post_url, status, current_views, created_at, submitted_at, fraud_score, fraud_reasons, campaign:campaign_id(title, cpm_rate), creator:creator_id(email)"
       )
       .eq("status", "tracking")
       .eq("fraud_flagged", true)
@@ -750,9 +731,8 @@ export function useBrandModeration(campaignId?: string) {
       post_url: r.post_url,
       status: r.status,
       current_views: Number(r.current_views ?? 0),
-      creatorCpm: Number(
-        r.participation?.creator_cpm_rate ?? r.campaign?.cpm_rate ?? DEFAULT_CPM
-      ),
+      // Brand-set CPM: the campaign rate (kept in sync with brand_cpm_rate).
+      creatorCpm: Number(r.campaign?.cpm_rate ?? DEFAULT_CPM),
       submitted_at: r.submitted_at ?? r.created_at,
       approval_deadline: r.approval_deadline ?? null,
       fraud_score: r.fraud_score ?? undefined,

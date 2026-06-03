@@ -58,7 +58,6 @@ export default function CreatorClipsPage() {
   const [postUrl, setPostUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [joinCpm, setJoinCpm] = useState(2.5);
   const [trusted, setTrusted] = useState(false);
 
   const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
@@ -93,21 +92,13 @@ export default function CreatorClipsPage() {
       .catch(() => {});
   }, [loadCampaigns]);
 
-  // Default the join CPM to the selected campaign's offered rate.
-  useEffect(() => {
-    if (selectedOfferedCpm != null && selectedOfferedCpm > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- derive default from selection
-      setJoinCpm(Number(selectedOfferedCpm));
-    }
-  }, [selectedOfferedCpm]);
-
   const handleJoin = async () => {
     if (!selectedCampaign) {
       toast.error(t("Pick a campaign to join."));
       return;
     }
     setJoining(true);
-    const res = await join(selectedCampaign, joinCpm > 0 ? joinCpm : undefined);
+    const res = await join(selectedCampaign);
     setJoining(false);
     if (res.ok) {
       toast.success(
@@ -338,31 +329,23 @@ export default function CreatorClipsPage() {
             </div>
             {!isJoined ? (
               <div className="space-y-3 pt-1">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                    {t("Your CPM ($ / 1,000 views)")}
-                  </label>
-                  <div className="relative">
-                    <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max={selectedOfferedCpm ?? undefined}
-                      value={joinCpm}
-                      onChange={(e) => setJoinCpm(Number(e.target.value))}
-                      className="w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80"
-                    />
+                <div className="rounded-xl bg-secondary/30 border border-border/10 p-3">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                    {t("Payout rate (set by brand)")}
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-lg font-bold tracking-tight">
+                      ${Number(selectedOfferedCpm ?? 0).toFixed(2)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{t("CPM · per 1,000 views")}</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground leading-normal">
+                  <p className="text-[10px] text-muted-foreground leading-normal mt-1">
                     {selectedOfferedCpm
-                      ? t("Brand offers up to ${rate}. Earn ${per100k} per 100k views.")
-                          .replace("{rate}", Number(selectedOfferedCpm).toFixed(2))
-                          .replace("{per100k}", Math.round(Math.max(joinCpm, 0) * 100).toLocaleString())
-                      : t("You earn ${per100k} per 100k views.").replace(
+                      ? t("Earn ${per100k} per 100k views at the brand's rate.").replace(
                           "{per100k}",
-                          Math.round(Math.max(joinCpm, 0) * 100).toLocaleString()
-                        )}
+                          Math.round(Number(selectedOfferedCpm) * 100).toLocaleString()
+                        )
+                      : t("This brand sets the pay-per-view rate.")}
                   </p>
                 </div>
                 <Button

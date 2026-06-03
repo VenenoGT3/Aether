@@ -16,11 +16,14 @@ export type JoinResult =
  * Open join: a creator joins a performance campaign directly — no pitch, no
  * brand approval. Idempotent (re-joining returns the existing participation).
  * The DB enforce_open_join trigger pins status='active' and zeroes the rollups.
+ *
+ * Brand-set CPM model: the creator does NOT choose a rate. record_clip_earning
+ * pays campaigns.brand_cpm_rate (the single source of truth), so nothing about
+ * the rate is written here.
  */
 export async function joinCampaign(
   campaignId: string,
-  userId: string,
-  creatorCpmRate?: number | null
+  userId: string
 ): Promise<JoinResult> {
   const supabase = await createClient();
 
@@ -42,7 +45,7 @@ export async function joinCampaign(
   // Campaign must exist, be a performance campaign, and be accepting creators.
   const { data: campaign, error: campErr } = await supabase
     .from("campaigns")
-    .select("id, status, campaign_type, cpm_rate")
+    .select("id, status, campaign_type")
     .eq("id", campaignId)
     .single();
 
@@ -78,17 +81,8 @@ export async function joinCampaign(
     return { ok: true, alreadyJoined: true, participation: existing };
   }
 
-  // Clamp the creator's proposed CPM to the brand's offered ceiling (they may
-  // bid down to be competitive, never above the campaign's rate). NULL => the
-  // earnings function falls back to the campaign base CPM.
-  let creatorCpm: number | null = null;
-  if (creatorCpmRate != null && Number.isFinite(creatorCpmRate) && creatorCpmRate >= 0) {
-    const campCpm =
-      campaign.cpm_rate != null ? Number(campaign.cpm_rate) : null;
-    creatorCpm = campCpm != null ? Math.min(creatorCpmRate, campCpm) : creatorCpmRate;
-  }
-
   // Insert. enforce_open_join pins status='active' for performance campaigns.
+  // No creator_cpm_rate: the brand rate (campaigns.brand_cpm_rate) is authoritative.
   const { data: participation, error: insertErr } = await supabase
     .from("participations")
     .insert({
@@ -96,7 +90,6 @@ export async function joinCampaign(
       influencer_id: userId,
       status: "active",
       proposed_payout: 0,
-      creator_cpm_rate: creatorCpm,
     })
     .select("id, campaign_id, influencer_id, status")
     .single();

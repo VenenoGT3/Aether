@@ -14,6 +14,8 @@ interface CampaignInput {
   description?: string;
   budget_total?: number;
   budget_pool?: number;
+  /** Brand-set $ per 1,000 views (single source of truth for performance). */
+  brand_cpm_rate?: number | null;
   campaign_type?: string;
   campaign_category?: string;
   category_meta?: Record<string, unknown>;
@@ -246,10 +248,23 @@ export async function getCampaignByIdAction(id: string) {
  */
 export async function createCampaignAction(campaignData: CampaignInput) {
   const mockUser = getMockUser();
-  
+
+  // Brand-set CPM: performance campaigns MUST carry a positive brand rate. We
+  // derive it from brand_cpm_rate (preferred) or the legacy cpm_rate, and write
+  // BOTH columns to the same value so legacy reads stay correct.
+  const isPerformance = campaignData.campaign_type === "performance";
+  const brandCpm = isPerformance
+    ? Number(campaignData.brand_cpm_rate ?? campaignData.cpm_rate ?? 0)
+    : null;
+  if (isPerformance && (!Number.isFinite(brandCpm) || (brandCpm ?? 0) <= 0)) {
+    return {
+      success: false,
+      error: "A performance campaign requires a brand CPM rate greater than 0.",
+    };
+  }
+
   if (isMockMode) {
     const campaigns = getMockCampaigns();
-    const isPerformance = campaignData.campaign_type === "performance";
     const mockPool = campaignData.budget_pool ?? campaignData.budget_total;
     const mockFee = feeBreakdown(Number(mockPool));
     const newCampaign = {
@@ -268,6 +283,9 @@ export async function createCampaignAction(campaignData: CampaignInput) {
             budget_reserved: 0,
             budget_paid: 0,
             funded_at: null,
+            // Brand-set CPM is the single source of truth; keep cpm_rate in sync.
+            brand_cpm_rate: brandCpm,
+            cpm_rate: brandCpm,
           }
         : {}),
       // Performance campaigns must be funded before going live → always 'draft' here.
@@ -285,7 +303,6 @@ export async function createCampaignAction(campaignData: CampaignInput) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    const isPerformance = campaignData.campaign_type === "performance";
     const { data, error } = await supabase
       .from("campaigns")
       .insert({
@@ -306,7 +323,9 @@ export async function createCampaignAction(campaignData: CampaignInput) {
           ? campaignData.campaign_category ?? "clipping"
           : null,
         category_meta: isPerformance ? campaignData.category_meta ?? {} : {},
-        cpm_rate: isPerformance ? campaignData.cpm_rate ?? null : null,
+        // Brand-set CPM is the single source of truth; cpm_rate kept in sync.
+        brand_cpm_rate: isPerformance ? brandCpm : null,
+        cpm_rate: isPerformance ? brandCpm : null,
         budget_pool: isPerformance
           ? campaignData.budget_pool ?? campaignData.budget_total
           : null,

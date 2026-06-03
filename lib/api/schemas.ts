@@ -177,12 +177,13 @@ export const PostSubmitBodySchema = z.object({
 // --- Performance clipping: open join + clip submission (Phase 2) ---
 
 /**
- * Joining a performance campaign needs no pitch/fee. The creator may optionally
- * propose their own CPM (pay per 1,000 views); the service clamps it to the
- * campaign's offered rate. Omitted => the campaign's base CPM is used.
+ * Joining a performance campaign needs no pitch, fee, or rate. Brand-set CPM
+ * model: payouts use campaigns.brand_cpm_rate (the single source of truth), so
+ * the creator does not propose a CPM. A legacy creator_cpm_rate field is still
+ * accepted-but-ignored for backward compatibility with older clients.
  */
 export const CampaignJoinBodySchema = z.object({
-  creator_cpm_rate: z.number().nonnegative().max(100_000).optional(),
+  creator_cpm_rate: z.number().nonnegative().max(100_000).optional(), // deprecated, ignored
   _hp: honeypot,
 });
 
