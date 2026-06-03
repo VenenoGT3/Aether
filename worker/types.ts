@@ -10,6 +10,7 @@ export interface ClipRow {
   post_url: string;
   external_post_id: string | null;
   status: string;
+  quality_status?: string | null;
   counted_views: number;
   current_views: number;
   last_synced_at: string | null;

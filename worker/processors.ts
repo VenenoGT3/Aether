@@ -15,7 +15,7 @@ import type { ClipRow, ViewSyncOutcome } from "./types";
  */
 
 const CLIP_COLUMNS =
-  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_score_updated_at, fraud_overridden";
+  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, quality_status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_score_updated_at, fraud_overridden";
 
 /**
  * Promote 'pending' clips past their 5-working-day approval deadline to
@@ -25,13 +25,25 @@ const CLIP_COLUMNS =
 export async function autoApproveOverdueClips(
   client?: SupabaseClient
 ): Promise<number> {
+  const traceId = randomUUID();
   const supabase = client ?? getServiceClient();
-  const { data, error } = await supabase.rpc("auto_approve_overdue_clips");
+  const { data, error } = await supabase.rpc("auto_approve_overdue_clips", {
+    p_trace_id: traceId,
+  });
   if (error) {
-    throw new Error(`[approval] auto_approve_overdue_clips failed: ${error.message}`);
+    log.alert("approval.auto_approve_failed", {
+      traceId,
+      code: (error as { code?: string }).code,
+      error: error.message,
+    });
+    throw new Error(
+      `[approval] auto_approve_overdue_clips failed (trace ${traceId}): ${error.message}`
+    );
   }
   const count = typeof data === "number" ? data : Number(data ?? 0);
-  if (count > 0) log.info("approval.auto_approved", { clips: count });
+  if (count > 0) {
+    log.info("approval.auto_approved", { traceId, clips: count });
+  }
   return count;
 }
 
@@ -116,6 +128,15 @@ export async function runViewSyncForClip(
   }
   if (clip.status !== "tracking") {
     return { status: "skipped", clipId, reason: `status=${clip.status}` };
+  }
+
+  if (clip.quality_status && clip.quality_status !== "approved") {
+    log.alert("earnings.skipped_not_quality_approved", {
+      clipId,
+      campaignId: clip.campaign_id,
+      qualityStatus: clip.quality_status,
+    });
+    return { status: "skipped", clipId, reason: `quality=${clip.quality_status}` };
   }
 
   const metrics = await getViewsProvider().fetchViews(clip);
