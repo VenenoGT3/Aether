@@ -11,6 +11,7 @@ import {
   autoApproveOverdueClips,
   auditCampaignBudgetDrift,
   auditPayoutRevenueDrift,
+  auditClipQualityInvariants,
   fetchTrackingClipIds,
   runViewSyncForClip,
   runEarningsCalc,
@@ -366,12 +367,15 @@ async function emitHeartbeat(): Promise<void> {
     // per offending row; this surfaces counts in the beat. Best-effort.
     try {
       const client = getServiceClient();
-      const [budgetDrift, revenueDrift] = await Promise.all([
+      const [budgetDrift, revenueDrift, qualityViolations] = await Promise.all([
         auditCampaignBudgetDrift(client),
         auditPayoutRevenueDrift(client),
+        auditClipQualityInvariants(client),
       ]);
       if (budgetDrift > 0) log.alert("heartbeat.budget_drift", { drifted: budgetDrift });
       if (revenueDrift > 0) log.alert("heartbeat.revenue_drift", { drifted: revenueDrift });
+      if (qualityViolations > 0)
+        log.alert("heartbeat.quality_invariant", { violations: qualityViolations });
     } catch (err) {
       log.warn("heartbeat.drift_audit_error", { error: errMessage(err) });
     }

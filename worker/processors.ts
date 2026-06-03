@@ -460,3 +460,34 @@ export async function auditPayoutRevenueDrift(
   }
   return rows.length;
 }
+
+/**
+ * Audit the clip quality invariant: status='tracking' <=> quality_status='approved'.
+ * A returned row is a real breach (a tracking clip earning without quality approval,
+ * or an approved clip not tracking); the DB raises [ALERT] per clip. Best-effort.
+ */
+export async function auditClipQualityInvariants(
+  client?: SupabaseClient
+): Promise<number> {
+  const traceId = randomUUID();
+  const supabase = client ?? getServiceClient();
+  const { data, error } = await supabase.rpc("audit_clip_quality_invariants", {
+    p_trace_id: traceId,
+  });
+  if (error) {
+    log.alert("clip.quality_audit_failed", { traceId, error: error.message });
+    return 0;
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > 0) {
+    log.alert("clip.quality_invariant_detected", {
+      traceId,
+      count: rows.length,
+      clips: rows
+        .map((r) => (r as { clip_id?: string }).clip_id)
+        .filter(Boolean)
+        .slice(0, 20),
+    });
+  }
+  return rows.length;
+}
