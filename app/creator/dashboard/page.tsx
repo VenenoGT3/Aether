@@ -42,6 +42,8 @@ import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import WalletUI from "@/components/wallet-ui";
 import { CreatorPerformanceSummary } from "@/components/creator-performance-summary";
 import { CreatorWallet } from "@/components/creator-wallet";
+import { ReferFriendCard } from "@/components/refer-friend-card";
+import { WeeklyChallengeWidget } from "@/components/weekly-challenge-widget";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
@@ -419,6 +421,12 @@ export default function InfluencerDashboard() {
       {/* Creator wallet — balances + withdraw (most prominent) */}
       <div className="mb-8">
         <CreatorWallet />
+      </div>
+
+      {/* Virality — refer a friend + weekly challenge */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
+        <ReferFriendCard />
+        <WeeklyChallengeWidget />
       </div>
 
       {/* Performance clipping earnings + clips (new model) — primary content */}
