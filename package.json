@@ -17,6 +17,7 @@
     "payouts:once": "tsx worker/run-payouts-once.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:chaos": "vitest run lib/tests/resilience.test.ts -t chaos",
     "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts",
     "loadtest:health": "k6 run tests/load/load-test-health.js",
     "loadtest:discovery": "k6 run tests/load/load-test-discovery.js",

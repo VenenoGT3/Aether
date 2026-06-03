@@ -59,6 +59,15 @@ import {
 } from "@/lib/validate";
 import { validateCategoryMeta } from "@/lib/campaign-category-meta";
 import { fetchWithTimeout, fetchWithRetry } from "@/lib/fetch-utils";
+import {
+  withChaoticRedis,
+  forceBreakerOpen,
+  saturateLimiter,
+  makeSlowFn,
+  makeFlakyFn,
+  makeHangingFetch,
+  delay,
+} from "./chaos-helpers";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const VALID_UUID = "123e4567-e89b-12d3-a456-426614174000";
@@ -386,5 +395,134 @@ describe("fetch-utils: timeout + retry", () => {
         );
       })) as unknown as typeof fetch;
     await expect(fetchWithTimeout("https://x", {}, 20)).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chaos engineering: inject latency / outages / saturation into the REAL
+// primitives and assert the system degrades SAFELY (fail-open, time out, shed,
+// short-circuit) instead of stalling or cascading.
+// ---------------------------------------------------------------------------
+describe("chaos: Redis latency + outage", () => {
+  it("a Redis OUTAGE trips the breaker, then fails open with no further network calls", async () => {
+    await withChaoticRedis({ networkError: true }, async (redis, fetchMock) => {
+      let result;
+      // 5 consecutive infra failures trip the "redis" breaker (threshold 5).
+      for (let i = 0; i < 5; i++) result = await redis.redisGet("rate:user:1");
+      expect(result).toMatchObject({ ok: false, reason: "error" });
+
+      const callsWhileClosed = fetchMock.mock.calls.length;
+      const afterTrip = await redis.redisGet("rate:user:1");
+      // Breaker now OPEN → short-circuits to a fallback without touching the network.
+      expect(afterTrip).toMatchObject({ ok: false, reason: "circuit_open" });
+      expect(fetchMock.mock.calls.length).toBe(callsWhileClosed);
+    });
+  });
+
+  it("a SLOW Redis READ times out and is retried once (idempotent → safe to retry)", async () => {
+    await withChaoticRedis(
+      { latencyMs: 5_000, honorAbort: true },
+      async (redis, fetchMock) => {
+        const result = await redis.redisGet("cache:discovery");
+        expect(result).toMatchObject({ ok: false, reason: "timeout" });
+        expect(fetchMock.mock.calls.length).toBe(2); // 2 attempts for a read
+      },
+      { timeoutMs: 20 }
+    );
+  });
+
+  it("a SLOW Redis WRITE times out and is NOT retried (no double-apply)", async () => {
+    await withChaoticRedis(
+      { latencyMs: 5_000, honorAbort: true },
+      async (redis, fetchMock) => {
+        const result = await redis.redisSet("lock:payout:1", "1", { nx: true, pxMs: 1_000 });
+        expect(result).toMatchObject({ ok: false, reason: "timeout" });
+        expect(fetchMock.mock.calls.length).toBe(1); // writes never retry
+      },
+      { timeoutMs: 20 }
+    );
+  });
+});
+
+describe("chaos: forced circuit breaker", () => {
+  it("an OPEN breaker short-circuits with a safe 503 and never calls the dependency", async () => {
+    const cb = forceBreakerOpen(new CircuitBreaker("chaos-cb-open", { failureThreshold: 4 }));
+    expect(cb.getState()).toBe("open");
+    const dependency = vi.fn().mockResolvedValue("should not run");
+    await expect(cb.exec(dependency)).rejects.toMatchObject({ statusCode: 503, expected: true });
+    expect(dependency).not.toHaveBeenCalled();
+  });
+
+  it("recovers (open → half-open → closed) once the dependency heals", async () => {
+    const cb = new CircuitBreaker("chaos-cb-recover", { failureThreshold: 2, openDurationMs: 30 });
+    forceBreakerOpen(cb);
+    expect(cb.getState()).toBe("open");
+    await delay(40); // cooldown elapses
+    expect(cb.getState()).toBe("half_open");
+    await expect(cb.exec(makeSlowFn(1, "healthy"))).resolves.toBe("healthy");
+    expect(cb.getState()).toBe("closed");
+  });
+});
+
+describe("chaos: backpressure saturation", () => {
+  it("sheds every request once saturated, then recovers after in-flight work releases", () => {
+    const lim = new ConcurrencyLimiter("chaos-bp", 8);
+    const sat = saturateLimiter(lim);
+    expect(sat.slots.length).toBe(8);
+    expect(lim.inFlight).toBe(8);
+
+    expect(sat.shed()).toBeNull(); // at capacity → shed
+    expect(sat.shed()).toBeNull();
+    expect(busyResponse().status).toBe(503);
+
+    sat.releaseAll();
+    expect(lim.inFlight).toBe(0);
+    expect(lim.tryAcquire()).not.toBeNull();
+  });
+
+  it("emits a shed warning under saturation (an alerting signal)", () => {
+    const lim = new ConcurrencyLimiter("chaos-bp-log", 4);
+    const sat = saturateLimiter(lim);
+    sat.shed();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ limiter: "chaos-bp-log" }),
+      "backpressure.shed"
+    );
+    sat.releaseAll();
+  });
+});
+
+describe("chaos: slow / flaky Supabase + Stripe", () => {
+  it("a HUNG downstream is aborted by fetchWithTimeout (no unbounded wait)", async () => {
+    const hung = makeHangingFetch(); // a Stripe/Supabase call that never responds
+    try {
+      await expect(
+        fetchWithTimeout("https://api.stripe.com/v1/transfers", {}, 20)
+      ).rejects.toMatchObject({ name: "AbortError" });
+    } finally {
+      hung.restore();
+    }
+  });
+
+  it("repeated failing downstream calls trip the breaker → fast-fail (no pile-up)", async () => {
+    const cb = new CircuitBreaker("chaos-supabase", { failureThreshold: 3 });
+    const timingOut = () => Promise.reject(new Error("supabase: statement timeout"));
+    for (let i = 0; i < 3; i++) {
+      await expect(cb.exec(timingOut)).rejects.toThrow("statement timeout");
+    }
+    expect(cb.getState()).toBe("open");
+
+    const next = vi.fn();
+    await expect(cb.exec(next)).rejects.toMatchObject({ statusCode: 503, expected: true });
+    expect(next).not.toHaveBeenCalled(); // dependency spared while it recovers
+  });
+
+  it("a FLAKY downstream that recovers does NOT trip the breaker (blips tolerated)", async () => {
+    const cb = new CircuitBreaker("chaos-stripe-flaky", { failureThreshold: 5 });
+    const charge = makeFlakyFn(2, "ch_123"); // fails twice, then succeeds
+    await expect(cb.exec(charge)).rejects.toThrow();
+    await expect(cb.exec(charge)).rejects.toThrow();
+    await expect(cb.exec(charge)).resolves.toBe("ch_123");
+    expect(cb.getState()).toBe("closed"); // the success reset the failure count
   });
 });
