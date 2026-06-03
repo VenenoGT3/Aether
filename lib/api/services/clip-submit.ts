@@ -232,9 +232,11 @@ export async function submitClip(
       code: insertErr.code,
       error: insertErr.message,
     });
+    // Full error already captured via the [ALERT] log above; never echo the raw
+    // DB message to the user.
     return {
       ok: false,
-      error: insertErr.message || "Could not submit your clip.",
+      error: "Could not submit your clip. Please try again.",
       status: 500,
     };
   }

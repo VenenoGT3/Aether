@@ -25,6 +25,16 @@ import {
   roleField,
 } from "@/lib/validate";
 import { z } from "zod";
+import {
+  toActionError,
+  reportError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  ExternalServiceError,
+  AppError,
+} from "@/lib/errors";
 
 /**
  * Server Action: Initialize Stripe Onboarding for Business or Influencer
@@ -48,7 +58,7 @@ export async function startStripeOnboardingAction(
     let userId = "mock-user-id";
     if (!isMock) {
       const user = await getServerUser();
-      if (!user) throw new Error("Unauthorized");
+      if (!user) throw new UnauthorizedError();
       userId = user.user_id;
     }
 
@@ -70,11 +80,8 @@ export async function startStripeOnboardingAction(
     }
 
     return { success: true, url, accountId };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Failed to start onboarding";
-    console.error("Error in startStripeOnboardingAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    return toActionError(error, { action: "startStripeOnboarding" });
   }
 }
 
@@ -141,15 +148,11 @@ export async function fundEscrowAction(
       transactionId: transaction.id,
       isMock: false,
     };
-  } catch (error: unknown) {
-    const message =
-      error instanceof AuthorizationError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "Failed to fund escrow";
-    console.error("Error in fundEscrowAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    return toActionError(error, { action: "fundEscrow" });
   }
 }
 
@@ -185,21 +188,21 @@ export async function fundCampaignPoolAction(campaignId: string) {
       .single();
 
     if (campErr || !campaign) {
-      throw new Error("Campaign not found.");
+      throw new NotFoundError("Campaign not found.", campErr);
     }
     if (campaign.business_id !== user!.user_id) {
-      throw new Error("You can only fund your own campaigns.");
+      throw new ForbiddenError("You can only fund your own campaigns.");
     }
     if (campaign.campaign_type !== "performance") {
-      throw new Error("Only performance campaigns are funded via a budget pool.");
+      throw new ConflictError("Only performance campaigns are funded via a budget pool.");
     }
     if (campaign.funded_at) {
-      throw new Error("This campaign pool is already funded.");
+      throw new ConflictError("This campaign pool is already funded.");
     }
 
     const amount = Number(campaign.budget_pool || 0);
     if (amount <= 0) {
-      throw new Error("Campaign budget pool must be greater than zero.");
+      throw new AppError("Campaign budget pool must be greater than zero.", { code: "validation" });
     }
 
     const { clientSecret, paymentIntentId } = await createEscrowPaymentIntent(
@@ -219,15 +222,11 @@ export async function fundCampaignPoolAction(campaignId: string) {
       amount,
       isMock: false as const,
     };
-  } catch (error: unknown) {
-    const message =
-      error instanceof AuthorizationError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "Failed to fund campaign pool";
-    console.error("Error in fundCampaignPoolAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    return toActionError(error, { action: "fundCampaignPool" });
   }
 }
 
@@ -264,7 +263,7 @@ export async function releaseEscrowAction(participationId: string) {
       .single();
 
     if (partError || !participation) {
-      throw new Error("Participation agreement not found.");
+      throw new NotFoundError("Participation agreement not found.", partError);
     }
 
     const { data: influencerProfile, error: profError } = await supabase
@@ -274,7 +273,7 @@ export async function releaseEscrowAction(participationId: string) {
       .single();
 
     if (profError || !influencerProfile?.stripe_connect_id) {
-      throw new Error("Influencer has not linked a Stripe payout account yet.");
+      throw new ConflictError("Influencer has not linked a Stripe payout account yet.", profError);
     }
 
     const amount = Number(participation.proposed_payout);
@@ -284,7 +283,9 @@ export async function releaseEscrowAction(participationId: string) {
       participation.campaign_id
     );
 
-    if (!success) throw new Error("Stripe Connect transfer failed.");
+    if (!success) {
+      throw new ExternalServiceError("The payout transfer could not be completed. Please try again.");
+    }
 
     await supabase.from("transactions").insert({
       participation_id: participationId,
@@ -309,15 +310,11 @@ export async function releaseEscrowAction(participationId: string) {
       .eq("id", participation.campaign_id);
 
     return { success: true, transferId, isMock: false };
-  } catch (error: unknown) {
-    const message =
-      error instanceof AuthorizationError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "Failed to release escrow";
-    console.error("Error in releaseEscrowAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    return toActionError(error, { action: "releaseEscrow" });
   }
 }
 
@@ -338,14 +335,14 @@ export async function withdrawFundsAction(amount: number) {
 
     const user = await getServerUser();
     if (!user || user.role !== "influencer") {
-      throw new Error("Unauthorized. Only creator accounts can withdraw funds.");
+      throw new ForbiddenError("Only creator accounts can withdraw funds.");
     }
 
     const supabase = await createClient();
 
     const ledger = await getTransactionLedgerAction();
     if (!ledger.success || (ledger.availableBalance || 0) < amount) {
-      throw new Error("Insufficient available balance.");
+      throw new ConflictError("Insufficient available balance.");
     }
 
     const { error: txError } = await supabase.from("transactions").insert({
@@ -358,11 +355,8 @@ export async function withdrawFundsAction(amount: number) {
     if (txError) throw txError;
 
     return { success: true, isMock: false };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Failed to withdraw funds";
-    console.error("Error in withdrawFundsAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    return toActionError(error, { action: "withdrawFunds" });
   }
 }
 
@@ -528,13 +522,14 @@ export async function requestWithdrawalAction() {
         error: "The payout failed and your balance was released — please try again.",
       };
     }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to withdraw funds";
+  } catch (error) {
+    // Keep the [ALERT] paging signal, but return a safe (generic) message and
+    // let toActionError capture the full error to Sentry.
     apiLog("alert", "withdrawal.unexpected", {
       traceId,
-      error: message,
+      error: error instanceof Error ? error.message : String(error),
     });
-    return { success: false, error: message };
+    return toActionError(error, { action: "requestWithdrawal", traceId });
   }
 }
 
@@ -556,7 +551,7 @@ export async function getTransactionLedgerAction() {
     }
 
     const user = await getServerUser();
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new UnauthorizedError();
 
     const supabase = await createClient();
 
@@ -629,10 +624,10 @@ export async function getTransactionLedgerAction() {
       pendingBalance,
       isMock: false,
     };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Failed to fetch ledger";
-    console.error("Error in getTransactionLedgerAction:", error);
-    return { success: false, error: message };
+  } catch (error) {
+    // Capture full detail internally; return a safe message. (Keep this action's
+    // existing return shape — its consumer reads fields without a success guard.)
+    reportError(error, { action: "getTransactionLedger" });
+    return { success: false, error: "Could not load your wallet. Please try again." };
   }
 }

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { assertParticipationAccess } from "@/lib/api/participation-access";
 import type { PostSubmitBody } from "@/lib/api/schemas";
+import { reportError } from "@/lib/errors";
 
 /** Allowed DB + app participation statuses for deliverable upload */
 const SUBMITTABLE_STATUSES = [
@@ -99,9 +100,10 @@ export async function submitParticipationPost(
     .single();
 
   if (postErr) {
+    reportError(postErr, { service: "submitPost" });
     return {
       ok: false,
-      error: postErr.message || "Could not save your post.",
+      error: "Could not save your post. Please try again.",
       status: 500,
     };
   }

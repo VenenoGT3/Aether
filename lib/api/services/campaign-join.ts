@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
+import { reportError } from "@/lib/errors";
 
 export type JoinedParticipation = {
   id: string;
@@ -112,9 +113,10 @@ export async function joinCampaign(
         status: 409,
       };
     }
+    reportError(insertErr, { service: "joinCampaign", campaignId });
     return {
       ok: false,
-      error: insertErr.message || "Could not join the campaign.",
+      error: "Could not join the campaign. Please try again.",
       status: 500,
     };
   }

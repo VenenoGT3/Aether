@@ -4,6 +4,7 @@ import {
   AuthorizationError,
 } from "@/lib/campaign-lifecycle";
 import type { CampaignApplyBody } from "@/lib/api/schemas";
+import { reportError } from "@/lib/errors";
 
 export type ApplyResult =
   | {
@@ -123,9 +124,10 @@ export async function applyToCampaign(
         status: 409,
       };
     }
+    reportError(insertErr, { service: "applyToCampaign", campaignId });
     return {
       ok: false,
-      error: insertErr.message || "Could not submit application.",
+      error: "Could not submit application. Please try again.",
       status: 500,
     };
   }

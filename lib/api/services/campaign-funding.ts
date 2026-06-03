@@ -3,6 +3,7 @@ import {
   retrievePaymentIntentStatus,
   refundPoolPayment,
 } from "@/lib/stripe/connect";
+import { reportError } from "@/lib/errors";
 import {
   planReconciliation,
   planCancellation,
@@ -105,7 +106,8 @@ export async function reconcileFunding(
     .eq("status", "draft");
 
   if (updErr) {
-    return { ok: false, error: updErr.message, status: 500 };
+    reportError(updErr, { service: "campaignFunding.reconcile", campaignId });
+    return { ok: false, error: "Could not update the campaign. Please try again.", status: 500 };
   }
 
   console.log(`[funding] reconcile ${campaignId}: activated from succeeded PI`);
@@ -167,7 +169,8 @@ export async function cancelFundedDraft(
     .eq("status", "draft");
 
   if (updErr) {
-    return { ok: false, error: updErr.message, status: 500 };
+    reportError(updErr, { service: "campaignFunding.cancel", campaignId });
+    return { ok: false, error: "Could not cancel the campaign. Please try again.", status: 500 };
   }
 
   console.log(

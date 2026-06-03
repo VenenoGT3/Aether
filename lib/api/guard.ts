@@ -18,6 +18,7 @@ import { methodNotAllowed } from "@/lib/api/response";
 import { requestLogger, endRequest, genRequestId } from "@/lib/logger";
 import type { Logger } from "pino";
 import * as Sentry from "@sentry/nextjs";
+import { toErrorResponse } from "@/lib/errors";
 
 export type ApiGuardOptions<T> = {
   schema: ZodSchema<T>;
@@ -105,7 +106,24 @@ async function resolveAuth(
   return { ok: true, auth: authResult.auth };
 }
 
+/**
+ * Guard a POST/JSON-body route. Any UNEXPECTED throw is converted to a safe JSON
+ * error (and reported to Sentry) so a handler never returns a raw stack/500.
+ */
 export async function guardApiPost<T>(
+  request: Request,
+  options: ApiGuardOptions<T>
+): Promise<
+  { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
+> {
+  try {
+    return await guardApiPostImpl(request, options);
+  } catch (err) {
+    return { ok: false, response: toErrorResponse(err, { routeKey: options.routeKey }) };
+  }
+}
+
+async function guardApiPostImpl<T>(
   request: Request,
   options: ApiGuardOptions<T>
 ): Promise<
@@ -164,7 +182,21 @@ export async function guardApiPost<T>(
 
 export type ApiGuardQueryOptions<T> = ApiGuardOptions<T>;
 
+/** Guard a GET/query route. Same unexpected-error safety net as guardApiPost. */
 export async function guardApiGet<T>(
+  request: Request,
+  options: ApiGuardQueryOptions<T>
+): Promise<
+  { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
+> {
+  try {
+    return await guardApiGetImpl(request, options);
+  } catch (err) {
+    return { ok: false, response: toErrorResponse(err, { routeKey: options.routeKey }) };
+  }
+}
+
+async function guardApiGetImpl<T>(
   request: Request,
   options: ApiGuardQueryOptions<T>
 ): Promise<
