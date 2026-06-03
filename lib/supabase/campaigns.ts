@@ -1,7 +1,29 @@
 import { supabase, isMockMode, getMockUser } from "./client";
-import { CampaignStatus } from "@/types/database";
+import { CampaignStatus, CampaignStatusSchema } from "@/types/database";
 import { PLATFORM_FEE_PCT, feeBreakdown } from "@/lib/campaign-budget";
 import { isCampaignCategory } from "@/lib/campaign-category";
+import { z } from "zod";
+import { safeParse, uuidField } from "@/lib/validate";
+
+/**
+ * Core campaign-payload shape (UX + defense-in-depth). The authoritative
+ * integrity boundary is the database (RLS + the brand_cpm_rate / category_meta /
+ * budget triggers); this catches malformed input early with a clear message.
+ * Unknown keys are ignored (we keep using the original payload downstream).
+ */
+const CampaignCreateSchema = z.object({
+  title: z.string().trim().min(1, "Title is required.").max(200, "Title is too long."),
+  description: z.string().max(10_000, "Description is too long.").optional(),
+  budget_total: z
+    .number()
+    .finite("Budget must be a number.")
+    .positive("Budget must be greater than 0.")
+    .max(10_000_000, "Budget is too large."),
+  campaign_type: z.enum(["fixed", "performance"]).optional(),
+  brand_cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
+  cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
+  budget_pool: z.number().finite().nonnegative().max(10_000_000).nullable().optional(),
+});
 import { validateCategoryMeta } from "@/lib/campaign-category-meta";
 import { apiLog } from "@/lib/api/trace-log";
 
@@ -250,6 +272,12 @@ export async function getCampaignByIdAction(id: string) {
  * Create a new campaign
  */
 export async function createCampaignAction(campaignData: CampaignInput) {
+  // Reject malformed payloads early with a clear, safe message.
+  const baseCheck = safeParse(CampaignCreateSchema, campaignData);
+  if (!baseCheck.ok) {
+    return { success: false, error: baseCheck.error };
+  }
+
   const mockUser = getMockUser();
 
   // Brand-set CPM: performance campaigns MUST carry a positive brand rate. We
@@ -385,6 +413,13 @@ export async function createCampaignAction(campaignData: CampaignInput) {
  * Update campaign status
  */
 export async function updateCampaignStatusAction(id: string, status: CampaignStatus) {
+  // Status is mode-agnostic; id format differs (mock ids aren't UUIDs), so the
+  // id is validated as a bounded non-empty string here and as a UUID in real mode.
+  const statusCheck = safeParse(CampaignStatusSchema, status);
+  if (!statusCheck.ok) return { success: false, error: statusCheck.error };
+  const idCheck = safeParse(z.string().trim().min(1, "Invalid ID.").max(128, "Invalid ID."), id);
+  if (!idCheck.ok) return { success: false, error: idCheck.error };
+
   if (isMockMode) {
     const campaigns = getMockCampaigns();
     const index = campaigns.findIndex((c) => c.id === id);
@@ -401,6 +436,12 @@ export async function updateCampaignStatusAction(id: string, status: CampaignSta
   }
 
   try {
+    // Real-mode ids are UUIDs — enforce strictly before the DB write.
+    const realIdCheck = safeParse(uuidField, id);
+    if (!realIdCheck.ok) {
+      return { success: false, error: realIdCheck.error };
+    }
+
     const { data, error } = await supabase
       .from("campaigns")
       .update({ status })

@@ -17,6 +17,14 @@ import {
 } from "@/lib/campaign-lifecycle";
 import { apiLog } from "@/lib/api/trace-log";
 import { requestLogger, endRequest } from "@/lib/logger";
+import {
+  safeParse,
+  uuidField,
+  moneyAmountField,
+  originUrlField,
+  roleField,
+} from "@/lib/validate";
+import { z } from "zod";
 
 /**
  * Server Action: Initialize Stripe Onboarding for Business or Influencer
@@ -26,6 +34,15 @@ export async function startStripeOnboardingAction(
   origin: string
 ) {
   try {
+    // Validate untrusted client input before any Stripe / DB work.
+    const input = safeParse(
+      z.object({ role: roleField, origin: originUrlField }),
+      { role, origin }
+    );
+    if (!input.ok) return { success: false, error: input.error };
+    role = input.data.role;
+    origin = input.data.origin;
+
     const isMock = isMockMode;
 
     let userId = "mock-user-id";
@@ -69,11 +86,21 @@ export async function fundEscrowAction(
   amount: number
 ) {
   try {
+    // Amount is mode-agnostic; validate it always. (Mock ids aren't UUIDs, so
+    // the UUID check runs only in real mode, after the mock early-return.)
+    const amountCheck = safeParse(moneyAmountField, amount);
+    if (!amountCheck.ok) return { success: false, error: amountCheck.error };
+    amount = amountCheck.data;
+
     const isMock = isMockMode;
 
     if (isMock) {
       return { success: true, isMock: true };
     }
+
+    const idCheck = safeParse(uuidField, participationId);
+    if (!idCheck.ok) return { success: false, error: idCheck.error };
+    participationId = idCheck.data;
 
     const user = await getServerUser();
     assertBusinessCanFundEscrow(user?.role);
@@ -137,9 +164,14 @@ export async function fundEscrowAction(
 export async function fundCampaignPoolAction(campaignId: string) {
   try {
     if (isMockMode) {
-      // Mock: no real charge; the client simulates activation.
+      // Mock: no real charge; the client simulates activation. (Mock ids are not
+      // UUIDs, so the UUID check below runs in real mode only.)
       return { success: true, isMock: true as const };
     }
+
+    const id = safeParse(uuidField, campaignId);
+    if (!id.ok) return { success: false, error: id.error };
+    campaignId = id.data;
 
     const user = await getServerUser();
     assertBusinessCanFundEscrow(user?.role);
@@ -209,6 +241,10 @@ export async function releaseEscrowAction(participationId: string) {
     if (isMock) {
       return { success: true, isMock: true };
     }
+
+    const id = safeParse(uuidField, participationId);
+    if (!id.ok) return { success: false, error: id.error };
+    participationId = id.data;
 
     const user = await getServerUser();
     assertBusinessCanReleaseEscrow(user?.role);
@@ -290,6 +326,10 @@ export async function releaseEscrowAction(participationId: string) {
  */
 export async function withdrawFundsAction(amount: number) {
   try {
+    const parsed = safeParse(moneyAmountField, amount);
+    if (!parsed.ok) return { success: false, error: parsed.error };
+    amount = parsed.data;
+
     const isMock = isMockMode;
 
     if (isMock) {
