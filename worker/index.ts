@@ -9,6 +9,7 @@ import {
 } from "./queues";
 import {
   autoApproveOverdueClips,
+  auditCampaignBudgetDrift,
   fetchTrackingClipIds,
   runViewSyncForClip,
   runEarningsCalc,
@@ -358,6 +359,17 @@ async function emitHeartbeat(): Promise<void> {
     }
 
     await scanPoolExhaustion();
+
+    // Financial-integrity drift check: rollups vs. the earnings ledger. The RPC
+    // raises [ALERT] per drifted campaign; this surfaces a count in the beat.
+    try {
+      const drifted = await auditCampaignBudgetDrift(getServiceClient());
+      if (drifted > 0) {
+        log.alert("heartbeat.budget_drift", { drifted });
+      }
+    } catch (err) {
+      log.warn("heartbeat.budget_drift_error", { error: errMessage(err) });
+    }
   } catch (err) {
     log.error("heartbeat.error", { error: errMessage(err) });
   }

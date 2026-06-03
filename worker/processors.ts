@@ -397,3 +397,35 @@ export async function reconcileExhaustedCampaigns(
   }
   return count;
 }
+
+/**
+ * Audit the denormalized campaign budget rollups against the earnings ledger.
+ * Any returned row is a real financial-integrity drift (the DB also raises an
+ * [ALERT] per drifted campaign). Best-effort: failures are logged, never thrown,
+ * so this can be called from the heartbeat without risking the loop.
+ */
+export async function auditCampaignBudgetDrift(
+  client?: SupabaseClient
+): Promise<number> {
+  const traceId = randomUUID();
+  const supabase = client ?? getServiceClient();
+  const { data, error } = await supabase.rpc("audit_campaign_budget_drift", {
+    p_trace_id: traceId,
+  });
+  if (error) {
+    log.alert("budget.drift_audit_failed", { traceId, error: error.message });
+    return 0;
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > 0) {
+    log.alert("budget.drift_detected", {
+      traceId,
+      count: rows.length,
+      campaigns: rows
+        .map((r) => (r as { campaign_id?: string }).campaign_id)
+        .filter(Boolean)
+        .slice(0, 20),
+    });
+  }
+  return rows.length;
+}
