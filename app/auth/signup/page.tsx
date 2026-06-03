@@ -18,12 +18,17 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [referralRef, setReferralRef] = useState("");
 
-  // Pre-select the role from the landing-page CTA (?role=business|influencer).
+  // Pre-select the role from the landing-page CTA (?role=business|influencer)
+  // and capture a referral code from a share link (?ref=CODE).
   useEffect(() => {
-    const r = new URLSearchParams(window.location.search).get("role");
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("role");
+    const ref = params.get("ref");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read-once-on-mount
     if (r === "influencer" || r === "business") setRole(r);
+    if (ref) setReferralRef(ref);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -50,10 +55,16 @@ export default function SignupPage() {
         } onboarding.`,
       });
 
-      // Redirect directly to the onboarding wizard
-      router.push(`/${role}/onboarding`);
+      // Redirect to the onboarding wizard. Role "influencer" maps to the
+      // "/creator" URL segment; carry any referral code through to onboarding.
+      const segment = role === "influencer" ? "creator" : "business";
+      const dest =
+        segment === "creator" && referralRef
+          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
+          : `/${segment}/onboarding`;
+      router.push(dest);
       router.refresh();
-    } catch (err: any) {
+    } catch {
       toast.error("An unexpected error occurred during signup.");
       setLoading(false);
     }

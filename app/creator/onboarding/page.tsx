@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { updateClientProfile } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
+import { CreatorOnboardingWelcome } from "@/components/creator-onboarding-welcome";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -87,6 +88,7 @@ const AVAILABLE_NICHES = [
 export default function InfluencerOnboarding() {
   const router = useRouter();
   const { t } = useTranslation();
+  const [showWelcome, setShowWelcome] = useState(true);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -262,6 +264,10 @@ export default function InfluencerOnboarding() {
       setLoading(false);
     }
   };
+
+  if (showWelcome) {
+    return <CreatorOnboardingWelcome onStart={() => setShowWelcome(false)} />;
+  }
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 bg-secondary/10 min-h-[calc(100vh-4rem)] relative">

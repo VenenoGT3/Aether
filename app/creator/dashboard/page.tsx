@@ -44,6 +44,7 @@ import { CreatorPerformanceSummary } from "@/components/creator-performance-summ
 import { CreatorWallet } from "@/components/creator-wallet";
 import { ReferFriendCard } from "@/components/refer-friend-card";
 import { WeeklyChallengeWidget } from "@/components/weekly-challenge-widget";
+import { GettingStartedChecklist } from "@/components/getting-started-checklist";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
@@ -418,13 +419,16 @@ export default function InfluencerDashboard() {
         </div>
       </div>
 
+      {/* Getting started — quick-win activation checklist (self-hides when done) */}
+      <GettingStartedChecklist />
+
       {/* Creator wallet — balances + withdraw (most prominent) */}
       <div className="mb-8">
         <CreatorWallet />
       </div>
 
       {/* Virality — refer a friend + weekly challenge */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
+      <div id="refer-a-friend" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
         <ReferFriendCard />
         <WeeklyChallengeWidget />
       </div>

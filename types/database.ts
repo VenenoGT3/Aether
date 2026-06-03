@@ -57,6 +57,7 @@ export const UserSchema = z.object({
   referral_code: z.string().nullable().optional(),
   referred_by: z.string().uuid().nullable().optional(),
   referral_count: z.number().int().nonnegative().default(0).optional(),
+  first_clip_bonus_at: z.union([z.date(), z.string()]).nullable().optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });

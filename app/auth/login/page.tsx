@@ -45,17 +45,19 @@ function LoginForm() {
       // Fetch the updated profile to determine onboarding direction
       const profile = await getClientProfile();
       if (profile) {
+        // Role "influencer" maps to the "/creator" URL segment.
+        const segment = profile.role === "influencer" ? "creator" : "business";
         if (!profile.onboarded) {
-          router.push(`/${profile.role}/onboarding`);
+          router.push(`/${segment}/onboarding`);
         } else {
-          router.push(redirectTo === "/dashboard" ? `/${profile.role}/dashboard` : redirectTo);
+          router.push(redirectTo === "/dashboard" ? `/${segment}/dashboard` : redirectTo);
         }
       } else {
         router.push("/dashboard");
       }
       
       router.refresh();
-    } catch (err: any) {
+    } catch {
       toast.error("An unexpected error occurred during login.");
       setLoading(false);
     }
