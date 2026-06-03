@@ -53,6 +53,10 @@ export const UserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   role: UserRoleSchema,
+  // Referral system (Phase 4)
+  referral_code: z.string().nullable().optional(),
+  referred_by: z.string().uuid().nullable().optional(),
+  referral_count: z.number().int().nonnegative().default(0).optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });
