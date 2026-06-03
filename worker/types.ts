@@ -16,6 +16,7 @@ export interface ClipRow {
   last_synced_at: string | null;
   submitted_at: string | null;
   fraud_score: number;
+  fraud_flagged?: boolean;
   fraud_score_updated_at: string | null;
   fraud_overridden: boolean;
 }

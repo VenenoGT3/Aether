@@ -15,7 +15,7 @@ import type { ClipRow, ViewSyncOutcome } from "./types";
  */
 
 const CLIP_COLUMNS =
-  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, quality_status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_score_updated_at, fraud_overridden";
+  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, quality_status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_flagged, fraud_score_updated_at, fraud_overridden";
 
 /**
  * Promote 'pending' clips past their 5-working-day approval deadline to
@@ -103,6 +103,39 @@ async function notifyBrandOfFraud(
 }
 
 /**
+ * Append a fraud detection to the immutable clip_fraud_events ledger. Best-effort:
+ * the audit trail must never break a sync (the clip's fraud_* columns already hold
+ * the latest state). Service-role insert (RLS-on, no policies).
+ */
+async function recordFraudEvent(
+  supabase: SupabaseClient,
+  clip: ClipRow,
+  fraud: { score: number; signalScore: number; reasons: string[]; velocityBreach: boolean },
+  action: "flagged" | "disqualified",
+  traceId: string
+): Promise<void> {
+  try {
+    await supabase.from("clip_fraud_events").insert({
+      clip_id: clip.id,
+      campaign_id: clip.campaign_id,
+      creator_id: clip.creator_id,
+      action,
+      score: fraud.score,
+      signal_score: fraud.signalScore,
+      velocity_breach: fraud.velocityBreach,
+      reasons: fraud.reasons,
+      trace_id: traceId,
+    });
+  } catch (err) {
+    log.warn("fraud.event_record_failed", {
+      traceId,
+      clipId: clip.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Sync a single clip: fetch current views, run the fraud/velocity check, append
  * a view_snapshot, and update the clip's latest view count. Returns the outcome
  * so the caller can decide whether to trigger earnings.
@@ -112,6 +145,8 @@ export async function runViewSyncForClip(
   client?: SupabaseClient
 ): Promise<ViewSyncOutcome> {
   const supabase = client ?? getServiceClient();
+  // Correlates every log line + the fraud ledger row for this single sync attempt.
+  const traceId = randomUUID();
 
   const { data: clipData, error: clipErr } = await supabase
     .from("clips")
@@ -241,8 +276,12 @@ export async function runViewSyncForClip(
         last_synced_at: nowIso,
       })
       .eq("id", clipId);
+    await recordFraudEvent(supabase, clip, fraud, "disqualified", traceId);
     await notifyBrandOfFraud(supabase, clip, fraud.score, fraud.reasons);
-    log.warn("viewsync.disqualified", {
+    // High-risk, money-reversing event (the reverse_earnings_on_clip_block trigger
+    // reverses accrued earnings) → ALERT, not warn.
+    log.alert("viewsync.disqualified", {
+      traceId,
       clipId,
       campaignId: clip.campaign_id,
       platform: clip.platform,
@@ -261,13 +300,20 @@ export async function runViewSyncForClip(
   const flag = fraud.flag && !clip.fraud_overridden;
   if ((fraud.flag || fraud.disqualify) && clip.fraud_overridden) {
     log.warn("viewsync.override_suppressed", {
+      traceId,
       clipId,
       campaignId: clip.campaign_id,
       score: fraud.score,
       reasons: fraud.reasons,
     });
   } else if (flag) {
+    // Only record a ledger event on the transition into the flagged band, not on
+    // every steady-state sync, to keep the audit trail signal-dense.
+    if (!clip.fraud_flagged) {
+      await recordFraudEvent(supabase, clip, fraud, "flagged", traceId);
+    }
     log.warn("viewsync.flagged", {
+      traceId,
       clipId,
       campaignId: clip.campaign_id,
       score: fraud.score,
@@ -308,6 +354,7 @@ export async function runViewSyncForClip(
   }
 
   log.info("viewsync.synced", {
+    traceId,
     clipId,
     campaignId: clip.campaign_id,
     views: nextViews,
