@@ -29,6 +29,7 @@ import {
   isMockMode,
   isRealModeSimulatingViews,
   shouldSimulateViews,
+  validateWorkerEnv,
 } from "./env";
 import { log, errMessage } from "./logger";
 import {
@@ -343,12 +344,23 @@ async function emitHeartbeat(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Fail fast on a misconfigured environment, with a clear message per problem.
+  const env = validateWorkerEnv();
+  env.warnings.forEach((note) => log.warn("env.warning", { note }));
+  if (env.errors.length > 0) {
+    env.errors.forEach((note) => log.alert("env.invalid", { note }));
+    throw new Error(`Worker environment invalid: ${env.errors.join(" | ")}`);
+  }
+  log.info("env.validated", { mode: isMockMode ? "mock" : "real" });
+
   log.info("startup", {
     mock: isMockMode,
     viewProvider: shouldSimulateViews() ? "simulated" : "ayrshare",
     viewSyncEveryMin: getViewSyncIntervalMinutes(),
     payoutEveryMin: getPayoutBatchIntervalMinutes(),
     batchSize: getViewSyncBatchSize(),
+    nodeVersion: process.version,
+    pid: process.pid,
   });
 
   // Loud startup alert for the dangerous real-mode-with-simulated-views state.
@@ -380,16 +392,40 @@ async function main(): Promise<void> {
   const heartbeatTimer = setInterval(() => void emitHeartbeat(), heartbeatMs);
   log.info("ready", { heartbeatEveryMin: getHeartbeatIntervalMinutes() });
 
-  const shutdown = async () => {
-    log.info("shutdown.begin");
+  // Graceful shutdown: stop the heartbeat, drain in-flight jobs, close Redis.
+  // Guards against a second signal, and force-exits if a close hangs so the
+  // platform's stop timeout doesn't SIGKILL us mid-write.
+  let shuttingDown = false;
+  const SHUTDOWN_TIMEOUT_MS = 15_000;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) {
+      log.warn("shutdown.repeat_signal", { signal });
+      return;
+    }
+    shuttingDown = true;
+    log.info("shutdown.begin", { signal });
     clearInterval(heartbeatTimer);
-    await Promise.all(workers.map(([w]) => w.close()));
-    await closeQueues();
-    log.info("shutdown.done");
-    process.exit(0);
+
+    const force = setTimeout(() => {
+      log.alert("shutdown.forced", { note: "graceful close timed out", timeoutMs: SHUTDOWN_TIMEOUT_MS });
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    force.unref();
+
+    try {
+      await Promise.all(workers.map(([w]) => w.close()));
+      await closeQueues();
+      clearTimeout(force);
+      log.info("shutdown.done", { signal });
+      process.exit(0);
+    } catch (err) {
+      clearTimeout(force);
+      log.error("shutdown.error", { signal, error: errMessage(err) });
+      process.exit(1);
+    }
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 // Process-level safety nets: log rather than die silently.

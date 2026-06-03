@@ -1,0 +1,41 @@
+# The worker image only needs: package.json, package-lock.json, tsconfig.json,
+# worker/, and node_modules (installed in the build). Everything below is excluded
+# from the build context to keep it small and fast.
+
+node_modules
+.next
+.git
+.gitignore
+
+# Secrets — never bake into an image
+.env
+.env.*
+!.env.example
+
+# Next.js app / frontend (worker is standalone, uses only relative imports)
+app
+components
+public
+lib
+types
+hooks
+
+# Supabase migrations / edge functions (applied separately)
+supabase
+
+# Docs, tooling, editor, CI
+docs
+*.md
+.cursor
+.vscode
+.github
+coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+
+# Misc
+.DS_Store
+npm-debug.log*
+Dockerfile
+.dockerignore

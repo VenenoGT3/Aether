@@ -95,7 +95,7 @@ reject/disqualify a clip → trigger reverses unpaid 'accrued' earnings, release
 1. **Run the live staging smoke test** (SETUP.md §"first live verification") — proves the money pipeline end-to-end in Stripe test mode. Highest value.
 2. **Implement Ayrshare account-linking** + validate per-platform view coverage; then turn on the real provider. Strengthen fraud controls (caps, dedupe, tuned holdback) before real money.
 3. **Pool funding robustness** — refund-on-cancel + a reconciliation job for funded-but-unactivated campaigns (don't depend solely on the webhook).
-4. **Deploy the worker** (host + Redis) with monitoring/alerting on failed jobs and payouts.
+4. **Deploy the worker** (host + Redis). Deployment assets are now in place — a multi-stage `Dockerfile`, `.dockerignore`, `Procfile`, an `npm run worker:prod` script, **startup env validation** (fails fast with `[ALERT] env.invalid`), and **graceful `SIGTERM` shutdown** (drains jobs, closes Redis, 15s force-exit). Provision a managed Redis + a worker host and follow **[SETUP.md §6 "Deploying the worker (production)"](SETUP.md)** (Railway/Render/Fly recommended). Structured `[ALERT]` logs + heartbeat already exist — point a log drain at them.
 5. **Polish for real mode** — moderation creator-name join, replace hardcoded dashboard numbers with real/empty states.
 6. **Tech-debt pass** — clear the 158 lint errors; reduce mock/real dual-path drift.
 

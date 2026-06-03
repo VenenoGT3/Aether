@@ -107,6 +107,42 @@ npm run payouts:once     # one payout batch (no Redis)
 
 **Pool-funding reconciliation.** A repeatable worker job (every `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES`) recovers performance campaigns stuck in `draft` after pool funding when the `payment_intent.succeeded` webhook is missed or delayed. It finds draft performance campaigns that have a `funding_payment_intent_id`, checks the PaymentIntent status in Stripe, and **activates** (`status: open` + `funded_at`) those that have succeeded — idempotently (guarded on `status='draft'`, so it can't race the webhook or touch live campaigns). Canceled/failed PaymentIntents are **left in draft** (cancellation + refund stays an explicit owner action via the cancel endpoint); a campaign stuck too long fires `campaign.funding_stuck` `[ALERT]`. This complements the manual `POST /api/campaigns/[id]/reconcile-funding` endpoint.
 
+### 6. Deploying the worker (production)
+
+The worker is a **long-running background process with no HTTP port**, and must run **separately from the Next.js app** (the app deploys to Vercel; the worker does **not**). It needs a **managed Redis** instance plus the Supabase service-role key.
+
+**What it needs (real mode):**
+
+- `REDIS_URL` — managed Redis (Upstash, Railway, Render, Redis Cloud…). TLS URLs (`rediss://`) are supported.
+- `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — **required** (service role bypasses RLS; keep it only on the worker host, never in the Vercel app).
+- `STRIPE_SECRET_KEY` — required for **live** creator payouts.
+- `AYRSHARE_API_KEY` — required for **real** views; without it the real-money safety guard blocks earnings/payouts.
+
+On startup the worker **validates its environment** and aborts with a clear `[worker][ALERT] env.invalid` line if a required var is missing; missing optional vars log `env.warning` and continue.
+
+**Option A — Docker** (`Dockerfile` + `.dockerignore` are included):
+
+```bash
+docker build -t aether-worker .
+docker run --env-file .env aether-worker
+```
+
+Multi-stage `node:22-alpine` image, production dependencies only, runs as a non-root user under `tini` (PID 1) so `SIGTERM` reaches the process and triggers graceful shutdown. Deploy to any container host — Fly.io, Railway, Render, ECS, Cloud Run, or a plain VM.
+
+**Option B — Procfile platforms** (Railway, Render, Fly.io, Heroku-style) — a `Procfile` is included:
+
+```
+worker: npm run worker:prod
+```
+
+Point the platform at this repo, add a Redis addon, set the env vars above, and it runs `npm run worker:prod` (which is `tsx worker/index.ts`). No build step is required.
+
+**Recommended platforms:** **Railway** or **Render** are simplest (managed Redis + Procfile in a few clicks); **Fly.io** if you prefer the Docker image. Run **one** worker instance — the payout and reconcile workers are single-instance by design.
+
+**Graceful shutdown & restarts.** On `SIGTERM`/`SIGINT` (deploys, scaling, `docker stop`) the worker stops scheduling, drains in-flight jobs, closes Redis, and exits `0` — force-exiting after 15s if a close hangs. BullMQ retries (with backoff) any job interrupted mid-flight, and every money mutation is atomic + idempotent, so restarts and redeploys are safe.
+
+**Health & monitoring.** The worker logs `startup` → `env.validated` → `ready`, then a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` (queue depths + counters). Forward stdout to a log drain and page on the substring `[ALERT]` (see the monitoring note above).
+
 ---
 
 ## Environment variable reference

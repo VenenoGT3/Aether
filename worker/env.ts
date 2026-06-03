@@ -85,6 +85,57 @@ export function simulatedEarningsBlocked(): boolean {
   return isRealModeSimulatingViews() && !allowSimulatedPayoutsInRealMode();
 }
 
+export interface EnvValidation {
+  /** Hard failures — the worker cannot run safely; startup must abort. */
+  errors: string[];
+  /** Non-fatal notices worth surfacing (defaults applied, degraded modes). */
+  warnings: string[];
+}
+
+/**
+ * Validate the worker's environment at startup (fail fast with clear messages
+ * instead of a deep stack trace mid-job). Mock mode needs nothing real; real
+ * mode requires Supabase URL + service-role key, and surfaces warnings for
+ * missing Redis / Ayrshare / Stripe so misconfiguration is obvious in the logs.
+ */
+export function validateWorkerEnv(): EnvValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (isMockMode) {
+    warnings.push(
+      "AETHER_MOCK_MODE=true — placeholder Supabase + simulated views; no real money moves. Do NOT use in production."
+    );
+    return { errors, warnings };
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) {
+    errors.push("NEXT_PUBLIC_SUPABASE_URL is required (your Supabase project URL).");
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    errors.push("SUPABASE_SERVICE_ROLE_KEY is required (service-role key; bypasses RLS).");
+  }
+  if (!process.env.REDIS_URL?.trim()) {
+    warnings.push(
+      "REDIS_URL not set — defaulting to redis://localhost:6379. Set a managed Redis URL in production."
+    );
+  }
+  if (!getAyrshareApiKey()) {
+    warnings.push(
+      allowSimulatedPayoutsInRealMode()
+        ? "AYRSHARE_API_KEY not set + ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true — real money may move on SIMULATED views (testing only)."
+        : "AYRSHARE_API_KEY not set — views are simulated; earnings accrual + payouts are BLOCKED by the safety guard."
+    );
+  }
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    warnings.push(
+      "STRIPE_SECRET_KEY not set — live creator payouts will fail (mock/test transfers still work)."
+    );
+  }
+
+  return { errors, warnings };
+}
+
 /** Minimum gap between Ayrshare API calls (ms) — basic client-side rate limiting. */
 export function getAyrshareMinIntervalMs(): number {
   const raw = Number(process.env.AYRSHARE_MIN_INTERVAL_MS);
