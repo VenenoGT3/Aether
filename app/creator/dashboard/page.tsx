@@ -45,6 +45,7 @@ import { CreatorWallet } from "@/components/creator-wallet";
 import { ReferFriendCard } from "@/components/refer-friend-card";
 import { WeeklyChallengeWidget } from "@/components/weekly-challenge-widget";
 import { GettingStartedChecklist } from "@/components/getting-started-checklist";
+import { useFeatureFlags } from "@/lib/use-feature-flags";
 import { Profile } from "@/types";
 import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
@@ -72,6 +73,7 @@ const mockInvites = [
 
 export default function InfluencerDashboard() {
   const { t } = useTranslation();
+  const flags = useFeatureFlags();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "trends" | "wallet">("overview");
   const [showLegacy, setShowLegacy] = useState(false);
@@ -427,11 +429,13 @@ export default function InfluencerDashboard() {
         <CreatorWallet />
       </div>
 
-      {/* Virality — refer a friend + weekly challenge */}
-      <div id="refer-a-friend" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
-        <ReferFriendCard />
-        <WeeklyChallengeWidget />
-      </div>
+      {/* Virality — refer a friend + weekly challenge (feature-flag gated) */}
+      {(flags.enable_referrals || flags.enable_challenges) && (
+        <div id="refer-a-friend" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
+          {flags.enable_referrals && <ReferFriendCard />}
+          {flags.enable_challenges && <WeeklyChallengeWidget />}
+        </div>
+      )}
 
       {/* Performance clipping earnings + clips (new model) — primary content */}
       <CreatorPerformanceSummary />

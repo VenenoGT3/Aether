@@ -587,6 +587,10 @@ export const dictionary: Record<string, string> = {
   "To run campaigns, calculate earnings and payouts, prevent fraud, and provide support. We never sell your personal data.": "Per gestire le campagne, calcolare guadagni e pagamenti, prevenire le frodi e fornire supporto. Non vendiamo mai i tuoi dati personali.",
   "Your rights (GDPR)": "I tuoi diritti (GDPR)",
   "You can access, correct, export, or delete your data, and withdraw consent at any time. Contact privacy@aether.app to exercise these rights.": "Puoi accedere, correggere, esportare o eliminare i tuoi dati e revocare il consenso in qualsiasi momento. Scrivi a privacy@aether.app per esercitare questi diritti.",
+  // 404 page (Phase 4)
+  "Page not found": "Pagina non trovata",
+  "We couldn't find the page you're looking for. It may have moved or no longer exists.": "Non riusciamo a trovare la pagina che cerchi. Potrebbe essere stata spostata o non esistere più.",
+  "Go to dashboard": "Vai alla dashboard",
   "Safety Analysis & Compliance": "Analisi di Sicurezza e Conformità",
   "Audit Caption Compliance": "Verifica Conformità Didascalia",
   "Pin Annotation Tool": "Strumento Pin Annotazione",

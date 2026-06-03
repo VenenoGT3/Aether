@@ -35,6 +35,14 @@ export const metadata: Metadata = {
   },
   description: "The premium Apple-designed marketing ecosystem. Connect brands and creators, secure escrows with Stripe Connect, and automate campaign tracking in real time.",
   applicationName: "Aether",
+  // Italian-first audience: declare it-IT as the primary locale with en-US alternate.
+  alternates: {
+    canonical: "/",
+    languages: {
+      "it-IT": "/",
+      "en-US": "/",
+    },
+  },
   appleWebApp: {
     capable: true,
     title: "Aether",
@@ -46,6 +54,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Aether",
+    locale: "it_IT",
+    alternateLocale: ["en_US"],
     title: "Aether - Frictionless Influencer Marketing Platform",
     description: "The premium Apple-designed marketing ecosystem. Connect brands and creators, secure escrows with Stripe Connect, and automate campaign tracking in real time.",
     images: [
