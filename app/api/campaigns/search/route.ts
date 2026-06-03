@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isMockMode } from "@/lib/env";
 import { cached } from "@/lib/cache/swr-cache";
 import { endRequest } from "@/lib/logger";
+import { getCircuitBreaker } from "@/lib/circuit-breaker";
 
 /** Discovery returns the GLOBAL open-campaign list (same for every creator), so
  * it is cached fleet-wide keyed only by the query params — no per-user data. A
@@ -59,12 +60,26 @@ export async function GET(request: Request) {
     if (niche) query = query.contains("target_niches", [niche]);
     if (category) query = query.eq("campaign_category", category);
 
-    const { data, error, count } = await query;
-    if (error) {
-      // Throw so a transient DB error is NOT cached as an empty result.
-      throw new Error(error.message || "campaign search failed");
+    // Breaker on this READ path only — safe to fail open because discovery is
+    // cache-backed (stale data is served while Supabase recovers). Money-path
+    // Supabase calls deliberately do NOT use a breaker: the DB is the system of
+    // record, so they must surface a real error rather than proceed degraded.
+    // (supabase-js resolves errors via { error } instead of throwing, so we
+    // record outcomes manually rather than using breaker.exec().)
+    const breaker = getCircuitBreaker("supabase-read", { failureThreshold: 5, openDurationMs: 30_000 });
+    if (!breaker.allowRequest()) {
+      throw new Error("supabase-read circuit open");
     }
-    return { campaigns: data ?? [], total: count ?? 0 };
+    try {
+      const { data, error, count } = await query;
+      // Throw so a transient DB error is NOT cached as an empty result.
+      if (error) throw new Error(error.message || "campaign search failed");
+      breaker.recordSuccess();
+      return { campaigns: data ?? [], total: count ?? 0 };
+    } catch (err) {
+      breaker.recordFailure(err);
+      throw err;
+    }
   };
 
   try {

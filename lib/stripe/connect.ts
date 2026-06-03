@@ -1,5 +1,11 @@
 import { isMockMode } from "@/lib/env";
 import { stripeServer } from "./client";
+import { getCircuitBreaker } from "@/lib/circuit-breaker";
+
+// All live Stripe API calls go through one breaker: 5 consecutive failures →
+// OPEN 30s. When OPEN, exec() throws a safe "temporarily unavailable" error
+// instead of piling requests onto a degraded Stripe — fail-fast, not fail-hang.
+const stripeBreaker = getCircuitBreaker("stripe", { failureThreshold: 5, openDurationMs: 30_000 });
 
 /**
  * Stripe Connect Marketplace onboarding, balance management, and transfer wrappers
@@ -39,7 +45,7 @@ export async function getConnectAccount(
   }
 
   try {
-    const account = await stripeServer.accounts.retrieve(accountId);
+    const account = await stripeBreaker.exec(() => stripeServer.accounts.retrieve(accountId));
     return {
       id: account.id,
       userId: account.metadata?.userId || "",
@@ -74,21 +80,25 @@ export async function createStripeExpressAccount(
   }
 
   try {
-    const account = await stripeServer.accounts.create({
-      type: "express",
-      metadata: { userId, role },
-      capabilities: {
-        transfers: { requested: true },
-        card_payments: { requested: true },
-      },
-    });
+    const account = await stripeBreaker.exec(() =>
+      stripeServer.accounts.create({
+        type: "express",
+        metadata: { userId, role },
+        capabilities: {
+          transfers: { requested: true },
+          card_payments: { requested: true },
+        },
+      })
+    );
 
-    const accountLink = await stripeServer.accountLinks.create({
-      account: account.id,
-      refresh_url: `${origin}/stripe/callback?action=refresh&role=${role}&accountId=${account.id}`,
-      return_url: `${origin}/stripe/callback?action=return&role=${role}&accountId=${account.id}`,
-      type: "account_onboarding",
-    });
+    const accountLink = await stripeBreaker.exec(() =>
+      stripeServer.accountLinks.create({
+        account: account.id,
+        refresh_url: `${origin}/stripe/callback?action=refresh&role=${role}&accountId=${account.id}`,
+        return_url: `${origin}/stripe/callback?action=return&role=${role}&accountId=${account.id}`,
+        type: "account_onboarding",
+      })
+    );
 
     return {
       url: accountLink.url,
@@ -119,11 +129,13 @@ export async function createEscrowPaymentIntent(
   }
 
   try {
-    const paymentIntent = await stripeServer.paymentIntents.create({
-      amount: Math.round(amount * 100),
-      currency: "usd",
-      metadata,
-    });
+    const paymentIntent = await stripeBreaker.exec(() =>
+      stripeServer.paymentIntents.create({
+        amount: Math.round(amount * 100),
+        currency: "usd",
+        metadata,
+      })
+    );
 
     return {
       clientSecret: paymentIntent.client_secret,
@@ -160,14 +172,16 @@ export async function releaseEscrowPayment(
   }
 
   try {
-    const transfer = await stripeServer.transfers.create(
-      {
-        amount: Math.round(amount * 100),
-        currency: "usd",
-        destination: influencerStripeAccountId,
-        metadata: { campaignId },
-      },
-      idempotencyKey ? { idempotencyKey } : undefined
+    const transfer = await stripeBreaker.exec(() =>
+      stripeServer.transfers.create(
+        {
+          amount: Math.round(amount * 100),
+          currency: "usd",
+          destination: influencerStripeAccountId,
+          metadata: { campaignId },
+        },
+        idempotencyKey ? { idempotencyKey } : undefined
+      )
     );
 
     return {
@@ -191,7 +205,9 @@ export async function retrievePaymentIntentStatus(
     return { status: "succeeded" };
   }
   try {
-    const pi = await stripeServer.paymentIntents.retrieve(paymentIntentId);
+    const pi = await stripeBreaker.exec(() =>
+      stripeServer.paymentIntents.retrieve(paymentIntentId)
+    );
     return { status: pi.status };
   } catch (error) {
     console.error("Error retrieving PaymentIntent:", error);
@@ -223,9 +239,11 @@ export async function refundPoolPayment(
     return { refunded: true, refundId: "re_mock_" + Math.random().toString(36).substring(2, 11) };
   }
 
-  const pi = await stripeServer.paymentIntents.retrieve(paymentIntentId, {
-    expand: ["latest_charge"],
-  });
+  const pi = await stripeBreaker.exec(() =>
+    stripeServer.paymentIntents.retrieve(paymentIntentId, {
+      expand: ["latest_charge"],
+    })
+  );
 
   const charge = pi.latest_charge;
   if (charge && typeof charge !== "string" && charge.refunded) {
@@ -233,9 +251,8 @@ export async function refundPoolPayment(
   }
 
   if (pi.status === "succeeded") {
-    const refund = await stripeServer.refunds.create(
-      { payment_intent: paymentIntentId },
-      { idempotencyKey }
+    const refund = await stripeBreaker.exec(() =>
+      stripeServer.refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey })
     );
     return { refunded: true, refundId: refund.id };
   }
@@ -245,7 +262,7 @@ export async function refundPoolPayment(
     pi.status === "requires_confirmation" ||
     pi.status === "requires_action"
   ) {
-    await stripeServer.paymentIntents.cancel(paymentIntentId);
+    await stripeBreaker.exec(() => stripeServer.paymentIntents.cancel(paymentIntentId));
     return { refunded: false, cancelled: true };
   }
 

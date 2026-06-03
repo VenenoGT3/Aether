@@ -18,8 +18,8 @@
  * up latency). Both fail OPEN: on any Redis trouble, callers use their fallback.
  */
 
-import { apiLog } from "@/lib/api/trace-log";
 import * as Sentry from "@sentry/nextjs";
+import { getCircuitBreaker } from "@/lib/circuit-breaker";
 
 type RedisOk = { ok: true; result: unknown };
 type RedisErr = { ok: false; reason: "unconfigured" | "circuit_open" | "timeout" | "error"; error?: string };
@@ -52,31 +52,11 @@ export function isRedisConfigured(): boolean {
   return CONFIG !== null;
 }
 
-// ---- Process-local circuit breaker ----
-const CB_FAILURE_THRESHOLD = 5;
-const CB_COOLDOWN_MS = 15_000;
-let cbConsecutiveFailures = 0;
-let cbOpenUntil = 0;
-
-function circuitOpen(now: number): boolean {
-  return now < cbOpenUntil;
-}
-
-function recordSuccess(): void {
-  cbConsecutiveFailures = 0;
-  cbOpenUntil = 0;
-}
-
-function recordFailure(): void {
-  cbConsecutiveFailures += 1;
-  if (cbConsecutiveFailures >= CB_FAILURE_THRESHOLD && cbOpenUntil === 0) {
-    cbOpenUntil = Date.now() + CB_COOLDOWN_MS;
-    apiLog("alert", "redis.circuit_open", {
-      consecutiveFailures: cbConsecutiveFailures,
-      cooldownMs: CB_COOLDOWN_MS,
-    });
-  }
-}
+// Process-local circuit breaker (shared implementation): after 5 consecutive
+// infra failures the breaker OPENS for 30s, then a half-open trial probes Redis.
+// We fail OPEN by returning { reason: "circuit_open" } (callers fall back), so we
+// use allowRequest()/recordSuccess()/recordFailure() rather than exec() (no throw).
+const redisBreaker = getCircuitBreaker("redis", { failureThreshold: 5, openDurationMs: 30_000 });
 
 /**
  * Execute a single Redis command. `args` is the command + arguments
@@ -85,8 +65,7 @@ function recordFailure(): void {
 export async function redisCommand(args: (string | number)[]): Promise<RedisResult> {
   if (!CONFIG) return { ok: false, reason: "unconfigured" };
 
-  const now = Date.now();
-  if (circuitOpen(now)) return { ok: false, reason: "circuit_open" };
+  if (!redisBreaker.allowRequest()) return { ok: false, reason: "circuit_open" };
 
   // Performance span for the Redis round-trip (no-op without active tracing).
   const op = String(args[0] ?? "CMD").toUpperCase();
@@ -112,7 +91,7 @@ async function execRedisCommand(args: (string | number)[]): Promise<RedisResult>
       cache: "no-store",
     });
     if (!res.ok) {
-      recordFailure();
+      redisBreaker.recordFailure(new Error(`redis http_${res.status}`));
       return { ok: false, reason: "error", error: `http_${res.status}` };
     }
     const json = (await res.json()) as { result?: unknown; error?: string };
@@ -121,11 +100,11 @@ async function execRedisCommand(args: (string | number)[]): Promise<RedisResult>
       // don't trip the breaker, but surface it.
       return { ok: false, reason: "error", error: json.error };
     }
-    recordSuccess();
+    redisBreaker.recordSuccess();
     return { ok: true, result: json.result };
   } catch (err) {
     const aborted = (err as { name?: string } | null)?.name === "AbortError";
-    recordFailure();
+    redisBreaker.recordFailure(err);
     return {
       ok: false,
       reason: aborted ? "timeout" : "error",

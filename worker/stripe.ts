@@ -1,5 +1,12 @@
 import Stripe from "stripe";
 import { isMockMode } from "./env";
+import { getCircuitBreaker } from "./circuit-breaker";
+
+// All live worker Stripe calls go through one breaker: 5 consecutive failures →
+// OPEN 30s. When OPEN, exec() throws — the payout batch treats that as a transient
+// failure (mark_payout_failed releases the claim, retried next batch), so we stop
+// hammering a degraded Stripe instead of failing every payout in the batch.
+const stripeBreaker = getCircuitBreaker("stripe", { failureThreshold: 5, openDurationMs: 30_000 });
 
 /**
  * Worker-local Stripe client. The Next.js Stripe client (lib/stripe/client.ts)
@@ -43,14 +50,16 @@ export async function transferToCreator(
     };
   }
 
-  const transfer = await getStripe().transfers.create(
-    {
-      amount: Math.round(amount * 100),
-      currency: "usd",
-      destination: destinationAccountId,
-      metadata,
-    },
-    { idempotencyKey }
+  const transfer = await stripeBreaker.exec(() =>
+    getStripe().transfers.create(
+      {
+        amount: Math.round(amount * 100),
+        currency: "usd",
+        destination: destinationAccountId,
+        metadata,
+      },
+      { idempotencyKey }
+    )
   );
 
   return { transferId: transfer.id, mock: false };
@@ -68,7 +77,9 @@ export async function retrievePaymentIntentStatus(
     return { status: "succeeded" };
   }
   try {
-    const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+    const pi = await stripeBreaker.exec(() =>
+      getStripe().paymentIntents.retrieve(paymentIntentId)
+    );
     return { status: pi.status };
   } catch {
     return null;
