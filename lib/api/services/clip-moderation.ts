@@ -13,8 +13,6 @@ export type ClipModerationResult =
   | { ok: true; clip: ModeratedClip; idempotent?: boolean }
   | { ok: false; error: string; status: number };
 
-type ModerationAction = "approve" | "reject" | "request_changes" | "disqualify";
-
 type RpcPayload = {
   ok?: boolean;
   clip_id?: string;
