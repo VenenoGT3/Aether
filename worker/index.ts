@@ -110,7 +110,19 @@ function startViewSyncWorker(): Worker {
               clipIds.map((clipId) => ({
                 name: JOB_NAMES.syncClip,
                 data: { clipId } satisfies SyncClipJob,
-                opts: { ...CLIP_RETRY },
+                opts: {
+                  ...CLIP_RETRY,
+                  // Per-clip dedup: while a sync for this clip is queued / active /
+                  // awaiting a retry, an OVERLAPPING fan-out (slow provider, backlog,
+                  // concurrency) cannot enqueue a second CONCURRENT sync of the same
+                  // clip. Two concurrent syncs would insert near-simultaneous
+                  // view_snapshots and corrupt the fraud trend/uniformity (CV/spike)
+                  // signals. Retries reuse this id (they serialize), and the id frees
+                  // on terminal state so the next fan-out re-syncs normally.
+                  jobId: `${JOB_NAMES.syncClip}:${clipId}`,
+                  removeOnComplete: true,
+                  removeOnFail: true,
+                },
               }))
             );
           }
