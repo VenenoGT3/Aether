@@ -4,7 +4,7 @@ import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
 import { scoreClipFraud } from "./fraud";
 import { getFraudConfig, getViewSyncBatchSize, simulatedEarningsBlocked } from "./env";
-import { log } from "./logger";
+import { log, errMessage } from "./logger";
 import type { ClipRow, ViewSyncOutcome } from "./types";
 
 /**
@@ -537,4 +537,111 @@ export async function auditClipQualityInvariants(
     });
   }
   return rows.length;
+}
+
+/**
+ * Fraud forensics sweep (heartbeat): (a) reversal-integrity audit — terminal
+ * clips that still carry accrued earnings; (b) cross-campaign repeat offenders;
+ * (c) disqualification-rate anomaly within the lookback window. Each DB RPC
+ * raises its own [ALERT]; this surfaces worker-side alerts + counts. Best-effort.
+ */
+export async function runFraudForensics(
+  opts: { repeatOffenderMinEvents: number; disqualifyRateThreshold: number; windowMinutes: number },
+  client?: SupabaseClient
+): Promise<{ reversalFailures: number; repeatOffenders: number; disqualified: number }> {
+  const traceId = randomUUID();
+  const supabase = client ?? getServiceClient();
+  const result = { reversalFailures: 0, repeatOffenders: 0, disqualified: 0 };
+
+  // (a) Reversal integrity — disqualified/rejected clips with accrued earnings.
+  try {
+    const { data, error } = await supabase.rpc("audit_disqualified_clip_earnings", {
+      p_trace_id: traceId,
+    });
+    if (error) {
+      log.alert("fraud.reversal_audit_failed", { traceId, error: error.message });
+    } else {
+      const rows = Array.isArray(data) ? data : [];
+      result.reversalFailures = rows.length;
+      if (rows.length > 0) {
+        log.alert("fraud.reversal_failure_detected", {
+          traceId,
+          count: rows.length,
+          clips: rows
+            .map((r) => (r as { clip_id?: string }).clip_id)
+            .filter(Boolean)
+            .slice(0, 20),
+        });
+      }
+    }
+  } catch (err) {
+    log.warn("fraud.reversal_audit_error", { traceId, error: errMessage(err) });
+  }
+
+  // (b) Cross-campaign repeat offenders (7-day lookback in the RPC default).
+  try {
+    const { data, error } = await supabase.rpc("fraud_repeat_offenders", {
+      p_min_events: opts.repeatOffenderMinEvents,
+    });
+    if (error) {
+      log.warn("fraud.repeat_offenders_failed", { traceId, error: error.message });
+    } else {
+      const rows = Array.isArray(data) ? data : [];
+      result.repeatOffenders = rows.length;
+      if (rows.length > 0) {
+        log.alert("fraud.repeat_offenders", {
+          traceId,
+          count: rows.length,
+          offenders: rows
+            .slice(0, 20)
+            .map((r) => {
+              const o = r as {
+                creator_id?: string;
+                event_count?: number;
+                campaign_count?: number;
+                disqualified?: number;
+              };
+              return {
+                creatorId: o.creator_id,
+                events: o.event_count,
+                campaigns: o.campaign_count,
+                disqualified: o.disqualified,
+              };
+            }),
+        });
+      }
+    }
+  } catch (err) {
+    log.warn("fraud.repeat_offenders_error", { traceId, error: errMessage(err) });
+  }
+
+  // (c) Disqualification-rate anomaly within the heartbeat window.
+  try {
+    const sinceInterval = `${Math.max(opts.windowMinutes, 1)} minutes`;
+    const { data, error } = await supabase.rpc("fraud_event_stats", {
+      p_since: sinceInterval,
+    });
+    if (error) {
+      log.warn("fraud.event_stats_failed", { traceId, error: error.message });
+    } else {
+      const row = (Array.isArray(data) ? data[0] : data) as
+        | { disqualified?: number; flagged?: number; total_events?: number }
+        | undefined;
+      const disqualified = Number(row?.disqualified ?? 0);
+      result.disqualified = disqualified;
+      if (disqualified >= opts.disqualifyRateThreshold) {
+        log.alert("fraud.disqualify_rate_spike", {
+          traceId,
+          disqualified,
+          threshold: opts.disqualifyRateThreshold,
+          windowMin: opts.windowMinutes,
+          flagged: Number(row?.flagged ?? 0),
+        });
+      }
+    }
+  } catch (err) {
+    log.warn("fraud.event_stats_error", { traceId, error: errMessage(err) });
+  }
+
+  return result;
 }

@@ -12,6 +12,7 @@ import {
   auditCampaignBudgetDrift,
   auditPayoutRevenueDrift,
   auditClipQualityInvariants,
+  runFraudForensics,
   fetchTrackingClipIds,
   runViewSyncForClip,
   runEarningsCalc,
@@ -27,6 +28,8 @@ import {
   getPayoutBatchIntervalMinutes,
   getPoolReconciliationIntervalMinutes,
   getProviderErrorAlertThreshold,
+  getFraudDisqualifyRateAlertThreshold,
+  getFraudRepeatOffenderMinEvents,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
   isMockMode,
@@ -367,15 +370,27 @@ async function emitHeartbeat(): Promise<void> {
     // per offending row; this surfaces counts in the beat. Best-effort.
     try {
       const client = getServiceClient();
-      const [budgetDrift, revenueDrift, qualityViolations] = await Promise.all([
+      const [budgetDrift, revenueDrift, qualityViolations, fraud] = await Promise.all([
         auditCampaignBudgetDrift(client),
         auditPayoutRevenueDrift(client),
         auditClipQualityInvariants(client),
+        runFraudForensics(
+          {
+            repeatOffenderMinEvents: getFraudRepeatOffenderMinEvents(),
+            disqualifyRateThreshold: getFraudDisqualifyRateAlertThreshold(),
+            windowMinutes: getHeartbeatIntervalMinutes(),
+          },
+          client
+        ),
       ]);
       if (budgetDrift > 0) log.alert("heartbeat.budget_drift", { drifted: budgetDrift });
       if (revenueDrift > 0) log.alert("heartbeat.revenue_drift", { drifted: revenueDrift });
       if (qualityViolations > 0)
         log.alert("heartbeat.quality_invariant", { violations: qualityViolations });
+      if (fraud.reversalFailures > 0)
+        log.alert("heartbeat.fraud_reversal_failure", { count: fraud.reversalFailures });
+      if (fraud.repeatOffenders > 0)
+        log.alert("heartbeat.fraud_repeat_offenders", { count: fraud.repeatOffenders });
     } catch (err) {
       log.warn("heartbeat.drift_audit_error", { error: errMessage(err) });
     }

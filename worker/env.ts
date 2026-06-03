@@ -230,6 +230,22 @@ export function getProviderErrorAlertThreshold(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 5;
 }
 
+/**
+ * Auto-disqualifications within a single heartbeat window at or above this count
+ * fire a [ALERT] — a spike usually means a provider returning bad data or a
+ * misconfigured threshold mass-disqualifying legitimate creators (scoring anomaly).
+ */
+export function getFraudDisqualifyRateAlertThreshold(): number {
+  const raw = Number(process.env.WORKER_FRAUD_DISQUALIFY_RATE_THRESHOLD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 25;
+}
+
+/** Minimum cross-campaign fraud events in the lookback window to flag a repeat offender. */
+export function getFraudRepeatOffenderMinEvents(): number {
+  const raw = Number(process.env.WORKER_FRAUD_REPEAT_OFFENDER_MIN_EVENTS);
+  return Number.isFinite(raw) && raw >= 2 ? raw : 3;
+}
+
 /** Parse a numeric env var with a fallback and a minimum allowed value. */
 function numEnv(name: string, fallback: number, min = 0): number {
   const raw = Number(process.env[name]);
