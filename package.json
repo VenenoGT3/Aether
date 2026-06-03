@@ -17,7 +17,10 @@
     "payouts:once": "tsx worker/run-payouts-once.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts"
+    "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts",
+    "loadtest:health": "k6 run tests/load/load-test-health.js",
+    "loadtest:discovery": "k6 run tests/load/load-test-discovery.js",
+    "loadtest:clips": "k6 run tests/load/load-test-clip-submit.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
