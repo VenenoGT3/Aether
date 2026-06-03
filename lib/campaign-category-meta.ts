@@ -44,6 +44,9 @@ export function categoryMetaSchema(category: CampaignCategory) {
   return category === "ugc" ? UgcCategoryMetaSchema : ClippingCategoryMetaSchema;
 }
 
+/** Hard cap on serialized category_meta — mirrors the DB CHECK (20 KB). */
+export const MAX_CATEGORY_META_BYTES = 20000;
+
 /** Normalize and validate category_meta for a performance campaign. */
 export function validateCategoryMeta(
   category: string | null | undefined,
@@ -60,6 +63,13 @@ export function validateCategoryMeta(
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { ok: false, error: issue?.message ?? "Invalid category brief." };
+  }
+  // Defense in depth: Zod strips unknown keys, but guard the serialized size so
+  // the app never attempts a write the DB CHECK would reject. TextEncoder is
+  // universal (browser + Node), unlike Buffer — this module runs in both.
+  const serializedBytes = new TextEncoder().encode(JSON.stringify(parsed.data)).length;
+  if (serializedBytes > MAX_CATEGORY_META_BYTES) {
+    return { ok: false, error: "Campaign brief is too large. Please shorten it." };
   }
   return { ok: true, category, meta: parsed.data as Record<string, unknown> };
 }
