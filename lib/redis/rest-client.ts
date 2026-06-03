@@ -20,6 +20,25 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
+import { fetchWithTimeout, fetchWithRetry } from "@/lib/fetch-utils";
+
+// Idempotent Redis read commands — safe to retry after a transient blip/timeout.
+// Writes (EVAL/INCR/SET/SET NX/DEL) are NOT retried: a retry after a timeout
+// could double-apply (e.g. double-INCR a rate-limit counter) or mis-signal a lock.
+const REDIS_READ_COMMANDS = new Set([
+  "GET",
+  "MGET",
+  "EXISTS",
+  "TTL",
+  "PTTL",
+  "STRLEN",
+  "HGET",
+  "HGETALL",
+  "SCARD",
+  "ZCARD",
+  "LLEN",
+  "GETRANGE",
+]);
 
 type RedisOk = { ok: true; result: unknown };
 type RedisErr = { ok: false; reason: "unconfigured" | "circuit_open" | "timeout" | "error"; error?: string };
@@ -77,19 +96,29 @@ export async function redisCommand(args: (string | number)[]): Promise<RedisResu
 
 async function execRedisCommand(args: (string | number)[]): Promise<RedisResult> {
   const cfg = CONFIG as RedisConfig;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
+  const op = String(args[0] ?? "").toUpperCase();
+  const init: RequestInit = {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${cfg.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(args),
+    cache: "no-store",
+  };
+  // Reads retry transient blips (small backoff to stay fast on the request hot
+  // path); writes time out without retry (non-idempotent — see REDIS_READ_COMMANDS).
+  // Redis stays on a SHORT timeout (default 1s) on purpose: a slow Redis must
+  // fail fast and fall back, not add latency to every request.
   try {
-    const res = await fetch(cfg.url, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${cfg.token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(args),
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    const res = REDIS_READ_COMMANDS.has(op)
+      ? await fetchWithRetry(cfg.url, init, {
+          attempts: 2,
+          timeoutMs: cfg.timeoutMs,
+          baseDelayMs: 50,
+          maxDelayMs: 300,
+        })
+      : await fetchWithTimeout(cfg.url, init, cfg.timeoutMs);
     if (!res.ok) {
       redisBreaker.recordFailure(new Error(`redis http_${res.status}`));
       return { ok: false, reason: "error", error: `http_${res.status}` };
@@ -110,8 +139,6 @@ async function execRedisCommand(args: (string | number)[]): Promise<RedisResult>
       reason: aborted ? "timeout" : "error",
       error: err instanceof Error ? err.message : String(err),
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

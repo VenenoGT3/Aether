@@ -6,6 +6,7 @@ import {
 } from "./env";
 import { log, errMessage } from "./logger";
 import { recordProviderError } from "./metrics";
+import { fetchWithRetry } from "./fetch-utils";
 import type { ClipRow, ViewData } from "./types";
 
 /**
@@ -87,27 +88,13 @@ class AyrshareViewsProvider implements ViewsProvider {
     };
 
     try {
+      // Timeout (10s) so a hung Ayrshare can't stall view-sync, plus retry on
+      // 429 (Retry-After honored) / 5xx / network blips with backoff + jitter.
+      // The analytics query is read-only, so retrying is safe.
       const res = await rateLimited(() =>
-        fetch("https://api.ayrshare.com/api/analytics/post", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            id: clip.external_post_id ?? clip.post_url,
-            platforms: [clip.platform],
-          }),
-        })
-      );
-
-      // Honor rate limiting with a single backoff retry.
-      if (res.status === 429) {
-        const retryAfter = Number(res.headers.get("retry-after")) || 2;
-        log.warn("views.ayrshare.rate_limited", { clipId: clip.id, retryAfterSec: retryAfter });
-        await sleep(retryAfter * 1000);
-        const retry = await rateLimited(() =>
-          fetch("https://api.ayrshare.com/api/analytics/post", {
+        fetchWithRetry(
+          "https://api.ayrshare.com/api/analytics/post",
+          {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -117,19 +104,10 @@ class AyrshareViewsProvider implements ViewsProvider {
               id: clip.external_post_id ?? clip.post_url,
               platforms: [clip.platform],
             }),
-          })
-        );
-        if (!retry.ok) {
-          recordProviderError();
-          log.warn("views.ayrshare.http_error", {
-            clipId: clip.id,
-            status: retry.status,
-            note: "retry failed; keeping last-known views",
-          });
-          return lastKnown;
-        }
-        return parseAyrshare(await retry.json(), clip.platform);
-      }
+          },
+          { attempts: 3, timeoutMs: 10_000, baseDelayMs: 500, maxDelayMs: 4_000 }
+        )
+      );
 
       if (!res.ok) {
         recordProviderError();

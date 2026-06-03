@@ -23,7 +23,9 @@ function getStripe(): Stripe {
   if (!key) {
     throw new Error("[worker] STRIPE_SECRET_KEY is required for live payouts.");
   }
-  cached = new Stripe(key);
+  // 15s per-request timeout + idempotent SDK retries. The payout transfer carries
+  // a stable idempotency key (the payout id), so a retried transfer never double-pays.
+  cached = new Stripe(key, { timeout: 15_000, maxNetworkRetries: 2 });
   return cached;
 }
 
