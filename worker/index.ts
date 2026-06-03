@@ -30,6 +30,7 @@ import {
   getProviderErrorAlertThreshold,
   getFraudDisqualifyRateAlertThreshold,
   getFraudRepeatOffenderMinEvents,
+  getHealthPort,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
   isMockMode,
@@ -37,7 +38,9 @@ import {
   shouldSimulateViews,
   validateWorkerEnv,
 } from "./env";
+import { randomUUID } from "node:crypto";
 import { log, errMessage } from "./logger";
+import { startHealthServer } from "./health";
 import {
   recordCompleted,
   recordExhausted,
@@ -61,6 +64,43 @@ const VIEW_SYNC_SCHEDULER_ID = "view-sync-scheduler";
 const PAYOUT_SCHEDULER_ID = "payout-batch-scheduler";
 const POOL_RECONCILE_SCHEDULER_ID = "pool-reconcile-scheduler";
 const CLIP_RETRY = { attempts: 3, backoff: { type: "exponential", delay: 5_000 } } as const;
+
+// Per-process identity (multi-instance). Used for the audit-leader lock value.
+const INSTANCE_ID = randomUUID();
+const AUDIT_LEADER_KEY = "aether:worker:audit-leader";
+
+// Liveness state surfaced by the health server.
+let workerReady = false;
+let lastHeartbeatAt = Date.now();
+
+/**
+ * Fleet-wide audit leadership: only ONE instance runs the heavy per-tick audits
+ * (pool scan + budget/revenue/quality/fraud forensics) so N instances don't run
+ * them N times and emit N duplicate [ALERT]s. Uses a Redis SET NX PX lease via
+ * BullMQ's own client (no extra Redis dependency). TTL < heartbeat interval so it
+ * auto-expires before the next tick (any instance can win next time; a dead
+ * leader never wedges the lock). The audits are also SKIP-LOCKED-safe in SQL, so
+ * this lease is a load/noise optimization, not a correctness dependency.
+ */
+async function tryAcquireAuditLeadership(ttlMs: number): Promise<boolean> {
+  try {
+    const client = (await viewSyncQueue.client) as unknown as {
+      set(
+        key: string,
+        value: string,
+        mode: "PX",
+        ttl: number,
+        nx: "NX"
+      ): Promise<string | null>;
+    };
+    const res = await client.set(AUDIT_LEADER_KEY, INSTANCE_ID, "PX", Math.max(ttlMs, 1000), "NX");
+    return res === "OK";
+  } catch (err) {
+    // On a Redis hiccup, skip audits this tick (next tick / another instance covers it).
+    log.warn("heartbeat.leader_lock_error", { error: errMessage(err) });
+    return false;
+  }
+}
 
 async function startSchedulers(): Promise<void> {
   const syncMinutes = getViewSyncIntervalMinutes();
@@ -358,6 +398,9 @@ async function emitHeartbeat(): Promise<void> {
       reconcile: depth(pr),
     });
 
+    // Mark this instance live for the health probe (per-instance liveness).
+    lastHeartbeatAt = Date.now();
+
     const provThreshold = getProviderErrorAlertThreshold();
     if (w.providerErrors >= provThreshold) {
       log.alert("views.provider.repeated_errors", {
@@ -373,6 +416,15 @@ async function emitHeartbeat(): Promise<void> {
         earningsBlocked: !allowSimulatedPayoutsInRealMode(),
         overrideEnabled: allowSimulatedPayoutsInRealMode(),
       });
+    }
+
+    // Fleet-wide work runs on ONE instance per tick (see tryAcquireAuditLeadership).
+    // The per-instance heartbeat LOG above already ran on every instance.
+    const heartbeatMs = getHeartbeatIntervalMinutes() * 60_000;
+    const isAuditLeader = await tryAcquireAuditLeadership(Math.floor(heartbeatMs * 0.8));
+    if (!isAuditLeader) {
+      log.debug("heartbeat.audit_skip_not_leader", {});
+      return;
     }
 
     await scanPoolExhaustion();
@@ -444,6 +496,16 @@ async function main(): Promise<void> {
     }
   }
 
+  // Health endpoint first, so orchestrator probes get a (not-yet-ready) response
+  // immediately instead of connection-refused during startup.
+  const heartbeatMs = getHeartbeatIntervalMinutes() * 60_000;
+  const healthServer = startHealthServer(getHealthPort(), {
+    ready: () => workerReady,
+    lastHeartbeatAt: () => lastHeartbeatAt,
+    // Allow ~3 missed beats before reporting stale (hung loop / dead Redis).
+    heartbeatStaleMs: heartbeatMs * 3,
+  });
+
   const workers: Array<[Worker, string]> = [
     [startViewSyncWorker(), QUEUE_NAMES.viewSync],
     [startEarningsWorker(), QUEUE_NAMES.earningsCalc],
@@ -455,10 +517,14 @@ async function main(): Promise<void> {
   await startSchedulers();
 
   // Heartbeat: one shortly after startup, then on a fixed interval.
-  const heartbeatMs = getHeartbeatIntervalMinutes() * 60_000;
   void emitHeartbeat();
   const heartbeatTimer = setInterval(() => void emitHeartbeat(), heartbeatMs);
-  log.info("ready", { heartbeatEveryMin: getHeartbeatIntervalMinutes() });
+  workerReady = true;
+  log.info("ready", {
+    instanceId: INSTANCE_ID,
+    heartbeatEveryMin: getHeartbeatIntervalMinutes(),
+    healthPort: getHealthPort() || "disabled",
+  });
 
   // Graceful shutdown: stop the heartbeat, drain in-flight jobs, close Redis.
   // Guards against a second signal, and force-exits if a close hangs so the
@@ -471,8 +537,10 @@ async function main(): Promise<void> {
       return;
     }
     shuttingDown = true;
+    workerReady = false; // readiness probe → 503 so the LB stops routing immediately
     log.info("shutdown.begin", { signal });
     clearInterval(heartbeatTimer);
+    healthServer?.close();
 
     const force = setTimeout(() => {
       log.alert("shutdown.forced", { note: "graceful close timed out", timeoutMs: SHUTDOWN_TIMEOUT_MS });

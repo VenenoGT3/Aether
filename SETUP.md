@@ -137,11 +137,27 @@ worker: npm run worker:prod
 
 Point the platform at this repo, add a Redis addon, set the env vars above, and it runs `npm run worker:prod` (which is `tsx worker/index.ts`). No build step is required.
 
-**Recommended platforms:** **Railway** or **Render** are simplest (managed Redis + Procfile in a few clicks); **Fly.io** if you prefer the Docker image. Run **one** worker instance — the payout and reconcile workers are single-instance by design.
+**Recommended platforms:** **Railway** or **Render** are simplest (managed Redis + Procfile in a few clicks); **Fly.io** if you prefer the Docker image.
 
-**Graceful shutdown & restarts.** On `SIGTERM`/`SIGINT` (deploys, scaling, `docker stop`) the worker stops scheduling, drains in-flight jobs, closes Redis, and exits `0` — force-exiting after 15s if a close hangs. BullMQ retries (with backoff) any job interrupted mid-flight, and every money mutation is atomic + idempotent, so restarts and redeploys are safe.
+**Horizontal scaling (multi-instance).** You can run **N worker instances** against the same Redis for throughput/HA:
 
-**Health & monitoring.** The worker logs `startup` → `env.validated` → `ready`, then a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` (queue depths + counters). Forward stdout to a log drain and page on the substring `[ALERT]` (see the monitoring note above).
+- **Schedulers** are registered via BullMQ `upsertJobScheduler` (idempotent, Redis-centralized), so the fan-out / payout / reconcile jobs are produced **exactly once per interval** no matter how many instances are up.
+- **View-sync** jobs carry a per-clip `jobId`, so an overlapping fan-out can't enqueue a **concurrent** sync of the same clip (which would corrupt fraud signals).
+- **Money mutations** (claims, settlement, accrual) are atomic SQL with advisory locks + claim-by-id-set, so even concurrent processing across instances can't double-pay or overspend.
+- **Per-tick audits** (pool scan + budget/revenue/quality/fraud forensics) run under a short **Redis leader lease** (`SET NX PX` via `aether:worker:audit-leader`) so only **one** instance runs them per heartbeat — no N× load or duplicate `[ALERT]`s. The lease auto-expires (< heartbeat interval), so a dead leader never wedges it.
+
+Each instance still logs its own `heartbeat` (per-instance liveness) and processes jobs from the shared queues.
+
+**Graceful shutdown & restarts.** On `SIGTERM`/`SIGINT` (deploys, scaling, `docker stop`) the worker flips its readiness probe to `503`, stops scheduling, drains in-flight jobs, closes Redis + the health server, and exits `0` — force-exiting after 15s if a close hangs. BullMQ retries (with backoff) any job interrupted mid-flight, and every money mutation is atomic + idempotent, so restarts and redeploys are safe.
+
+**Health checks.** The worker exposes a tiny HTTP endpoint on `WORKER_HEALTH_PORT` (default `8080`; set `0` to disable) for orchestrator probes:
+
+- `GET /health` (aliases `/healthz`, `/livez`) — **liveness**: `200` when started **and** the heartbeat is fresh (a hung loop / dead Redis goes stale → `503`).
+- `GET /ready` (alias `/readyz`) — **readiness**: `200` once startup completed; flips to `503` immediately on shutdown so a load balancer drains it.
+
+The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livenessProbe` at `/health` and `readinessProbe` at `/ready`.
+
+**Monitoring.** The worker logs `startup` → `env.validated` → `ready` (with `instanceId`), then a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` (queue depths + counters). Forward stdout to a log drain and page on the substring `[ALERT]` (see the monitoring note above).
 
 ---
 
@@ -167,6 +183,9 @@ Point the platform at this repo, add a Redis addon, set the env vars above, and 
 | `WORKER_LOG_DEBUG` | worker | `true` enables verbose per-clip/per-job debug logs (default off) |
 | `WORKER_HEARTBEAT_MINUTES` | worker | Heartbeat cadence — queue depths + counters (default 5) |
 | `WORKER_PROVIDER_ERROR_ALERT_THRESHOLD` | worker | Provider errors per heartbeat window before an `[ALERT]` (default 5) |
+| `WORKER_FRAUD_DISQUALIFY_RATE_THRESHOLD` | worker | Auto-disqualifications per heartbeat window before a scoring-anomaly `[ALERT]` (default 25) |
+| `WORKER_FRAUD_REPEAT_OFFENDER_MIN_EVENTS` | worker | Cross-campaign fraud events (7d) to flag a repeat offender (default 3) |
+| `WORKER_HEALTH_PORT` | worker | HTTP health endpoint port for orchestrator probes; `0` disables (default 8080) |
 | `VIEW_HOLDBACK_HOURS` | worker | Fallback holdback (per-campaign value overrides; default 48) |
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |

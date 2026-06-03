@@ -32,6 +32,13 @@ COPY worker ./worker
 
 USER aether
 
+# Health endpoint for orchestrator probes (Docker/k8s/Fly). Must match
+# WORKER_HEALTH_PORT (default 8080); set WORKER_HEALTH_PORT=0 to disable.
+EXPOSE 8080
+# busybox wget (bundled in alpine). start-period covers schedulers/Redis connect.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -q -O- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1
+
 ENTRYPOINT ["/sbin/tini", "--"]
 # Invoke tsx directly (not via npm) so signals reach the Node process cleanly.
 CMD ["node_modules/.bin/tsx", "worker/index.ts"]

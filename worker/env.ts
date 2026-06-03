@@ -246,6 +246,17 @@ export function getFraudRepeatOffenderMinEvents(): number {
   return Number.isFinite(raw) && raw >= 2 ? raw : 3;
 }
 
+/**
+ * Port for the worker health endpoint (Docker/k8s probes). Default 8080.
+ * Set WORKER_HEALTH_PORT=0 to disable the server (e.g. platforms with no probes).
+ */
+export function getHealthPort(): number {
+  const raw = process.env.WORKER_HEALTH_PORT;
+  if (raw == null || raw.trim() === "") return 8080;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 8080;
+}
+
 /** Parse a numeric env var with a fallback and a minimum allowed value. */
 function numEnv(name: string, fallback: number, min = 0): number {
   const raw = Number(process.env[name]);
