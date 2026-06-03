@@ -23,6 +23,8 @@ import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useBrandModeration } from "@/lib/supabase/clips";
 import { approvalCountdownLabel, workingDaysLeft } from "@/lib/approval";
 import { Clock } from "lucide-react";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface PerfCampaign {
   id: string;
@@ -213,10 +215,12 @@ export default function BrandModerationPage() {
               <Loader2 className="animate-spin" />
             </div>
           ) : pending.length === 0 ? (
-            <div className="p-10 apple-card text-center text-muted-foreground">
-              <Check size={22} className="mx-auto mb-2 opacity-40" />
-              <p className="text-sm font-semibold">{t("All caught up")}</p>
-              <p className="text-xs mt-1">{t("No clips waiting for review.")}</p>
+            <div className="apple-card">
+              <EmptyState
+                icon={Check}
+                title={t("All caught up")}
+                description={t("No clips waiting for review.")}
+              />
             </div>
           ) : (
             pending.map((clip) => {
@@ -230,25 +234,19 @@ export default function BrandModerationPage() {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20 uppercase tracking-wide">
-                      {t("Pending review")}
-                    </span>
+                    <StatusBadge tone="warning">{t("Pending review")}</StatusBadge>
                     <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
                     {clip.creatorCpm != null && (
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20 flex items-center gap-0.5">
+                      <StatusBadge tone="info">
                         ${Number(clip.creatorCpm).toFixed(2)} {t("CPM")}
-                      </span>
+                      </StatusBadge>
                     )}
                     {clip.approval_deadline && (
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                          (workingDaysLeft(clip.approval_deadline) ?? 0) <= 1
-                            ? "bg-destructive/10 text-destructive border-destructive/20"
-                            : "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20"
-                        }`}
+                      <StatusBadge
+                        tone={(workingDaysLeft(clip.approval_deadline) ?? 0) <= 1 ? "danger" : "warning"}
                       >
-                        <Clock size={9} /> {t(approvalCountdownLabel(clip.approval_deadline))}
-                      </span>
+                        <Clock size={9} aria-hidden="true" /> {t(approvalCountdownLabel(clip.approval_deadline))}
+                      </StatusBadge>
                     )}
                   </div>
                   <p className="text-sm font-semibold truncate">{clip.creatorName} · {clip.campaignTitle}</p>
@@ -364,9 +362,7 @@ export default function BrandModerationPage() {
                 >
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/20 uppercase tracking-wide">
-                        {t("Risk")} {clip.fraud_score ?? 0}
-                      </span>
+                      <StatusBadge tone="danger">{t("Risk")} {clip.fraud_score ?? 0}</StatusBadge>
                       <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
                       <span className="text-[11px] font-semibold truncate">{clip.creatorName} · {clip.campaignTitle}</span>
                     </div>

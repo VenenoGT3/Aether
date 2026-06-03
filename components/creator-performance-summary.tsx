@@ -18,13 +18,17 @@ import {
   useCreatorEarnings,
   type ClipStatus,
 } from "@/lib/supabase/clips";
+import { SectionHeader } from "@/components/ui/section-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
+import { PromoCard } from "@/components/ui/empty-state";
 
-const STATUS_STYLE: Record<ClipStatus, { label: string; cls: string }> = {
-  pending: { label: "Pending", cls: "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20" },
-  approved: { label: "Approved", cls: "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/20" },
-  tracking: { label: "Tracking", cls: "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20" },
-  rejected: { label: "Rejected", cls: "bg-muted text-muted-foreground border-border/30" },
-  disqualified: { label: "Disqualified", cls: "bg-destructive/10 text-destructive border-destructive/20" },
+const STATUS_STYLE: Record<ClipStatus, { label: string; tone: BadgeTone }> = {
+  pending: { label: "Pending", tone: "warning" },
+  approved: { label: "Approved", tone: "info" },
+  tracking: { label: "Tracking", tone: "success" },
+  rejected: { label: "Rejected", tone: "neutral" },
+  disqualified: { label: "Disqualified", tone: "danger" },
 };
 
 /**
@@ -44,23 +48,12 @@ export function CreatorPerformanceSummary() {
   if (!hasActivity) {
     return (
       <div className="mb-12 relative z-10">
-        <Link
+        <PromoCard
+          icon={Film}
           href="/creator/clips"
-          className="flex items-center justify-between gap-4 p-5 rounded-3xl bg-[#34C759]/5 border border-[#34C759]/20 hover:bg-[#34C759]/10 transition-colors group"
-        >
-          <div className="flex items-start gap-3">
-            <span className="p-2 rounded-2xl bg-[#34C759]/10 text-[#34C759] shrink-0">
-              <Film size={16} />
-            </span>
-            <div>
-              <h4 className="text-xs font-bold text-foreground">{t("Earn per view with clipping campaigns")}</h4>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
-                {t("Join open campaigns, submit clips, and get paid for the views you generate.")}
-              </p>
-            </div>
-          </div>
-          <ArrowRight size={16} className="text-[#34C759] shrink-0 group-hover:translate-x-0.5 transition-transform" />
-        </Link>
+          title={t("Earn per view with clipping campaigns")}
+          description={t("Join open campaigns, submit clips, and get paid for the views you generate.")}
+        />
       </div>
     );
   }
@@ -102,37 +95,25 @@ export function CreatorPerformanceSummary() {
 
   return (
     <div className="mb-12 relative z-10">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <span className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider flex items-center gap-1.5">
-            <Film size={12} /> {t("Performance Clipping")}
-          </span>
-          <h2 className="text-lg font-bold tracking-tight mt-1">{t("Clips & Earnings")}</h2>
-        </div>
-        <Link
-          href="/creator/clips"
-          className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 shrink-0"
-        >
-          {t("Open Clips & Earnings")} <ArrowRight size={13} />
-        </Link>
-      </div>
+      <SectionHeader
+        eyebrow={t("Performance Clipping")}
+        eyebrowIcon={Film}
+        title={t("Clips & Earnings")}
+        action={{ label: t("Open Clips & Earnings"), href: "/creator/clips" }}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div key={c.label} title={c.hint} className="p-5 apple-card cursor-default">
-              <div className="flex justify-between items-start text-muted-foreground">
-                <span className="text-[10px] font-bold uppercase tracking-wider">{c.label}</span>
-                <span className="p-1.5 rounded-xl" style={{ backgroundColor: `${c.color}1a`, color: c.color }}>
-                  <Icon size={14} />
-                </span>
-              </div>
-              <h3 className="text-xl font-bold tracking-tight mt-3">{c.value}</h3>
-              <span className="text-[10px] text-muted-foreground">{c.sub}</span>
-            </div>
-          );
-        })}
+        {cards.map((c) => (
+          <StatCard
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            icon={c.icon}
+            color={c.color}
+            sub={c.sub}
+            hint={c.hint}
+          />
+        ))}
       </div>
 
       {/* How automatic payouts work */}
@@ -167,9 +148,7 @@ export function CreatorPerformanceSummary() {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style.cls}`}>
-                          {t(style.label)}
-                        </span>
+                        <StatusBadge tone={style.tone}>{t(style.label)}</StatusBadge>
                         <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
                       </div>
                       <p className="text-xs font-semibold truncate mt-1">{clip.campaignTitle}</p>

@@ -8,6 +8,10 @@ import { isMockMode, supabase } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useTranslation } from "@/lib/translations";
 import { campaignCategoryLabel } from "@/lib/campaign-category";
+import { SectionHeader } from "@/components/ui/section-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { PromoCard } from "@/components/ui/empty-state";
 
 interface PerfCampaign {
   id: string;
@@ -81,23 +85,12 @@ export function BrandPerformanceSummary() {
   if (campaigns.length === 0) {
     return (
       <div className="mb-10 relative z-10">
-        <Link
+        <PromoCard
+          icon={Zap}
           href="/business/campaigns/new"
-          className="flex items-center justify-between gap-4 p-5 rounded-3xl bg-[#34C759]/5 border border-[#34C759]/20 hover:bg-[#34C759]/10 transition-colors group"
-        >
-          <div className="flex items-start gap-3">
-            <span className="p-2 rounded-2xl bg-[#34C759]/10 text-[#34C759] shrink-0">
-              <Zap size={16} />
-            </span>
-            <div>
-              <h4 className="text-xs font-bold text-foreground">{t("New: pay-per-view clipping campaigns")}</h4>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
-                {t("Fund a budget pool and let creators earn per view. Launch your first performance campaign.")}
-              </p>
-            </div>
-          </div>
-          <ArrowRight size={16} className="text-[#34C759] shrink-0 group-hover:translate-x-0.5 transition-transform" />
-        </Link>
+          title={t("New: pay-per-view clipping campaigns")}
+          description={t("Fund a budget pool and let creators earn per view. Launch your first performance campaign.")}
+        />
       </div>
     );
   }
@@ -147,20 +140,12 @@ export function BrandPerformanceSummary() {
 
   return (
     <div className="mb-12 relative z-10">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <span className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider flex items-center gap-1.5">
-            <Zap size={12} /> {t("Performance Campaigns")}
-          </span>
-          <h2 className="text-lg font-bold tracking-tight mt-1">{t("Pay-per-view at a glance")}</h2>
-        </div>
-        <Link
-          href="/business/moderation"
-          className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 shrink-0"
-        >
-          {t("Moderation")} <ArrowRight size={13} />
-        </Link>
-      </div>
+      <SectionHeader
+        eyebrow={t("Performance Campaigns")}
+        eyebrowIcon={Zap}
+        title={t("Pay-per-view at a glance")}
+        action={{ label: t("Moderation"), href: "/business/moderation" }}
+      />
 
       {/* Threshold warning / closed notice */}
       {anyExhausted ? (
@@ -248,21 +233,16 @@ export function BrandPerformanceSummary() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div key={c.label} className="p-5 apple-card">
-              <div className="flex justify-between items-start text-muted-foreground">
-                <span className="text-[10px] font-bold uppercase tracking-wider">{c.label}</span>
-                <span className="p-1.5 rounded-xl" style={{ backgroundColor: `${c.color}1a`, color: c.color }}>
-                  <Icon size={14} />
-                </span>
-              </div>
-              <h3 className="text-xl font-bold tracking-tight mt-3">{c.value}</h3>
-              {c.sub && <span className="text-[10px] text-muted-foreground">{c.sub}</span>}
-            </div>
-          );
-        })}
+        {cards.map((c) => (
+          <StatCard
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            icon={c.icon}
+            color={c.color}
+            sub={c.sub}
+          />
+        ))}
       </div>
 
       <div className="p-6 apple-card">
@@ -282,18 +262,10 @@ export function BrandPerformanceSummary() {
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm font-semibold truncate">{c.title}</span>
                     {campaignCategoryLabel(c.campaign_category) && (
-                      <span className="text-[8px] font-bold uppercase tracking-wide bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full shrink-0">
-                        {t(campaignCategoryLabel(c.campaign_category)!)}
-                      </span>
+                      <StatusBadge tone="info">{t(campaignCategoryLabel(c.campaign_category)!)}</StatusBadge>
                     )}
-                    <span className="text-[8px] font-bold uppercase tracking-wide bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 px-1.5 py-0.5 rounded-full shrink-0">
-                      {t("Performance")}
-                    </span>
-                    {c.status === "exhausted" && (
-                      <span className="text-[8px] font-bold uppercase tracking-wide bg-destructive/10 text-destructive border border-destructive/20 px-1.5 py-0.5 rounded-full shrink-0">
-                        {t("Closed")}
-                      </span>
-                    )}
+                    <StatusBadge tone="success">{t("Performance")}</StatusBadge>
+                    {c.status === "exhausted" && <StatusBadge tone="danger">{t("Closed")}</StatusBadge>}
                   </div>
                   <span className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1">
                     <Eye size={11} /> {viewsByCampaign(c.id).toLocaleString()}
