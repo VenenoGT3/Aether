@@ -142,6 +142,24 @@ export async function submitClip(
         status: 409,
       };
     }
+    if (insertErr.code === "23514") {
+      const msg = insertErr.message ?? "";
+      if (msg.includes("not accepting new clips") && msg.includes("closed")) {
+        return {
+          ok: false,
+          error: "This campaign is closed and is not accepting new clips.",
+          status: 409,
+        };
+      }
+      if (msg.includes("most of its budget")) {
+        return {
+          ok: false,
+          error:
+            "This campaign has used most of its budget and is no longer accepting new clips. Try another campaign.",
+          status: 409,
+        };
+      }
+    }
     return {
       ok: false,
       error: insertErr.message || "Could not submit your clip.",

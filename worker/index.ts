@@ -249,6 +249,7 @@ interface PoolRow {
   id: string;
   title: string;
   budget_pool: number | null;
+  available_pool: number | null;
   budget_reserved: number | null;
   budget_paid: number | null;
 }
@@ -262,7 +263,7 @@ async function scanPoolExhaustion(): Promise<void> {
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("campaigns")
-    .select("id, title, budget_pool, budget_reserved, budget_paid")
+    .select("id, title, budget_pool, available_pool, budget_reserved, budget_paid")
     .eq("campaign_type", "performance")
     .in("status", ["open", "in_progress"]);
   if (error) {
@@ -270,15 +271,18 @@ async function scanPoolExhaustion(): Promise<void> {
     return;
   }
   for (const c of (data ?? []) as PoolRow[]) {
+    const pool =
+      c.available_pool != null ? Number(c.available_pool) : Number(c.budget_pool || 0);
     const remaining =
-      Number(c.budget_pool || 0) - Number(c.budget_reserved || 0) - Number(c.budget_paid || 0);
+      pool - Number(c.budget_reserved || 0) - Number(c.budget_paid || 0);
     if (remaining <= 0) {
       if (!exhaustedPoolAlerts.has(c.id)) {
         exhaustedPoolAlerts.add(c.id);
         log.alert("campaign.pool_exhausted", {
           campaignId: c.id,
           title: c.title,
-          pool: c.budget_pool,
+          pool,
+          availablePool: c.available_pool,
           reserved: c.budget_reserved,
           paid: c.budget_paid,
         });

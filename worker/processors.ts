@@ -328,6 +328,7 @@ export async function runEarningsCalc(
   const { data, error } = await supabase.rpc("record_clip_earning", {
     p_clip_id: clipId,
     p_new_views: views,
+    p_trace_id: traceId,
   });
 
   if (error) {
@@ -349,7 +350,6 @@ export async function runEarningsCalc(
   if (amount > 0) {
     log.info("earnings.accrued", { traceId, clipId, views, amount: amount.toFixed(2) });
   } else {
-    // Expected steady-state outcome (no new billable views, or pool/cap hit) — debug only.
     log.debug("earnings.no_accrual", { traceId, clipId, views });
   }
   return amount;

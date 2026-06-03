@@ -2,9 +2,10 @@
  * Shared performance-campaign budget thresholds + usage math (pure, no React).
  *
  * Pool accounting: used = budget_reserved + budget_paid; remaining = pool - used.
- *   - At >= 90% used, new clip submissions are blocked (soft gate at submit).
- *   - At 100% used, the campaign auto-closes to 'exhausted' (enforced atomically
- *     in record_clip_earning under the campaign row lock — see the migration).
+ *   - At >= 90% used, new clip submissions are blocked (soft gate: API pre-check
+ *     + DB BEFORE INSERT trigger trg_clips_budget_submission_gate).
+ *   - At 100% used, the campaign auto-closes to 'exhausted' (atomic in
+ *     close_performance_campaign_if_exhausted, called from record_clip_earning).
  */
 
 export const BUDGET_BLOCK_PCT = 0.9; // block new submissions at/above this
