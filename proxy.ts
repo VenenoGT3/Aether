@@ -1,34 +1,39 @@
-/**
- * Request logging + correlation-id propagation.
- *
- * NOTE ON NAMING: in Next.js 16 the `middleware.ts` convention was renamed to
- * `proxy.ts` (same capability, deprecation notice in the docs). Proxy now
- * defaults to the **Node.js runtime**, which is why we can use Pino here (it
- * would not run on the legacy Edge runtime). The `runtime` config option is not
- * allowed in proxy files.
- *
- * Responsibilities:
- *   - Generate a per-request correlation id (or honor an inbound x-request-id).
- *   - Log the INCOMING request (method, path WITHOUT query string, safe UA).
- *   - Propagate the id (and a start timestamp) to the route handler via request
- *     headers, and echo x-request-id back on the response for client-side tracing.
- *
- * WHY RESPONSE STATUS/LATENCY IS NOT LOGGED HERE: by design, proxy runs BEFORE
- * the route and returns `NextResponse.next()` — it never observes the handler's
- * final status or duration for pass-through requests. Response logging therefore
- * lives at the handler boundary (lib/api/guard.ts), which reads the propagated
- * x-request-id / x-request-start to emit a correlated completion line.
- */
-
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
 import { logger, genRequestId } from "@/lib/logger";
+import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export const config = {
-  // Only correlate/log API traffic — not static assets, images, or page renders.
-  matcher: ["/api/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
-export function proxy(request: NextRequest): NextResponse {
+/**
+ * Single Next.js 16 proxy entrypoint.
+ *
+ * API requests get request-id propagation for correlated route-handler logs.
+ * Page requests get the lightweight auth/role redirects formerly implemented
+ * in middleware.ts.
+ */
+export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = request.nextUrl;
+
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.includes(".") ||
+    pathname === "/favicon.ico"
+  ) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api")) {
+    return correlateApiRequest(request);
+  }
+
+  return enforcePageAccess(request);
+}
+
+function correlateApiRequest(request: NextRequest): NextResponse {
   const requestId = request.headers.get("x-request-id") || genRequestId();
   const startTime = Date.now();
   const pathname = request.nextUrl.pathname; // already excludes the query string
@@ -49,4 +54,134 @@ export function proxy(request: NextRequest): NextResponse {
   // Echo the id to the client for end-to-end tracing / support correlation.
   response.headers.set("x-request-id", requestId);
   return response;
+}
+
+async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = request.nextUrl;
+  const res = NextResponse.next();
+  const cookieStore = request.cookies;
+
+  let isLoggedIn = false;
+  let userRole: "business" | "influencer" = "business";
+  let isOnboarded = false;
+
+  if (isMockMode) {
+    const sessionCookie = cookieStore.get("aether-session")?.value;
+    const roleCookie = cookieStore.get("aether-role")?.value;
+    const onboardedCookie = cookieStore.get("aether-onboarded")?.value;
+
+    isLoggedIn = !!sessionCookie;
+    userRole = roleCookie === "influencer" ? "influencer" : "business";
+    isOnboarded = onboardedCookie === "true";
+  } else {
+    try {
+      const supabase = createServerClient(
+        getSupabaseUrl(),
+        getSupabaseAnonKey(),
+        {
+          cookies: {
+            getAll() {
+              return request.cookies.getAll();
+            },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                request.cookies.set(name, value);
+                res.cookies.set(name, value, options);
+              });
+            },
+          },
+        }
+      );
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      isLoggedIn = !!user;
+
+      if (user) {
+        userRole =
+          (user.app_metadata?.role as "business" | "influencer") || "influencer";
+
+        const { data: userRow } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        if (userRow?.role) {
+          userRole = userRow.role as "business" | "influencer";
+        }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("onboarded")
+          .eq(PROFILE_PK_COLUMN, user.id)
+          .single();
+        isOnboarded = profile?.onboarded ?? false;
+
+        res.cookies.set("aether-onboarded", isOnboarded ? "true" : "false", {
+          path: "/",
+          maxAge: 31536000,
+          sameSite: "lax",
+        });
+      }
+    } catch {
+      isLoggedIn = false;
+    }
+  }
+
+  const userRolePath = userRole === "influencer" ? "creator" : "business";
+
+  const isProtectedPath =
+    pathname.startsWith("/business") ||
+    pathname.startsWith("/creator") ||
+    pathname.startsWith("/campaigns") ||
+    pathname === "/dashboard";
+
+  if (!isLoggedIn && isProtectedPath) {
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("redirectTo", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const isAuthPath = pathname.startsWith("/auth");
+  if (isLoggedIn && isAuthPath) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (isLoggedIn) {
+    if (pathname === "/dashboard") {
+      if (!isOnboarded) {
+        return NextResponse.redirect(
+          new URL(`/${userRolePath}/onboarding`, request.url)
+        );
+      }
+      return NextResponse.redirect(new URL(`/${userRolePath}/dashboard`, request.url));
+    }
+
+    if (pathname.startsWith("/business") && userRole !== "business") {
+      return NextResponse.redirect(new URL("/creator/dashboard", request.url));
+    }
+
+    if (pathname.startsWith("/creator") && userRole !== "influencer") {
+      return NextResponse.redirect(new URL("/business/dashboard", request.url));
+    }
+
+    const isBusinessOnboarding = pathname === "/business/onboarding";
+    const isCreatorOnboarding = pathname === "/creator/onboarding";
+    const isOnboardingPath = isBusinessOnboarding || isCreatorOnboarding;
+
+    if (!isOnboarded && isProtectedPath && !isOnboardingPath) {
+      return NextResponse.redirect(
+        new URL(`/${userRolePath}/onboarding`, request.url)
+      );
+    }
+
+    if (isOnboarded && isOnboardingPath) {
+      return NextResponse.redirect(
+        new URL(`/${userRolePath}/dashboard`, request.url)
+      );
+    }
+  }
+
+  return res;
 }

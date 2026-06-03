@@ -41,8 +41,8 @@ describe("profiles.user_id schema contract", () => {
     assertNoProfilesIdQueries(join(ROOT, "lib"));
     assertNoProfilesIdQueries(join(ROOT, "app"));
     assertNoProfilesIdQueries(join(ROOT, "components"));
-    const middleware = readFileSync(join(ROOT, "middleware.ts"), "utf-8");
-    expect(fileUsesProfilesIdQuery(middleware)).toBe(false);
+    const proxy = readFileSync(join(ROOT, "proxy.ts"), "utf-8");
+    expect(fileUsesProfilesIdQuery(proxy)).toBe(false);
   });
 });
 
