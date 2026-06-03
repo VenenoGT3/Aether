@@ -4,6 +4,7 @@ import { jsonSuccess, jsonError } from "@/lib/api/response";
 import { createClient } from "@/lib/supabase/server";
 import { isMockMode } from "@/lib/env";
 import { cached } from "@/lib/cache/swr-cache";
+import { endRequest } from "@/lib/logger";
 
 /** Discovery returns the GLOBAL open-campaign list (same for every creator), so
  * it is cached fleet-wide keyed only by the query params — no per-user data. A
@@ -24,11 +25,13 @@ export async function GET(request: Request) {
     auth: true,
   });
   if (!guarded.ok) return guarded.response;
+  const { log, startTime } = guarded.ctx;
 
   const { q, niche, category, page, limit } = guarded.ctx.data;
   const offset = (page - 1) * limit;
 
   if (isMockMode) {
+    endRequest(log, { statusCode: 200, startTime });
     return jsonSuccess({
       campaigns: [],
       page,
@@ -79,8 +82,10 @@ export async function GET(request: Request) {
           })
         : await runQuery();
 
+    endRequest(log, { statusCode: 200, startTime });
     return jsonSuccess({ campaigns: result.campaigns, page, limit, total: result.total });
   } catch {
+    endRequest(log, { statusCode: 500, startTime });
     return jsonError("Could not load campaigns. Please try again.", 500);
   }
 }

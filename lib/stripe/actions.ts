@@ -16,6 +16,7 @@ import {
   AuthorizationError,
 } from "@/lib/campaign-lifecycle";
 import { apiLog } from "@/lib/api/trace-log";
+import { requestLogger, endRequest } from "@/lib/logger";
 
 /**
  * Server Action: Initialize Stripe Onboarding for Business or Influencer
@@ -356,12 +357,19 @@ export async function requestWithdrawalAction() {
   }
 
   const traceId = randomUUID();
+  // Server action (no proxy/guard): build a request-scoped logger ourselves and
+  // measure end-to-end latency from action entry. requestId == traceId so this
+  // correlates with the apiLog [ALERT] lines below.
+  const startTime = Date.now();
 
   try {
     const user = await getServerUser();
     if (!user || user.role !== "influencer") {
       return { success: false, error: "Only creator accounts can withdraw." };
     }
+    const log = requestLogger({ requestId: traceId, userId: user.user_id }).child({
+      route: "withdrawal.request",
+    });
 
     const supabase = await createClient();
 
@@ -434,6 +442,7 @@ export async function requestWithdrawalAction() {
           transferId: transfer.transferId,
           error: settleErr.message,
         });
+        endRequest(log, { statusCode: 202, startTime, msg: "withdrawal.pending" });
         return {
           success: true,
           isMock: false,
@@ -444,6 +453,7 @@ export async function requestWithdrawalAction() {
         };
       }
       apiLog("info", "withdrawal.paid", { traceId, payoutId, gross, fee, net });
+      endRequest(log, { statusCode: 200, startTime, msg: "withdrawal.completed" });
       return { success: true, isMock: false, gross, net, fee };
     } catch (transferErr) {
       if (isUnknownTransferOutcome(transferErr)) {

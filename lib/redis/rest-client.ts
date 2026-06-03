@@ -19,6 +19,7 @@
  */
 
 import { apiLog } from "@/lib/api/trace-log";
+import * as Sentry from "@sentry/nextjs";
 
 type RedisOk = { ok: true; result: unknown };
 type RedisErr = { ok: false; reason: "unconfigured" | "circuit_open" | "timeout" | "error"; error?: string };
@@ -87,13 +88,23 @@ export async function redisCommand(args: (string | number)[]): Promise<RedisResu
   const now = Date.now();
   if (circuitOpen(now)) return { ok: false, reason: "circuit_open" };
 
+  // Performance span for the Redis round-trip (no-op without active tracing).
+  const op = String(args[0] ?? "CMD").toUpperCase();
+  return Sentry.startSpan(
+    { name: `redis ${op}`, op: "db.redis", attributes: { "db.system": "redis", "db.operation": op } },
+    () => execRedisCommand(args)
+  );
+}
+
+async function execRedisCommand(args: (string | number)[]): Promise<RedisResult> {
+  const cfg = CONFIG as RedisConfig;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
   try {
-    const res = await fetch(CONFIG.url, {
+    const res = await fetch(cfg.url, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${CONFIG.token}`,
+        authorization: `Bearer ${cfg.token}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(args),

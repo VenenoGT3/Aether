@@ -4,6 +4,7 @@ import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { approveClip } from "@/lib/api/services/clip-moderation";
 import { isMockMode } from "@/lib/env";
+import { endRequest } from "@/lib/logger";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
@@ -24,8 +25,10 @@ export async function POST(
     auth: "business",
   });
   if (!guarded.ok) return guarded.response;
+  const { log, startTime } = guarded.ctx;
 
   if (isMockMode) {
+    endRequest(log, { statusCode: 200, startTime });
     return jsonSuccess({
       clip: {
         id: clipId,
@@ -43,8 +46,10 @@ export async function POST(
     guarded.ctx.data.quality_score
   );
   if (!result.ok) {
+    endRequest(log, { statusCode: result.status, startTime });
     return jsonError(result.error, result.status);
   }
 
+  endRequest(log, { statusCode: 200, startTime });
   return jsonSuccess({ clip: result.clip });
 }

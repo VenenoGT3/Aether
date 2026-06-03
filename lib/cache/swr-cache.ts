@@ -28,6 +28,7 @@
 import { randomUUID } from "node:crypto";
 import { isRedisConfigured, redisGet, redisSet, redisCommand } from "@/lib/redis/rest-client";
 import { apiLog } from "@/lib/api/trace-log";
+import * as Sentry from "@sentry/nextjs";
 
 const ENV = (process.env.VERCEL_ENV || process.env.NODE_ENV || "dev").trim();
 
@@ -90,6 +91,20 @@ function shouldEarlyRecompute(env: Envelope<unknown>, now: number, beta: number)
  * back to compute().
  */
 export async function cached<T>(opts: CacheOptions<T>): Promise<T> {
+  return Sentry.startSpan(
+    {
+      name: `cache ${opts.namespace}`,
+      op: "cache.get",
+      attributes: { "cache.namespace": opts.namespace, "cache.key": opts.key },
+    },
+    (span) => cachedInner(opts, span)
+  );
+}
+
+async function cachedInner<T>(
+  opts: CacheOptions<T>,
+  span: { setAttribute(key: string, value: boolean | string): void }
+): Promise<T> {
   const beta = opts.beta ?? 1;
   const staleGraceMs = opts.staleGraceMs ?? Math.max(opts.ttlMs, 30_000);
   const lockTtlMs = opts.lockTtlMs ?? 5_000;
@@ -97,6 +112,7 @@ export async function cached<T>(opts: CacheOptions<T>): Promise<T> {
 
   // No Redis configured / available → behave exactly as before (direct compute).
   if (!isRedisConfigured()) {
+    span.setAttribute("cache.hit", false);
     return opts.compute();
   }
 
@@ -135,11 +151,13 @@ export async function cached<T>(opts: CacheOptions<T>): Promise<T> {
 
   const env = await readEnvelope();
   const now = Date.now();
+  span.setAttribute("cache.hit", false); // overridden to true on a fresh hit below
 
   if (env) {
     const expiry = env.t + env.ttl;
     const fresh = now < expiry && !shouldEarlyRecompute(env, now, beta);
     if (fresh) {
+      span.setAttribute("cache.hit", true);
       return env.v; // hot path: fresh hit
     }
 

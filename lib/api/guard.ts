@@ -15,6 +15,9 @@ import {
 import type { UserRole } from "@/types";
 import { DEFAULT_MAX_BODY_BYTES } from "@/lib/api/validate";
 import { methodNotAllowed } from "@/lib/api/response";
+import { requestLogger, endRequest, genRequestId } from "@/lib/logger";
+import type { Logger } from "pino";
+import * as Sentry from "@sentry/nextjs";
 
 export type ApiGuardOptions<T> = {
   schema: ZodSchema<T>;
@@ -31,7 +34,31 @@ export { methodNotAllowed };
 export type GuardedRequest<T> = {
   data: T;
   auth: ApiAuthContext | null;
+  /** Request-scoped logger (requestId + method + url bound); use it in handlers. */
+  log: Logger;
+  /** Proxy-propagated request start (epoch ms) for end-to-end latency. */
+  startTime: number;
 };
+
+/**
+ * Read the correlation context the proxy propagated (x-request-id / x-request-start).
+ * Falls back to a fresh id + now() when the proxy didn't run (e.g. direct calls).
+ */
+function requestContext(request: Request): {
+  requestId: string;
+  startTime: number;
+  log: Logger;
+} {
+  const requestId = request.headers.get("x-request-id") || genRequestId();
+  const startHeader = Number(request.headers.get("x-request-start"));
+  const startTime = Number.isFinite(startHeader) && startHeader > 0 ? startHeader : Date.now();
+  const log = requestLogger({ requestId, method: request.method, url: request.url });
+  // Correlate Sentry events with the same requestId the logger uses. Operates on
+  // the per-request isolation scope (set up by the Sentry Next.js SDK), so it
+  // does not leak across concurrent requests. No-ops when Sentry is unconfigured.
+  Sentry.setTag("requestId", requestId);
+  return { requestId, startTime, log };
+}
 
 /** Distributed (Redis) enforcement for the async guards; in-memory fallback inside. */
 async function enforceRateLimitAsync(
@@ -84,12 +111,25 @@ export async function guardApiPost<T>(
 ): Promise<
   { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
 > {
+  const { startTime, log: baseLog } = requestContext(request);
+  let log = baseLog.child({ routeKey: options.routeKey });
+  Sentry.setTag("routeKey", options.routeKey);
+
   const authResult = await resolveAuth(
     request,
     options.auth,
     options.allowCronBearer
   );
-  if (!authResult.ok) return { ok: false, response: authResult.response };
+  if (!authResult.ok) {
+    endRequest(log, { statusCode: authResult.response.status, startTime, msg: "request.rejected" });
+    return { ok: false, response: authResult.response };
+  }
+  // Bind the authenticated user for every subsequent line.
+  if (authResult.auth?.userId) {
+    log = log.child({ userId: authResult.auth.userId });
+    // Opaque user id only (no email/PII) — correlates errors to a user.
+    Sentry.setUser({ id: authResult.auth.userId });
+  }
 
   const rateLimited = await enforceRateLimitAsync(
     request,
@@ -97,19 +137,29 @@ export async function guardApiPost<T>(
     options.rateLimit,
     authResult.auth?.userId
   );
-  if (rateLimited) return { ok: false, response: rateLimited };
+  if (rateLimited) {
+    endRequest(log, { statusCode: rateLimited.status, startTime, msg: "request.rate_limited" });
+    return { ok: false, response: rateLimited };
+  }
 
   const body = await parseJsonBody(
     request,
     options.schema,
     options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   );
-  if (!body.ok) return { ok: false, response: body.response };
+  if (!body.ok) {
+    endRequest(log, { statusCode: body.response.status, startTime, msg: "request.invalid" });
+    return { ok: false, response: body.response };
+  }
 
   const hp = rejectIfHoneypot(body.data as { _hp?: string });
-  if (hp) return { ok: false, response: hp };
+  if (hp) {
+    endRequest(log, { statusCode: hp.status, startTime, msg: "request.honeypot" });
+    return { ok: false, response: hp };
+  }
 
-  return { ok: true, ctx: { data: body.data, auth: authResult.auth } };
+  log.debug({ event: "request.authorized" }, "request.authorized");
+  return { ok: true, ctx: { data: body.data, auth: authResult.auth, log, startTime } };
 }
 
 export type ApiGuardQueryOptions<T> = ApiGuardOptions<T>;
@@ -120,12 +170,24 @@ export async function guardApiGet<T>(
 ): Promise<
   { ok: true; ctx: GuardedRequest<T> } | { ok: false; response: Response }
 > {
+  const { startTime, log: baseLog } = requestContext(request);
+  let log = baseLog.child({ routeKey: options.routeKey });
+  Sentry.setTag("routeKey", options.routeKey);
+
   const authResult = await resolveAuth(
     request,
     options.auth,
     options.allowCronBearer
   );
-  if (!authResult.ok) return { ok: false, response: authResult.response };
+  if (!authResult.ok) {
+    endRequest(log, { statusCode: authResult.response.status, startTime, msg: "request.rejected" });
+    return { ok: false, response: authResult.response };
+  }
+  if (authResult.auth?.userId) {
+    log = log.child({ userId: authResult.auth.userId });
+    // Opaque user id only (no email/PII) — correlates errors to a user.
+    Sentry.setUser({ id: authResult.auth.userId });
+  }
 
   const rateLimited = await enforceRateLimitAsync(
     request,
@@ -133,12 +195,19 @@ export async function guardApiGet<T>(
     options.rateLimit,
     authResult.auth?.userId
   );
-  if (rateLimited) return { ok: false, response: rateLimited };
+  if (rateLimited) {
+    endRequest(log, { statusCode: rateLimited.status, startTime, msg: "request.rate_limited" });
+    return { ok: false, response: rateLimited };
+  }
 
   const query = parseQuery(request, options.schema);
-  if (!query.ok) return { ok: false, response: query.response };
+  if (!query.ok) {
+    endRequest(log, { statusCode: query.response.status, startTime, msg: "request.invalid" });
+    return { ok: false, response: query.response };
+  }
 
-  return { ok: true, ctx: { data: query.data, auth: authResult.auth } };
+  log.debug({ event: "request.authorized" }, "request.authorized");
+  return { ok: true, ctx: { data: query.data, auth: authResult.auth, log, startTime } };
 }
 
 /** Rate limit only (webhooks, cron) */

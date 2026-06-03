@@ -4,6 +4,7 @@ import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { joinCampaign } from "@/lib/api/services/campaign-join";
 import { isMockMode } from "@/lib/env";
+import { endRequest } from "@/lib/logger";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
@@ -24,8 +25,10 @@ export async function POST(
     auth: "influencer",
   });
   if (!guarded.ok) return guarded.response;
+  const { log, startTime } = guarded.ctx;
 
   if (isMockMode) {
+    endRequest(log, { statusCode: 200, startTime });
     return jsonSuccess({
       participation: {
         id: `part_mock_${Date.now()}`,
@@ -40,9 +43,11 @@ export async function POST(
 
   const result = await joinCampaign(campaignId, guarded.ctx.auth!.userId);
   if (!result.ok) {
+    endRequest(log, { statusCode: result.status, startTime });
     return jsonError(result.error, result.status);
   }
 
+  endRequest(log, { statusCode: 200, startTime });
   return jsonSuccess({
     participation: result.participation,
     alreadyJoined: result.alreadyJoined,
