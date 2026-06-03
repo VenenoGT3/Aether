@@ -1,6 +1,7 @@
 import type { ZodSchema } from "zod";
 import {
   applyRateLimit,
+  applyRateLimitAsync,
   type RateLimitPreset,
 } from "@/lib/api/rate-limit";
 import { rateLimitError } from "@/lib/api/response";
@@ -32,6 +33,21 @@ export type GuardedRequest<T> = {
   auth: ApiAuthContext | null;
 };
 
+/** Distributed (Redis) enforcement for the async guards; in-memory fallback inside. */
+async function enforceRateLimitAsync(
+  request: Request,
+  routeKey: string,
+  preset: RateLimitPreset,
+  userId?: string | null
+) {
+  const rl = await applyRateLimitAsync(request, routeKey, preset, userId);
+  if (!rl.allowed) {
+    return rateLimitError(rl.retryAfterSec);
+  }
+  return null;
+}
+
+/** Synchronous in-memory enforcement for the sync-only guard (webhooks/cron). */
 function enforceRateLimit(
   request: Request,
   routeKey: string,
@@ -75,7 +91,7 @@ export async function guardApiPost<T>(
   );
   if (!authResult.ok) return { ok: false, response: authResult.response };
 
-  const rateLimited = enforceRateLimit(
+  const rateLimited = await enforceRateLimitAsync(
     request,
     options.routeKey,
     options.rateLimit,
@@ -111,7 +127,7 @@ export async function guardApiGet<T>(
   );
   if (!authResult.ok) return { ok: false, response: authResult.response };
 
-  const rateLimited = enforceRateLimit(
+  const rateLimited = await enforceRateLimitAsync(
     request,
     options.routeKey,
     options.rateLimit,
