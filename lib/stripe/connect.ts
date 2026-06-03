@@ -141,7 +141,13 @@ export async function createEscrowPaymentIntent(
 export async function releaseEscrowPayment(
   amount: number,
   influencerStripeAccountId: string,
-  campaignId: string
+  campaignId: string,
+  /**
+   * Stable Stripe idempotency key. CRITICAL for withdrawals: re-issuing the
+   * same transfer (retry / reconcile) returns the original transfer instead of
+   * creating a second one, so a network timeout can never double-pay.
+   */
+  idempotencyKey?: string
 ) {
   if (isMockMode || influencerStripeAccountId.startsWith("acct_mock_")) {
     console.log(
@@ -154,12 +160,15 @@ export async function releaseEscrowPayment(
   }
 
   try {
-    const transfer = await stripeServer.transfers.create({
-      amount: Math.round(amount * 100),
-      currency: "usd",
-      destination: influencerStripeAccountId,
-      metadata: { campaignId },
-    });
+    const transfer = await stripeServer.transfers.create(
+      {
+        amount: Math.round(amount * 100),
+        currency: "usd",
+        destination: influencerStripeAccountId,
+        metadata: { campaignId },
+      },
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
 
     return {
       success: true,

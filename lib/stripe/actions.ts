@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { getServerUser, createClient } from "@/lib/supabase/server";
 import {
   createStripeExpressAccount,
@@ -333,11 +334,27 @@ export async function withdrawFundsAction(amount: number) {
  * auth.uid()-scoped, so this only ever touches the caller's own earnings, and
  * the earnings.payout_id claim makes double-withdrawal impossible.
  */
+/**
+ * Classify a Stripe transfer error. A DEFINITIVE failure (the transfer was not
+ * created — bad account, insufficient platform balance, validation) is safe to
+ * release and retry. An UNKNOWN outcome (network/timeout/API error: the transfer
+ * MAY have gone through) must NOT release — leave the payout 'processing' for the
+ * worker reconciler, which re-issues with the stable idempotency key.
+ */
+function isUnknownTransferOutcome(err: unknown): boolean {
+  const type = (err as { type?: string } | null)?.type;
+  // No Stripe error type => raw network/timeout. StripeConnectionError /
+  // StripeAPIError => request may or may not have reached/applied at Stripe.
+  return !type || type === "StripeConnectionError" || type === "StripeAPIError";
+}
+
 export async function requestWithdrawalAction() {
   // Mock mode is handled client-side (balances live in localStorage).
   if (isMockMode) {
     return { success: true, isMock: true } as const;
   }
+
+  const traceId = randomUUID();
 
   try {
     const user = await getServerUser();
@@ -364,12 +381,14 @@ export async function requestWithdrawalAction() {
       };
     }
 
-    // 1) Atomically claim approved+unclaimed earnings into a payout.
+    // 1) Atomically claim approved+unclaimed earnings into a payout (advisory
+    //    locked + claim-by-id-set in SQL; impossible to double-claim).
     const { data: claimData, error: claimErr } = await supabase.rpc("request_withdrawal", {
       p_min_threshold: WITHDRAWAL_MIN,
       p_fee_pct: WITHDRAWAL_FEE_PCT,
     });
     if (claimErr) {
+      console.error(`[ALERT] withdrawal.claim_failed trace=${traceId} user=${user.user_id}: ${claimErr.message}`);
       return { success: false, error: claimErr.message || "Could not start the withdrawal." };
     }
     const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as
@@ -386,18 +405,51 @@ export async function requestWithdrawalAction() {
     const gross = Number(claim.out_gross);
     const net = Number(claim.out_net);
     const fee = Number(claim.out_fee);
+    // Stable idempotency key: a retry/reconcile of THIS payout reuses it, so
+    // Stripe returns the original transfer instead of paying twice.
+    const idempotencyKey = `withdrawal_${payoutId}`;
 
-    // 2) Transfer the NET to the creator, then settle (or release on failure).
+    // 2) Transfer the NET, then settle. On a DEFINITIVE failure release the
+    //    claim (balance returns). On an UNKNOWN outcome leave it 'processing'
+    //    for the reconciler — never release into a possible double-pay.
     try {
-      const transfer = await releaseEscrowPayment(net, account, `withdrawal_${payoutId}`);
-      await supabase.rpc("settle_withdrawal", {
+      const transfer = await releaseEscrowPayment(net, account, idempotencyKey, idempotencyKey);
+      const { error: settleErr } = await supabase.rpc("settle_withdrawal", {
         p_payout_id: payoutId,
         p_transfer_id: transfer.transferId,
       });
+      if (settleErr) {
+        // Money moved but the DB didn't record it — leave 'processing' for the
+        // reconciler (which re-issues with the same key, gets the same transfer,
+        // and settles). Do NOT release.
+        console.error(`[ALERT] withdrawal.settle_failed trace=${traceId} payout=${payoutId} transfer=${transfer.transferId}: ${settleErr.message}`);
+        return {
+          success: true,
+          isMock: false,
+          gross,
+          net,
+          fee,
+          pending: true,
+        };
+      }
+      console.log(`withdrawal.paid trace=${traceId} payout=${payoutId} gross=${gross} fee=${fee} net=${net}`);
       return { success: true, isMock: false, gross, net, fee };
     } catch (transferErr) {
-      await supabase.rpc("fail_withdrawal", { p_payout_id: payoutId });
-      console.error("Withdrawal transfer failed:", transferErr);
+      if (isUnknownTransferOutcome(transferErr)) {
+        // Unknown: the transfer may have succeeded. Leave the payout claimed +
+        // 'processing'; the worker reconciler resolves it idempotently.
+        console.error(`[ALERT] withdrawal.transfer_unknown trace=${traceId} payout=${payoutId}:`, transferErr);
+        return {
+          success: false,
+          error: "Your withdrawal is processing. We'll confirm it shortly — please don't retry yet.",
+        };
+      }
+      // Definitive failure: nothing was transferred — safe to release & retry.
+      const { error: failErr } = await supabase.rpc("fail_withdrawal", { p_payout_id: payoutId });
+      if (failErr) {
+        console.error(`[ALERT] withdrawal.release_failed trace=${traceId} payout=${payoutId}: ${failErr.message}`);
+      }
+      console.error(`withdrawal.transfer_failed trace=${traceId} payout=${payoutId}:`, transferErr);
       return {
         success: false,
         error: "The payout failed and your balance was released — please try again.",
@@ -405,7 +457,7 @@ export async function requestWithdrawalAction() {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to withdraw funds";
-    console.error("Error in requestWithdrawalAction:", error);
+    console.error(`[ALERT] withdrawal.unexpected trace=${traceId}:`, error);
     return { success: false, error: message };
   }
 }

@@ -169,6 +169,16 @@ export function getMinPayoutThreshold(): number {
   return Number.isFinite(raw) && raw >= 0 ? raw : 10;
 }
 
+/**
+ * A withdrawal payout stuck in 'processing' longer than this (minutes) is
+ * reconciled by the payout batch — the transfer is re-issued with its stable
+ * idempotency key (Stripe returns the original; never double-pays) then settled.
+ */
+export function getWithdrawalReconcileStuckMinutes(): number {
+  const raw = Number(process.env.WITHDRAWAL_RECONCILE_STUCK_MINUTES);
+  return Number.isFinite(raw) && raw > 0 ? raw : 10;
+}
+
 /** How often the payout-batch job runs (minutes). Default 6h. */
 export function getPayoutBatchIntervalMinutes(): number {
   const raw = Number(process.env.PAYOUT_BATCH_INTERVAL);

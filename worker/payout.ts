@@ -5,6 +5,7 @@ import {
   autoPayoutsEnabled,
   getMinPayoutThreshold,
   getViewHoldbackHours,
+  getWithdrawalReconcileStuckMinutes,
   simulatedEarningsBlocked,
 } from "./env";
 import { log, errMessage } from "./logger";
@@ -26,6 +27,97 @@ export interface PayoutBatchSummary {
 interface PayoutClaim {
   out_payout_id: string;
   out_amount: number | string;
+}
+
+/**
+ * Unknown transfer outcome = the transfer MAY have applied (network/timeout/API
+ * error). We must not release the claim into a possible double-pay; leave it for
+ * the next reconcile pass instead. Definitive errors are safe to release.
+ */
+function isUnknownTransferOutcome(err: unknown): boolean {
+  const type = (err as { type?: string } | null)?.type;
+  return !type || type === "StripeConnectionError" || type === "StripeAPIError";
+}
+
+/**
+ * Recover withdrawal payouts stuck in 'processing' (transfer outcome unknown, or
+ * the transfer succeeded but the synchronous settle failed). Re-issues the
+ * transfer with the STABLE idempotency key withdrawal_<payoutId> — Stripe
+ * returns the original transfer if it already happened, so this can never
+ * double-pay — then settles, or releases the claim on a definitive failure.
+ * Idempotent and safe to run at the start of every payout batch.
+ */
+export async function reconcileStuckWithdrawals(
+  client?: SupabaseClient
+): Promise<number> {
+  const supabase = client ?? getServiceClient();
+  const cutoff = new Date(
+    Date.now() - getWithdrawalReconcileStuckMinutes() * 60_000
+  ).toISOString();
+
+  const { data: stuck, error } = await supabase
+    .from("payouts")
+    .select("id, creator_id, amount")
+    .eq("status", "processing")
+    .not("fee_amount", "is", null) // manual withdrawals carry a fee
+    .lt("created_at", cutoff)
+    .limit(100);
+  if (error) {
+    log.warn("withdrawal.reconcile.query_error", { error: error.message });
+    return 0;
+  }
+
+  let recovered = 0;
+  for (const p of (stuck ?? []) as {
+    id: string;
+    creator_id: string;
+    amount: number | string;
+  }[]) {
+    const payoutId = p.id;
+    const amount = Number(p.amount);
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_connect_id")
+      .eq("user_id", p.creator_id)
+      .maybeSingle();
+    const account = (profile as { stripe_connect_id?: string | null } | null)
+      ?.stripe_connect_id;
+    if (!account) {
+      await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
+      log.alert("withdrawal.reconcile.no_account", { payoutId, creatorId: p.creator_id });
+      continue;
+    }
+
+    try {
+      const { transferId } = await transferToCreator(amount, account, `withdrawal_${payoutId}`, {
+        payoutId,
+        kind: "withdrawal_reconcile",
+      });
+      const { error: paidErr } = await supabase.rpc("mark_payout_paid", {
+        p_payout_id: payoutId,
+        p_transfer_id: transferId,
+      });
+      if (paidErr) throw new Error(`mark_payout_paid failed: ${paidErr.message}`);
+      recovered += 1;
+      log.info("withdrawal.reconcile.settled", {
+        payoutId,
+        amount: amount.toFixed(2),
+        transferId,
+      });
+    } catch (err) {
+      if (isUnknownTransferOutcome(err)) {
+        // Still unknown — leave 'processing'; the next pass retries idempotently.
+        log.alert("withdrawal.reconcile.still_unknown", { payoutId, error: errMessage(err) });
+      } else {
+        await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
+        log.alert("withdrawal.reconcile.failed_released", { payoutId, error: errMessage(err) });
+      }
+    }
+  }
+
+  if (recovered > 0) log.info("withdrawal.reconcile.done", { recovered });
+  return recovered;
 }
 
 /**
@@ -65,6 +157,14 @@ export async function runPayoutBatch(
   const threshold = getMinPayoutThreshold();
   const holdback = getViewHoldbackHours();
   log.info("payout.batch.start", { threshold, holdbackHours: holdback });
+
+  // 0. Recover any creator-initiated withdrawals stuck in 'processing' (transfer
+  //    outcome unknown / settle failed). Idempotent; never blocks the batch.
+  try {
+    await reconcileStuckWithdrawals(supabase);
+  } catch (err) {
+    log.error("withdrawal.reconcile.error", { error: errMessage(err) });
+  }
 
   // 1. Promote earnings past their holdback window.
   const { data: promoted, error: promoteErr } = await supabase.rpc(
