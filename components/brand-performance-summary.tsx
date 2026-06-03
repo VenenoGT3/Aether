@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Eye, Layers, Zap, ArrowRight, Megaphone, Clock } from "lucide-react";
+import { Eye, Layers, Zap, ArrowRight, Megaphone, Clock, DollarSign } from "lucide-react";
 import { isMockMode, supabase } from "@/lib/supabase/client";
 import { getCampaignsAction } from "@/lib/supabase/campaigns";
 import { useTranslation } from "@/lib/translations";
@@ -127,15 +127,15 @@ export function BrandPerformanceSummary() {
 
   const cards = [
     { label: t("Active campaigns"), value: activeCount.toLocaleString(), icon: Megaphone, color: "#007AFF" },
-    { label: t("Total views"), value: totalViews.toLocaleString(), icon: Eye, color: "#FF9500" },
+    { label: t("Total spend"), value: money(totalPaid), icon: DollarSign, color: "#34C759" },
     {
-      label: t("Active clips"),
+      label: t("Clips delivered"),
       value: trackingClips.length.toLocaleString(),
       sub: activeCreators > 0 ? `${activeCreators} ${t("creators")}` : undefined,
       icon: Layers,
       color: "#5856D6",
     },
-    { label: t("Pending review"), value: pendingClips.length.toLocaleString(), icon: Clock, color: "#FF9500" },
+    { label: t("Reach"), value: totalViews.toLocaleString(), sub: t("views"), icon: Eye, color: "#FF9500" },
   ] as { label: string; value: string; sub?: string; icon: typeof Eye; color: string }[];
 
   return (

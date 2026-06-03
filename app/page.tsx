@@ -343,7 +343,7 @@ export default function Home() {
       <footer className="w-full max-w-7xl px-6 py-12 border-t border-border/10 flex flex-col md:flex-row items-center justify-between text-muted-foreground text-xs gap-4 relative z-10">
         <div>&copy; {new Date().getFullYear()} Aether Inc. {t("Privacy Policy").includes("Informativa") ? "Tutti i diritti riservati." : "All rights reserved."}</div>
         <div className="flex gap-6">
-          <Link href="#" className="hover:text-foreground">{t("Privacy Policy")}</Link>
+          <Link href="/privacy" className="hover:text-foreground">{t("Privacy Policy")}</Link>
           <Link href="#" className="hover:text-foreground">{t("Terms of Service")}</Link>
           <Link href="#" className="hover:text-foreground">{t("Contact")}</Link>
         </div>

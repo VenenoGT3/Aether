@@ -3,6 +3,7 @@ import { Inter, Instrument_Serif } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { NavBar } from "@/components/nav-bar";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
+import { GdprConsentBanner } from "@/components/gdpr-consent-banner";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -101,6 +102,7 @@ export default function RootLayout({
           <NavBar />
           <main className="flex-1 flex flex-col pb-24 md:pb-0">{children}</main>
           <MobileTabBar />
+          <GdprConsentBanner />
           <Toaster 
             position="bottom-right" 
             toastOptions={{
