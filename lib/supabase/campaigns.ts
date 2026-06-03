@@ -1,8 +1,39 @@
 import { supabase, isMockMode, getMockUser } from "./client";
-import { DbCampaign, CampaignStatus } from "@/types/database";
+import { CampaignStatus } from "@/types/database";
 import { PLATFORM_FEE_PCT, feeBreakdown } from "@/lib/campaign-budget";
 
 const LOCAL_STORAGE_KEY = "aether-campaigns";
+
+/** A campaign as stored in mock localStorage / accepted by create. Loosely typed
+ * (extra performance fields vary) but free of `any`. */
+type CampaignRecord = Record<string, unknown>;
+
+/** Fields read off the campaign-creation payload (extra keys are passed through). */
+interface CampaignInput {
+  title?: string;
+  description?: string;
+  budget_total?: number;
+  budget_pool?: number;
+  campaign_type?: string;
+  campaign_category?: string;
+  category_meta?: Record<string, unknown>;
+  content_rules?: Record<string, unknown>;
+  cpm_rate?: number | null;
+  max_payout_per_creator?: number | null;
+  view_holdback_hours?: number;
+  platforms?: string[];
+  target_niches?: string[];
+  target_audience?: Record<string, unknown>;
+  deliverables?: unknown[];
+  timeline?: Record<string, unknown>;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/** Narrow an unknown thrown value to a human-readable message. */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 // Pre-seeded mock campaigns for initial development
 const DEFAULT_MOCK_CAMPAIGNS = [
@@ -134,7 +165,7 @@ const DEFAULT_MOCK_CAMPAIGNS = [
 ];
 
 // Helper to load mock campaigns from localStorage
-function getMockCampaigns(): any[] {
+function getMockCampaigns(): CampaignRecord[] {
   if (typeof window === "undefined") return DEFAULT_MOCK_CAMPAIGNS;
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!stored) {
@@ -143,13 +174,13 @@ function getMockCampaigns(): any[] {
   }
   try {
     return JSON.parse(stored);
-  } catch (e) {
+  } catch {
     return DEFAULT_MOCK_CAMPAIGNS;
   }
 }
 
 // Helper to save mock campaigns to localStorage
-function saveMockCampaigns(campaigns: any[]) {
+function saveMockCampaigns(campaigns: CampaignRecord[]) {
   if (typeof window !== "undefined") {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(campaigns));
     window.dispatchEvent(new Event("campaigns-update"));
@@ -178,9 +209,9 @@ export async function getCampaignsAction() {
 
     if (error) throw error;
     return { success: true, campaigns: data };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in getCampaignsAction:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage(error) };
   }
 }
 
@@ -204,16 +235,16 @@ export async function getCampaignByIdAction(id: string) {
 
     if (error) throw error;
     return { success: true, campaign: data };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in getCampaignByIdAction:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage(error) };
   }
 }
 
 /**
  * Create a new campaign
  */
-export async function createCampaignAction(campaignData: any) {
+export async function createCampaignAction(campaignData: CampaignInput) {
   const mockUser = getMockUser();
   
   if (isMockMode) {
@@ -296,9 +327,9 @@ export async function createCampaignAction(campaignData: any) {
 
     if (error) throw error;
     return { success: true, campaign: data };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in createCampaignAction:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage(error) };
   }
 }
 
@@ -331,16 +362,16 @@ export async function updateCampaignStatusAction(id: string, status: CampaignSta
 
     if (error) throw error;
     return { success: true, campaign: data };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in updateCampaignStatusAction:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: errorMessage(error) };
   }
 }
 
 /**
  * Helper to subscribe to campaign changes (Realtime)
  */
-export function subscribeToCampaignChanges(callback: (payload: any) => void) {
+export function subscribeToCampaignChanges(callback: (payload: unknown) => void) {
   if (isMockMode) {
     // Client-side local storage event triggers
     const handleUpdate = () => {

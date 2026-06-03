@@ -66,7 +66,7 @@ export function getMockUser(): Profile {
     if (profileJson) {
       try {
         return JSON.parse(profileJson);
-      } catch (e) {
+      } catch {
         // Fallback
       }
     }
@@ -181,7 +181,7 @@ export async function signInClient(email: string, password: string) {
                 foundUser = parsed;
                 break;
               }
-            } catch (e) {}
+            } catch {}
           }
         }
       }
@@ -278,7 +278,7 @@ export async function getClientProfile(): Promise<Profile | null> {
   return null;
 }
 
-export async function updateClientProfile(data: Partial<Profile>): Promise<{ data: Profile | null; error: any }> {
+export async function updateClientProfile(data: Partial<Profile>): Promise<{ data: Profile | null; error: { message: string } | null }> {
   if (isMockMode) {
     const profile = getMockUser();
     const updated = { ...profile, ...data };
@@ -294,6 +294,8 @@ export async function updateClientProfile(data: Partial<Profile>): Promise<{ dat
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { data: null, error: new Error("User not authenticated") };
     
+    // Strip identity columns that must not be updated here (kept out of the payload).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { role: _role, user_id: _uid, email: _email, ...profileFields } = data;
     const { data: updated, error } = await supabase
       .from("profiles")

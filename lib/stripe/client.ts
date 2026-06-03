@@ -3,9 +3,11 @@ import Stripe from "stripe";
 import { getStripeSecretKey } from "@/lib/env.server";
 
 export const stripeServer = new Stripe(getStripeSecretKey(), {
-  apiVersion: "2023-10-16" as any, // fallback standard API version
+  // Pin a known-good API version. Cast the config through unknown since the
+  // installed SDK types track a newer apiVersion literal union.
+  apiVersion: "2023-10-16",
   typescript: true,
-});
+} as unknown as ConstructorParameters<typeof Stripe>[1]);
 
 export interface EscrowPayment {
   id: string;

@@ -40,6 +40,41 @@ export interface PostRecord {
   campaignTitle?: string;
 }
 
+/** Narrow an unknown thrown value to a message string. */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Raw transaction row from Supabase (nested participation → campaign). */
+interface RawTransactionRow {
+  id: string;
+  participation_id?: string;
+  payout_id?: string;
+  amount: number | string;
+  type: TransactionRecord["type"];
+  status: TransactionRecord["status"];
+  stripe_payment_intent_id?: string;
+  created_at: string;
+  participation?: { campaign?: { title?: string | null } | null } | null;
+}
+
+/** Raw post row from Supabase (nested participation → campaign). */
+interface RawPostRow {
+  id: string;
+  participation_id: string;
+  platform: string;
+  post_url: string;
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  engagement_rate?: number | null;
+  metrics?: PostRecord["metrics"] | null;
+  submitted_at: string;
+  approved_at?: string | null;
+  participation?: { campaign?: { title?: string | null } | null } | null;
+}
+
 // Key definitions for localStorage
 const METRICS_LS_KEY = "aether-campaign-metrics";
 const TRANSACTIONS_LS_KEY = "aether-mock-transactions";
@@ -233,7 +268,7 @@ export async function getCampaignMetricsAction(campaignId: string): Promise<{ su
       budget_spent: 0
     };
 
-    data?.forEach((part: any) => {
+    data?.forEach((part: { performance_data?: Record<string, unknown> | null; actual_payout?: number | null }) => {
       const perf = part.performance_data || {};
       aggregated.clicks += Number(perf.clicks || 0);
       aggregated.impressions += Number(perf.impressions || 0);
@@ -244,12 +279,12 @@ export async function getCampaignMetricsAction(campaignId: string): Promise<{ su
     });
 
     return { success: true, metrics: aggregated };
-  } catch (err: any) {
+  } catch (err) {
     console.error("Error fetching campaign metrics:", err);
     return {
       success: false,
       metrics: { clicks: 0, impressions: 0, conversions: 0, attributed_value: 0, budget_spent: 0 },
-      error: err.message
+      error: errorMessage(err)
     };
   }
 }
@@ -313,9 +348,9 @@ export async function updateCampaignMetricsAction(
     // Trigger calculation aggregate
     const aggregateRes = await getCampaignMetricsAction(campaignId);
     return { success: true, metrics: aggregateRes.metrics };
-  } catch (err: any) {
+  } catch (err) {
     console.error("Error updating campaign metrics:", err);
-    return { success: false, error: err.message };
+    return { success: false, error: errorMessage(err) };
   }
 }
 
@@ -342,6 +377,7 @@ export function useCampaignMetrics(campaignId: string) {
   }, [campaignId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     fetchMetrics();
 
     // Listen to changes
@@ -465,7 +501,7 @@ export function useTransactions() {
               return;
             }
 
-            const formatted: TransactionRecord[] = (data || []).map((t: any) => ({
+            const formatted: TransactionRecord[] = (data || []).map((t: RawTransactionRow) => ({
               id: t.id,
               participation_id: t.participation_id,
               payout_id: t.payout_id,
@@ -526,6 +562,7 @@ export function useTransactions() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     if (isMockMode) {
@@ -616,7 +653,7 @@ export function usePosts() {
             return;
           }
 
-          const formatted: PostRecord[] = (data || []).map((p: any) => ({
+          const formatted: PostRecord[] = (data || []).map((p: RawPostRow) => ({
             id: p.id,
             participation_id: p.participation_id,
             platform: p.platform,
@@ -661,6 +698,7 @@ export function usePosts() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     if (isMockMode) {

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies as getCookies } from "next/headers";
-import { Profile, UserRole } from "@/types";
+import { Profile } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
 import { MOCK_BUSINESS_USER, MOCK_INFLUENCER_USER } from "./client";
 import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";

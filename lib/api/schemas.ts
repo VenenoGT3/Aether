@@ -16,7 +16,6 @@ const socialPostUrl = z
   });
 
 const shortText = z.string().trim().min(1, "Cannot be empty.").max(500);
-const mediumText = z.string().trim().min(1).max(5000);
 const optionalMediumText = z.string().trim().max(5000).optional();
 const pitchText = z
   .string()
