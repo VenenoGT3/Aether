@@ -37,7 +37,7 @@ export async function POST(
     });
   }
 
-  const result = await overrideClipFraud(clipId, guarded.ctx.auth!.userId);
+  const result = await overrideClipFraud(clipId);
   if (!result.ok) {
     return jsonError(result.error, result.status);
   }

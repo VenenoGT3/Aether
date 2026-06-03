@@ -149,43 +149,14 @@ export function disqualifyClip(
 /**
  * Brand override of a fraud flag: clears the flag and marks the clip so the
  * worker stops soft-score flagging/disqualifying it (hard velocity still applies).
- * Does NOT change clip status.
+ * Does NOT change clip status. Routed through the atomic override_clip_fraud RPC
+ * (owner-checked + per-clip locked); a direct authenticated write is blocked by
+ * check_clip_update, so the RPC is the only valid path.
  */
-export async function overrideClipFraud(
-  clipId: string,
-  brandUserId: string
-): Promise<ClipModerationResult> {
+export function overrideClipFraud(clipId: string): Promise<ClipModerationResult> {
   const traceId = randomUUID();
-  const supabase = await createClient();
-
-  const { data: clip, error: clipErr } = await supabase
-    .from("clips")
-    .select("id, status, campaign_id")
-    .eq("id", clipId)
-    .maybeSingle();
-  if (clipErr) return { ok: false, error: "Could not load the clip.", status: 500 };
-  if (!clip) return { ok: false, error: "Clip not found.", status: 404 };
-
-  const { data: campaign, error: campErr } = await supabase
-    .from("campaigns")
-    .select("business_id")
-    .eq("id", clip.campaign_id)
-    .maybeSingle();
-  if (campErr || !campaign) return { ok: false, error: "Campaign not found.", status: 404 };
-  if (campaign.business_id !== brandUserId) {
-    return { ok: false, error: "You can only override clips on your own campaigns.", status: 403 };
-  }
-
-  const { data: updated, error: updErr } = await supabase
-    .from("clips")
-    .update({ fraud_overridden: true, fraud_flagged: false })
-    .eq("id", clipId)
-    .select("id, status, reviewed_at, reviewed_by")
-    .single();
-  if (updErr) {
-    apiLog("alert", "clip.fraud_override.failed", { traceId, clipId, error: updErr.message });
-    return { ok: false, error: updErr.message || "Could not override the clip.", status: 500 };
-  }
-  apiLog("info", "clip.fraud_override.ok", { traceId, clipId });
-  return { ok: true, clip: updated };
+  return callModerationRpc("override_clip_fraud", {
+    p_clip_id: clipId,
+    p_trace_id: traceId,
+  }, traceId);
 }
