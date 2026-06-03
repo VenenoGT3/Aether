@@ -10,6 +10,7 @@ import {
 import {
   autoApproveOverdueClips,
   auditCampaignBudgetDrift,
+  auditPayoutRevenueDrift,
   fetchTrackingClipIds,
   runViewSyncForClip,
   runEarningsCalc,
@@ -360,15 +361,19 @@ async function emitHeartbeat(): Promise<void> {
 
     await scanPoolExhaustion();
 
-    // Financial-integrity drift check: rollups vs. the earnings ledger. The RPC
-    // raises [ALERT] per drifted campaign; this surfaces a count in the beat.
+    // Financial-integrity drift checks: rollups vs. the earnings ledger, and
+    // settled payouts vs. the platform_revenue ledger. Each RPC raises [ALERT]
+    // per offending row; this surfaces counts in the beat. Best-effort.
     try {
-      const drifted = await auditCampaignBudgetDrift(getServiceClient());
-      if (drifted > 0) {
-        log.alert("heartbeat.budget_drift", { drifted });
-      }
+      const client = getServiceClient();
+      const [budgetDrift, revenueDrift] = await Promise.all([
+        auditCampaignBudgetDrift(client),
+        auditPayoutRevenueDrift(client),
+      ]);
+      if (budgetDrift > 0) log.alert("heartbeat.budget_drift", { drifted: budgetDrift });
+      if (revenueDrift > 0) log.alert("heartbeat.revenue_drift", { drifted: revenueDrift });
     } catch (err) {
-      log.warn("heartbeat.budget_drift_error", { error: errMessage(err) });
+      log.warn("heartbeat.drift_audit_error", { error: errMessage(err) });
     }
   } catch (err) {
     log.error("heartbeat.error", { error: errMessage(err) });

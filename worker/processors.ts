@@ -429,3 +429,34 @@ export async function auditCampaignBudgetDrift(
   }
   return rows.length;
 }
+
+/**
+ * Audit settled, fee-bearing payouts against the immutable platform_revenue
+ * ledger. Any returned row is a fee-accounting integrity breach (missing revenue
+ * row or fee mismatch); the DB also raises an [ALERT] per row. Best-effort.
+ */
+export async function auditPayoutRevenueDrift(
+  client?: SupabaseClient
+): Promise<number> {
+  const traceId = randomUUID();
+  const supabase = client ?? getServiceClient();
+  const { data, error } = await supabase.rpc("audit_payout_revenue_drift", {
+    p_trace_id: traceId,
+  });
+  if (error) {
+    log.alert("payout.revenue_audit_failed", { traceId, error: error.message });
+    return 0;
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > 0) {
+    log.alert("payout.revenue_drift_detected", {
+      traceId,
+      count: rows.length,
+      payouts: rows
+        .map((r) => (r as { payout_id?: string }).payout_id)
+        .filter(Boolean)
+        .slice(0, 20),
+    });
+  }
+  return rows.length;
+}
