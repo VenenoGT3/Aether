@@ -29,6 +29,9 @@ import { approvalCountdownLabel } from "@/lib/approval";
 import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder";
 import { CreatorWallet } from "@/components/creator-wallet";
 import { ShieldCheck } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface PerfCampaign {
   id: string;
@@ -36,12 +39,12 @@ interface PerfCampaign {
   cpm_rate?: number | null;
 }
 
-const STATUS_STYLES: Record<ClipStatus, { label: string; cls: string }> = {
-  pending: { label: "Pending review", cls: "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20" },
-  approved: { label: "Approved", cls: "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/20" },
-  tracking: { label: "Tracking · Live", cls: "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20" },
-  rejected: { label: "Rejected", cls: "bg-muted text-muted-foreground border-border/30" },
-  disqualified: { label: "Disqualified", cls: "bg-destructive/10 text-destructive border-destructive/20" },
+const STATUS_STYLES: Record<ClipStatus, { label: string; tone: BadgeTone }> = {
+  pending: { label: "Pending review", tone: "warning" },
+  approved: { label: "Approved", tone: "info" },
+  tracking: { label: "Tracking · Live", tone: "success" },
+  rejected: { label: "Rejected", tone: "neutral" },
+  disqualified: { label: "Disqualified", tone: "danger" },
 };
 
 export default function CreatorClipsPage() {
@@ -182,41 +185,34 @@ export default function CreatorClipsPage() {
 
       {/* Earnings summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <motion.div whileHover={{ y: -3 }} className="p-6 apple-card">
-          <div className="flex justify-between items-start text-muted-foreground">
-            <span className="text-[10px] font-bold uppercase tracking-wider">{t("Ready for payout")}</span>
-            <span className="p-2 rounded-xl bg-[#34C759]/10 text-[#34C759]"><Wallet size={15} /></span>
-          </div>
-          <h3 className="text-2xl font-bold tracking-tight mt-4">${breakdown.readyForPayout.toLocaleString()}</h3>
-          <span className="text-[11px] text-muted-foreground">{t("Cleared holdback")}</span>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -3 }} className="p-6 apple-card">
-          <div className="flex justify-between items-start text-muted-foreground">
-            <span className="text-[10px] font-bold uppercase tracking-wider">{t("In holdback")}</span>
-            <span className="p-2 rounded-xl bg-[#FF9500]/10 text-[#FF9500]"><Clock size={15} /></span>
-          </div>
-          <h3 className="text-2xl font-bold tracking-tight mt-4">${breakdown.inHoldback.toLocaleString()}</h3>
-          <span className="text-[11px] text-muted-foreground">{t("Pending settle window")}</span>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -3 }} className="p-6 apple-card">
-          <div className="flex justify-between items-start text-muted-foreground">
-            <span className="text-[10px] font-bold uppercase tracking-wider">{t("Paid out")}</span>
-            <span className="p-2 rounded-xl bg-[#007AFF]/10 text-[#007AFF]"><DollarSign size={15} /></span>
-          </div>
-          <h3 className="text-2xl font-bold tracking-tight mt-4">${breakdown.paid.toLocaleString()}</h3>
-          <span className="text-[11px] text-muted-foreground">{t("Lifetime")}</span>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -3 }} className="p-6 apple-card">
-          <div className="flex justify-between items-start text-muted-foreground">
-            <span className="text-[10px] font-bold uppercase tracking-wider">{t("Live views")}</span>
-            <span className="p-2 rounded-xl bg-primary/10 text-primary"><TrendingUp size={15} /></span>
-          </div>
-          <h3 className="text-2xl font-bold tracking-tight mt-4">{totalLiveViews.toLocaleString()}</h3>
-          <span className="text-[11px] text-muted-foreground">{t("Across tracking clips")}</span>
-        </motion.div>
+        <StatCard
+          label={t("Ready for payout")}
+          value={`$${breakdown.readyForPayout.toLocaleString()}`}
+          icon={Wallet}
+          color="#34C759"
+          sub={t("Cleared holdback")}
+        />
+        <StatCard
+          label={t("In holdback")}
+          value={`$${breakdown.inHoldback.toLocaleString()}`}
+          icon={Clock}
+          color="#FF9500"
+          sub={t("Pending settle window")}
+        />
+        <StatCard
+          label={t("Paid out")}
+          value={`$${breakdown.paid.toLocaleString()}`}
+          icon={DollarSign}
+          color="#007AFF"
+          sub={t("Lifetime")}
+        />
+        <StatCard
+          label={t("Live views")}
+          value={totalLiveViews.toLocaleString()}
+          icon={TrendingUp}
+          color="#5856D6"
+          sub={t("Across tracking clips")}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -229,10 +225,12 @@ export default function CreatorClipsPage() {
               <Loader2 className="animate-spin" />
             </div>
           ) : clips.length === 0 ? (
-            <div className="p-10 apple-card text-center text-muted-foreground">
-              <Link2 size={22} className="mx-auto mb-2 opacity-40" />
-              <p className="text-sm font-semibold">{t("No clips yet")}</p>
-              <p className="text-xs mt-1">{t("Submit your first clip to start earning per view.")}</p>
+            <div className="apple-card">
+              <EmptyState
+                icon={Link2}
+                title={t("No clips yet")}
+                description={t("Submit your first clip to start earning per view.")}
+              />
             </div>
           ) : (
             clips.map((clip) => {
@@ -247,13 +245,9 @@ export default function CreatorClipsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       {clip.quality_status === "changes_requested" ? (
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20">
-                          {t("Changes requested")}
-                        </span>
+                        <StatusBadge tone="warning">{t("Changes requested")}</StatusBadge>
                       ) : (
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style.cls}`}>
-                          {t(style.label)}
-                        </span>
+                        <StatusBadge tone={style.tone}>{t(style.label)}</StatusBadge>
                       )}
                       <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
                       {clip.status === "pending" && clip.quality_status !== "changes_requested" && (
@@ -262,9 +256,9 @@ export default function CreatorClipsPage() {
                         </span>
                       )}
                       {clip.status === "tracking" && clip.auto_approved && (
-                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-secondary text-muted-foreground border-border/30 uppercase tracking-wide">
+                        <StatusBadge tone="neutral">
                           {trusted ? t("Auto-approved · Trusted") : t("Auto-approved")}
-                        </span>
+                        </StatusBadge>
                       )}
                     </div>
                     <p className="text-sm font-semibold truncate">{clip.campaignTitle}</p>
@@ -441,7 +435,7 @@ export default function CreatorClipsPage() {
               </div>
             )}
             <p className="text-[10px] text-muted-foreground mt-4 pt-3 border-t border-border/10 leading-normal">
-              {t("Earnings clear the holdback window automatically, then pay out to your connected Stripe account.")}
+              {t("Earnings clear the holdback window automatically, then become available to withdraw from your Creator Wallet above.")}
             </p>
           </div>
         </div>
