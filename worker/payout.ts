@@ -98,7 +98,17 @@ export async function reconcileStuckWithdrawals(
         p_payout_id: payoutId,
         p_transfer_id: transferId,
       });
-      if (paidErr) throw new Error(`mark_payout_paid failed: ${paidErr.message}`);
+      if (paidErr) {
+        // A terminal-state guard rejection here means the payout was already
+        // failed/settled elsewhere — surface it, but do not release (money moved).
+        log.alert("withdrawal.reconcile.settle_rejected", {
+          payoutId,
+          transferId,
+          code: (paidErr as { code?: string }).code,
+          error: paidErr.message,
+        });
+        throw new Error(`mark_payout_paid failed: ${paidErr.message}`);
+      }
       recovered += 1;
       log.info("withdrawal.reconcile.settled", {
         payoutId,
@@ -110,7 +120,12 @@ export async function reconcileStuckWithdrawals(
         // Still unknown — leave 'processing'; the next pass retries idempotently.
         log.alert("withdrawal.reconcile.still_unknown", { payoutId, error: errMessage(err) });
       } else {
-        await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
+        const { error: failErr } = await supabase.rpc("mark_payout_failed", {
+          p_payout_id: payoutId,
+        });
+        if (failErr) {
+          log.alert("withdrawal.reconcile.release_failed", { payoutId, error: failErr.message });
+        }
         log.alert("withdrawal.reconcile.failed_released", { payoutId, error: errMessage(err) });
       }
     }

@@ -15,6 +15,7 @@ import {
   assertBusinessCanReleaseEscrow,
   AuthorizationError,
 } from "@/lib/campaign-lifecycle";
+import { apiLog } from "@/lib/api/trace-log";
 
 /**
  * Server Action: Initialize Stripe Onboarding for Business or Influencer
@@ -388,7 +389,12 @@ export async function requestWithdrawalAction() {
       p_fee_pct: WITHDRAWAL_FEE_PCT,
     });
     if (claimErr) {
-      console.error(`[ALERT] withdrawal.claim_failed trace=${traceId} user=${user.user_id}: ${claimErr.message}`);
+      apiLog("alert", "withdrawal.claim_failed", {
+        traceId,
+        userId: user.user_id,
+        code: (claimErr as { code?: string }).code,
+        error: claimErr.message,
+      });
       return { success: false, error: claimErr.message || "Could not start the withdrawal." };
     }
     const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as
@@ -422,7 +428,12 @@ export async function requestWithdrawalAction() {
         // Money moved but the DB didn't record it — leave 'processing' for the
         // reconciler (which re-issues with the same key, gets the same transfer,
         // and settles). Do NOT release.
-        console.error(`[ALERT] withdrawal.settle_failed trace=${traceId} payout=${payoutId} transfer=${transfer.transferId}: ${settleErr.message}`);
+        apiLog("alert", "withdrawal.settle_failed", {
+          traceId,
+          payoutId,
+          transferId: transfer.transferId,
+          error: settleErr.message,
+        });
         return {
           success: true,
           isMock: false,
@@ -432,13 +443,17 @@ export async function requestWithdrawalAction() {
           pending: true,
         };
       }
-      console.log(`withdrawal.paid trace=${traceId} payout=${payoutId} gross=${gross} fee=${fee} net=${net}`);
+      apiLog("info", "withdrawal.paid", { traceId, payoutId, gross, fee, net });
       return { success: true, isMock: false, gross, net, fee };
     } catch (transferErr) {
       if (isUnknownTransferOutcome(transferErr)) {
         // Unknown: the transfer may have succeeded. Leave the payout claimed +
         // 'processing'; the worker reconciler resolves it idempotently.
-        console.error(`[ALERT] withdrawal.transfer_unknown trace=${traceId} payout=${payoutId}:`, transferErr);
+        apiLog("alert", "withdrawal.transfer_unknown", {
+          traceId,
+          payoutId,
+          error: transferErr instanceof Error ? transferErr.message : String(transferErr),
+        });
         return {
           success: false,
           error: "Your withdrawal is processing. We'll confirm it shortly — please don't retry yet.",
@@ -447,9 +462,17 @@ export async function requestWithdrawalAction() {
       // Definitive failure: nothing was transferred — safe to release & retry.
       const { error: failErr } = await supabase.rpc("fail_withdrawal", { p_payout_id: payoutId });
       if (failErr) {
-        console.error(`[ALERT] withdrawal.release_failed trace=${traceId} payout=${payoutId}: ${failErr.message}`);
+        apiLog("alert", "withdrawal.release_failed", {
+          traceId,
+          payoutId,
+          error: failErr.message,
+        });
       }
-      console.error(`withdrawal.transfer_failed trace=${traceId} payout=${payoutId}:`, transferErr);
+      apiLog("warn", "withdrawal.transfer_failed", {
+        traceId,
+        payoutId,
+        error: transferErr instanceof Error ? transferErr.message : String(transferErr),
+      });
       return {
         success: false,
         error: "The payout failed and your balance was released — please try again.",
@@ -457,7 +480,10 @@ export async function requestWithdrawalAction() {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to withdraw funds";
-    console.error(`[ALERT] withdrawal.unexpected trace=${traceId}:`, error);
+    apiLog("alert", "withdrawal.unexpected", {
+      traceId,
+      error: message,
+    });
     return { success: false, error: message };
   }
 }
