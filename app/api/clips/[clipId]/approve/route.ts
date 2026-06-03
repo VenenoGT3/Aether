@@ -5,13 +5,28 @@ import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { approveClip } from "@/lib/api/services/clip-moderation";
 import { isMockMode } from "@/lib/env";
 import { endRequest } from "@/lib/logger";
+import { getLimiter, busyResponse } from "@/lib/backpressure";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ clipId: string }> }
-) {
+): Promise<Response> {
+  // Shared "clip-write" concurrency budget (see app/api/clips/route.ts).
+  const slot = getLimiter("clip-write", 40).tryAcquire();
+  if (!slot) return busyResponse();
+  try {
+    return await handleModeration(request, context);
+  } finally {
+    slot.release();
+  }
+}
+
+async function handleModeration(
+  request: Request,
+  context: { params: Promise<{ clipId: string }> }
+): Promise<Response> {
   const { clipId: rawId } = await context.params;
   const clipId = parseUuidParam(rawId);
   if (!clipId) {

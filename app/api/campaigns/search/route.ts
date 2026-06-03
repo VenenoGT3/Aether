@@ -6,6 +6,10 @@ import { isMockMode } from "@/lib/env";
 import { cached } from "@/lib/cache/swr-cache";
 import { endRequest } from "@/lib/logger";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
+import { getLimiter, busyResponse } from "@/lib/backpressure";
+
+/** Max concurrent discovery queries per instance — sheds excess load with a 503. */
+const DISCOVERY_MAX_CONCURRENCY = 50;
 
 /** Discovery returns the GLOBAL open-campaign list (same for every creator), so
  * it is cached fleet-wide keyed only by the query params — no per-user data. A
@@ -18,7 +22,19 @@ const DISCOVER_TTL_MS = (() => {
 
 export const POST = () => methodNotAllowed(["GET"]);
 
-export async function GET(request: Request) {
+export async function GET(request: Request): Promise<Response> {
+  // Backpressure: shed load (503) when too many discovery queries are in flight,
+  // protecting the DB/cache from a thundering herd. Slot released in finally.
+  const slot = getLimiter("discovery", DISCOVERY_MAX_CONCURRENCY).tryAcquire();
+  if (!slot) return busyResponse();
+  try {
+    return await handleSearch(request);
+  } finally {
+    slot.release();
+  }
+}
+
+async function handleSearch(request: Request): Promise<Response> {
   const guarded = await guardApiGet(request, {
     schema: CampaignSearchQuerySchema,
     rateLimit: "search",

@@ -128,3 +128,15 @@ export function getCircuitBreaker(name: string, opts?: CircuitBreakerOptions): C
   }
   return breaker;
 }
+
+/**
+ * Current state of every breaker that has been used (for the health endpoint).
+ * Breakers are created lazily, so a name appears only after its first call.
+ */
+export function circuitBreakerStates(): Record<string, CircuitState> {
+  const out: Record<string, CircuitState> = {};
+  for (const [name, breaker] of registry) {
+    out[name] = breaker.getState();
+  }
+  return out;
+}
