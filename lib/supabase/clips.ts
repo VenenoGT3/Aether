@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase, isMockMode, getMockUser } from "./client";
 import { apiPost } from "@/lib/api/client";
 import { addBusinessDays, APPROVAL_WINDOW_BUSINESS_DAYS } from "@/lib/approval";
-import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
+import { budgetUsage, isNearlyFull, isPoolExhausted } from "@/lib/campaign-budget";
 import { WITHDRAWAL_MIN, withdrawalBreakdown } from "@/lib/withdrawal";
 import { getCampaignsAction } from "./campaigns";
 import { requestWithdrawalAction } from "@/lib/stripe/actions";
@@ -444,11 +444,20 @@ export function useCreatorClips() {
             if (camp.status && camp.status !== "open" && camp.status !== "in_progress") {
               return { ok: false, error: "This campaign is closed and is not accepting new clips." };
             }
-            if (camp.campaign_type === "performance" && isNearlyFull(budgetUsage(camp))) {
-              return {
-                ok: false,
-                error: "This campaign has used most of its budget and is no longer accepting new clips.",
-              };
+            if (camp.campaign_type === "performance") {
+              const usage = budgetUsage(camp);
+              if (isPoolExhausted(usage)) {
+                return {
+                  ok: false,
+                  error: "This campaign has used its full budget and is closed to new clips.",
+                };
+              }
+              if (isNearlyFull(usage)) {
+                return {
+                  ok: false,
+                  error: "This campaign has used most of its budget and is no longer accepting new clips.",
+                };
+              }
             }
           }
         } catch {

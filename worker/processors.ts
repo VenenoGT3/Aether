@@ -375,3 +375,25 @@ export async function runEarningsCalc(
   }
   return amount;
 }
+
+/** Sweep open performance campaigns and idempotently close any at 100% pool. */
+export async function reconcileExhaustedCampaigns(
+  client?: SupabaseClient
+): Promise<number> {
+  const traceId = randomUUID();
+  const supabase = client ?? getServiceClient();
+  const { data, error } = await supabase.rpc("reconcile_exhausted_performance_campaigns", {
+    p_trace_id: traceId,
+  });
+  if (error) {
+    log.alert("budget.reconcile_failed", { traceId, error: error.message });
+    throw new Error(
+      `[budget] reconcile_exhausted_performance_campaigns failed (trace ${traceId}): ${error.message}`
+    );
+  }
+  const count = typeof data === "number" ? data : Number(data ?? 0);
+  if (count > 0) {
+    log.info("budget.reconcile_closed", { traceId, campaigns: count });
+  }
+  return count;
+}

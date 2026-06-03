@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { ClipSubmitBody } from "@/lib/api/schemas";
-import { budgetUsage, isNearlyFull } from "@/lib/campaign-budget";
+import { budgetUsage, isNearlyFull, isPoolExhausted } from "@/lib/campaign-budget";
 import { apiLog } from "@/lib/api/trace-log";
 
 function detectPlatform(
@@ -86,6 +86,9 @@ export async function submitClip(
   const platform = detectPlatform(body.post_url, body.platform);
 
   if (campaign) {
+    const usage =
+      campaign.campaign_type === "performance" ? budgetUsage(campaign) : null;
+
     if (campaign.status !== "open" && campaign.status !== "in_progress") {
       return {
         ok: false,
@@ -93,7 +96,25 @@ export async function submitClip(
         status: 409,
       };
     }
-    if (campaign.campaign_type === "performance" && isNearlyFull(budgetUsage(campaign))) {
+    if (usage && isPoolExhausted(usage)) {
+      apiLog("alert", "clip.submit.blocked_100pct", {
+        traceId,
+        campaignId: body.campaign_id,
+        used: usage.used,
+        pool: usage.pool,
+      });
+      return {
+        ok: false,
+        error: "This campaign has used its full budget and is closed to new clips.",
+        status: 409,
+      };
+    }
+    if (usage && isNearlyFull(usage)) {
+      apiLog("warn", "clip.submit.blocked_90pct", {
+        traceId,
+        campaignId: body.campaign_id,
+        usedPct: usage.pct,
+      });
       return {
         ok: false,
         error:
@@ -172,6 +193,13 @@ export async function submitClip(
         return {
           ok: false,
           error: "This campaign is closed and is not accepting new clips.",
+          status: 409,
+        };
+      }
+      if (msg.includes("full budget") || msg.includes("budget_exhausted")) {
+        return {
+          ok: false,
+          error: "This campaign has used its full budget and is closed to new clips.",
           status: 409,
         };
       }

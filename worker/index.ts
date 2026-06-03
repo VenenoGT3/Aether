@@ -258,9 +258,24 @@ interface PoolRow {
 // Cleared per-campaign when its pool is topped back up.
 const exhaustedPoolAlerts = new Set<string>();
 
-/** Scan active performance campaigns for an exhausted budget pool and alert once. */
+/** Close campaigns at 100% pool + emit monitoring alerts (available_pool-aware). */
 async function scanPoolExhaustion(): Promise<void> {
   const supabase = getServiceClient();
+  const traceId = crypto.randomUUID();
+
+  const { data: closed, error: reconcileErr } = await supabase.rpc(
+    "reconcile_exhausted_performance_campaigns",
+    { p_trace_id: traceId }
+  );
+  if (reconcileErr) {
+    log.alert("heartbeat.reconcile_exhausted_failed", {
+      traceId,
+      error: reconcileErr.message,
+    });
+  } else if (typeof closed === "number" && closed > 0) {
+    log.info("heartbeat.reconcile_exhausted", { traceId, closed });
+  }
+
   const { data, error } = await supabase
     .from("campaigns")
     .select("id, title, budget_pool, available_pool, budget_reserved, budget_paid")
@@ -275,10 +290,11 @@ async function scanPoolExhaustion(): Promise<void> {
       c.available_pool != null ? Number(c.available_pool) : Number(c.budget_pool || 0);
     const remaining =
       pool - Number(c.budget_reserved || 0) - Number(c.budget_paid || 0);
-    if (remaining <= 0) {
+    if (remaining <= 0.005) {
       if (!exhaustedPoolAlerts.has(c.id)) {
         exhaustedPoolAlerts.add(c.id);
         log.alert("campaign.pool_exhausted", {
+          traceId,
           campaignId: c.id,
           title: c.title,
           pool,
@@ -288,7 +304,7 @@ async function scanPoolExhaustion(): Promise<void> {
         });
       }
     } else {
-      exhaustedPoolAlerts.delete(c.id); // topped up → re-arm the alert
+      exhaustedPoolAlerts.delete(c.id);
     }
   }
 }

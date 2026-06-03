@@ -3,12 +3,16 @@
  *
  * Pool accounting: used = budget_reserved + budget_paid; remaining = pool - used.
  *   - At >= 90% used, new clip submissions are blocked (soft gate: API pre-check
- *     + DB BEFORE INSERT trigger trg_clips_budget_submission_gate).
+ *     + DB BEFORE INSERT trigger trg_clips_submission_gates).
  *   - At 100% used, the campaign auto-closes to 'exhausted' (atomic in
- *     close_performance_campaign_if_exhausted, called from record_clip_earning).
+ *     close_performance_campaign_if_exhausted; also reconciled on rollup UPDATE
+ *     and via reconcile_exhausted_performance_campaigns worker sweep).
  */
 
 export const BUDGET_BLOCK_PCT = 0.9; // block new submissions at/above this
+
+/** Epsilon for pool exhaustion (matches SQL 0.005). */
+export const BUDGET_EXHAUSTED_EPSILON = 0.005;
 
 /** Platform's cut of a performance pool. The remaining (1 - fee) funds creators. */
 export const PLATFORM_FEE_PCT = 0.1;
@@ -64,4 +68,15 @@ export function budgetUsage(c: {
 /** True once the pool is at/above the 90% submission-block threshold. */
 export function isNearlyFull(u: BudgetUsage): boolean {
   return u.pool > 0 && u.pct >= BUDGET_BLOCK_PCT;
+}
+
+/** True when the creator pool is fully consumed (100% hard gate). */
+export function isPoolExhausted(u: BudgetUsage): boolean {
+  return u.pool > 0 && u.remaining <= BUDGET_EXHAUSTED_EPSILON;
+}
+
+/** True when new clip submissions must be blocked (90% soft or 100% hard). */
+export function blocksClipSubmission(u: BudgetUsage, status?: string | null): boolean {
+  if (status && status !== "open" && status !== "in_progress") return true;
+  return isPoolExhausted(u) || isNearlyFull(u);
 }
