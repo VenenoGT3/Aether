@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bell, 
   Check, 
-  Trash2, 
   MessageCircle, 
   DollarSign, 
   Sparkles, 
@@ -40,7 +39,6 @@ export function NotificationCenter() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeFilter, setActiveFilter] = useState<"all" | "campaign" | "payment" | "message" | "system">("all");
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
-  const [swRegistered, setSwRegistered] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [user, setUser] = useState<Profile | null>(null);
@@ -73,6 +71,7 @@ export function NotificationCenter() {
 
   useEffect(() => {
     if (!user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadNotifications();
 
     // Realtime subscription for this user's notifications.
@@ -111,13 +110,8 @@ export function NotificationCenter() {
   // PWA push notification initialization
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read browser permission on mount
       setPushPermission(Notification.permission);
-    }
-    
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        setSwRegistered(!!reg);
-      });
     }
   }, []);
 
@@ -135,8 +129,7 @@ export function NotificationCenter() {
       if (permission === "granted") {
         if ("serviceWorker" in navigator) {
           // Register sw if not already done
-          const reg = await navigator.serviceWorker.register("/sw.js");
-          setSwRegistered(true);
+          await navigator.serviceWorker.register("/sw.js");
           toast.success("Push notifications configured!", {
             description: "Aether is authorized to deliver system notifications."
           });
@@ -144,7 +137,7 @@ export function NotificationCenter() {
       } else if (permission === "denied") {
         toast.warning("Notification permission denied. Review browser settings to unlock.");
       }
-    } catch (err: any) {
+    } catch {
       toast.error("Failed to request notification permission.");
     }
   };
@@ -168,7 +161,7 @@ export function NotificationCenter() {
             badge: "/favicon.ico",
             vibrate: [100, 50, 100],
             data: { url: "/creator/dashboard" }
-          } as any);
+          } as NotificationOptions & { vibrate?: number[] });
           toast.success("Test push triggered!", { id: "test-push-load" });
         } else {
           // Fallback to standard client notification if worker not active yet
@@ -302,10 +295,10 @@ export function NotificationCenter() {
 
             {/* Category Filter Pills */}
             <div className="px-6 py-3 bg-secondary/20 border-b border-border/5 flex gap-1.5 overflow-x-auto no-scrollbar">
-              {["all", "campaign", "payment", "message", "system"].map((filter) => (
+              {(["all", "campaign", "payment", "message", "system"] as const).map((filter) => (
                 <button
                   key={filter}
-                  onClick={() => setActiveFilter(filter as any)}
+                  onClick={() => setActiveFilter(filter)}
                   className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider select-none cursor-pointer transition-colors ${
                     activeFilter === filter
                       ? "bg-foreground text-background"
@@ -423,10 +416,9 @@ export function NotificationCenter() {
                     onClick={async () => {
                       if ("serviceWorker" in navigator) {
                         const regs = await navigator.serviceWorker.getRegistrations();
-                        for (let reg of regs) {
+                        for (const reg of regs) {
                           await reg.unregister();
                         }
-                        setSwRegistered(false);
                         setPushPermission("default");
                         toast.success("Notifications unsubscribed.");
                       }

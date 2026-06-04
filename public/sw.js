@@ -1,6 +1,6 @@
 // Aether PWA Service Worker Stub for Push Notifications
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -14,7 +14,7 @@ self.addEventListener("push", (event) => {
   if (event.data) {
     try {
       data = event.data.json();
-    } catch (e) {
+    } catch {
       data = { title: "Aether Update", body: event.data.text() };
     }
   }

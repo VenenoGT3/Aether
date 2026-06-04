@@ -7,17 +7,12 @@ import {
   DollarSign, 
   Calendar, 
   ArrowRight, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle,
-  FileCheck2,
   FolderLock,
   Layers,
   Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
-import { Profile } from "@/types";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
 
@@ -33,9 +28,18 @@ interface CampaignParticipation {
   deliverableType: string;
 }
 
+/** Raw participation row (with joined campaign) as returned by Supabase. */
+interface RawParticipationRow {
+  id: string;
+  campaign_id: string;
+  proposed_payout: number;
+  status: CampaignParticipation["status"];
+  applied_at?: string;
+  campaign?: { title?: string; deliverables?: Array<{ type?: string }> } | null;
+}
+
 export default function InfluencerCampaignsPage() {
   const { t } = useTranslation();
-  const [user, setUser] = useState<Profile | null>(null);
   const [participations, setParticipations] = useState<CampaignParticipation[]>([]);
   const [activeTab, setActiveTab] = useState<"applied" | "active" | "completed">("active");
   const [loading, setLoading] = useState(true);
@@ -44,7 +48,6 @@ export default function InfluencerCampaignsPage() {
     try {
       setLoading(true);
       const profile = await getClientProfile();
-      setUser(profile);
       const influencerId = profile?.user_id;
       if (!influencerId) {
         setParticipations([]);
@@ -61,7 +64,7 @@ export default function InfluencerCampaignsPage() {
 
       if (error) throw error;
 
-      const formatted: CampaignParticipation[] = (data || []).map((p: any) => ({
+      const formatted: CampaignParticipation[] = ((data || []) as RawParticipationRow[]).map((p) => ({
         participationId: p.id,
         campaignId: p.campaign_id,
         title: p.campaign?.title || "Sponsorship Campaign",
@@ -74,7 +77,7 @@ export default function InfluencerCampaignsPage() {
       }));
 
       setParticipations(formatted);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error loading creator campaigns:", err);
       toast.error(t("Failed to load campaign contracts."));
     } finally {
@@ -83,6 +86,7 @@ export default function InfluencerCampaignsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     // Listen to changes from detail chat pages or discover updates
@@ -95,6 +99,7 @@ export default function InfluencerCampaignsPage() {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   // Tabs splitting logic

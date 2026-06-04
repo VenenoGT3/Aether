@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,10 +11,6 @@ import {
   Check, 
   Plus, 
   Trash2, 
-  DollarSign, 
-  Users, 
-  Layers, 
-  Calendar, 
   Target, 
   Info,
   Loader2,
@@ -29,7 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
-import { createCampaignAction, updateCampaignStatusAction } from "@/lib/supabase/campaigns";
+import { createCampaignAction } from "@/lib/supabase/campaigns";
 import { fundCampaignPoolAction } from "@/lib/stripe/actions";
 import { PoolPaymentModal } from "@/components/pool-payment-modal";
 import { generateCampaignBriefAction } from "@/lib/actions/ai";
@@ -179,9 +175,9 @@ export default function NewCampaignWizard() {
     setDeliverables(deliverables.filter((_, i) => i !== index));
   };
 
-  const updateDeliverable = (index: number, field: string, value: any) => {
+  const updateDeliverable = (index: number, field: string, value: string | number) => {
     const updated = [...deliverables];
-    updated[index] = { ...updated[index], [field]: value };
+    updated[index] = { ...updated[index], [field]: value } as (typeof deliverables)[number];
     setDeliverables(updated);
   };
 
@@ -225,9 +221,9 @@ export default function NewCampaignWizard() {
           description: res.error || t("Please try again.")
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error(t("Brief generation failed"), {
-        description: err.message || t("An unexpected error occurred.")
+        description: err instanceof Error ? err.message : t("An unexpected error occurred.")
       });
     } finally {
       setAiGenerating(false);
@@ -476,9 +472,9 @@ export default function NewCampaignWizard() {
           description: res.error || t("Unknown database error.")
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error(t("Escrow payment failed"), {
-        description: err.message || t("An unexpected error occurred.")
+        description: err instanceof Error ? err.message : t("An unexpected error occurred.")
       });
     } finally {
       setPaying(false);

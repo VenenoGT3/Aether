@@ -59,7 +59,7 @@ function Button({
         damping: 25,
         mass: 0.8,
       }}
-      {...(props as any)}
+      {...(props as React.ComponentProps<typeof MotionButton>)}
     />
   )
 }

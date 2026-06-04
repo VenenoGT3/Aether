@@ -1,8 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
-
-type ThemeMode = "system" | "pinned";
+import React, { createContext, useContext, useEffect } from "react";
 
 interface ThemeContextType {
   isPinned: boolean;
@@ -14,10 +12,6 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isPinned, setIsPinned] = useState<boolean>(false);
-  const [systemTheme, setSystemTheme] = useState<"light" | "dark">("dark");
-  const [isDark, setIsDark] = useState<boolean>(true);
-
   // Initialize theme status on mount
   useEffect(() => {
     const root = document.documentElement;

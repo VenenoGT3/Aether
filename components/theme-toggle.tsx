@@ -2,10 +2,10 @@
 
 import { useTheme } from "@/lib/theme-provider";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Moon, Laptop } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 
 export function ThemeToggle() {
-  const { isPinned, isDark, toggleTheme, systemTheme } = useTheme();
+  const { isPinned, isDark, toggleTheme } = useTheme();
 
   return (
     <button

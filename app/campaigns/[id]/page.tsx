@@ -19,29 +19,18 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
-  CreditCard,
   CheckCircle2,
-  Lock,
-  User,
-  Users,
   Check,
   X,
-  ChevronDown,
   Layers,
   Video,
-  Plus,
-  FileText,
-  BarChart3,
   Sparkles,
   MessageSquare,
   RefreshCw,
   MousePointerClick,
-  Calendar,
   MessageCircle,
-  Eye,
   Share2,
-  TrendingUp,
-  Award
+  TrendingUp
 } from "lucide-react";
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
@@ -165,6 +154,42 @@ interface CampaignDetailState {
   participants: Participant[];
 }
 
+/** AI content-safety audit result (mirrors /api/ai/safety response shape). */
+interface SafetyReport {
+  isDisclosed: boolean;
+  hasProhibitedClaims: boolean;
+  guidelinesCompliant: boolean;
+  score: number;
+  disclosureFeedback: string;
+  prohibitedClaimsFeedback: string;
+  guidelinesFeedback: string;
+  flaggedIssues: Array<{ type: "warning" | "error" | "info"; message: string; fix: string }>;
+}
+
+/** AI performance prediction result (mirrors /api/ai/predict response shape). */
+interface AiPrediction {
+  predictedROI: number;
+  predictedConversions: number;
+  predictedClicks: number;
+  predictedViews: number;
+  predictedRevenue: number;
+  pacingStatus: "underperforming" | "on_track" | "overperforming";
+  analysis: string;
+  recommendations: string[];
+}
+
+/** Chat message exchanged between brand and creator on a campaign. */
+interface ChatMessage {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  sender_avatar: string;
+  role: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+}
+
 const PRESET_IMAGES = [
   {
     name: "Minimal Tech",
@@ -209,6 +234,7 @@ export default function CampaignDetailPage() {
 
   useEffect(() => {
     if (metrics) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync editable form fields when source metrics change
       setLocalAttributed(metrics.attributed_value.toString());
       setLocalSpend(metrics.budget_spent.toString());
       setLocalClicks(metrics.clicks.toString());
@@ -260,15 +286,15 @@ export default function CampaignDetailPage() {
   
   // AI safety and prediction states
   const [commentsTab, setCommentsTab] = useState<"pins" | "safety">("pins");
-  const [safetyReport, setSafetyReport] = useState<any>(null);
+  const [safetyReport, setSafetyReport] = useState<SafetyReport | null>(null);
   const [safetyLoading, setSafetyLoading] = useState(false);
   const [lastAuditedVersion, setLastAuditedVersion] = useState<number | null>(null);
-  const [aiPrediction, setAiPrediction] = useState<any>(null);
+  const [aiPrediction, setAiPrediction] = useState<AiPrediction | null>(null);
   const [predictLoading, setPredictLoading] = useState(false);
   
   // Annotation tool states
   const [selectedVersionNum, setSelectedVersionNum] = useState<number>(1);
-  const [isPinningMode, setIsPinningMode] = useState(false);
+  const [, setIsPinningMode] = useState(false);
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
   const [activeTempPin, setActiveTempPin] = useState<{ x: number; y: number } | null>(null);
   const [newPinComment, setNewPinComment] = useState("");
@@ -296,7 +322,7 @@ export default function CampaignDetailPage() {
         guidelines: campaign.brief.guidelines || [],
       });
       if (data.success) {
-        setSafetyReport(data.report);
+        setSafetyReport(data.report as SafetyReport);
         setLastAuditedVersion(selectedVersionNum);
         toast.success("AI Safety audit completed!");
       } else {
@@ -347,7 +373,7 @@ export default function CampaignDetailPage() {
           : undefined,
       });
       if (data.success) {
-        setAiPrediction(data.prediction);
+        setAiPrediction(data.prediction as AiPrediction);
       } else {
         console.error("AI Predict failed:", data.error);
       }
@@ -360,14 +386,18 @@ export default function CampaignDetailPage() {
 
   useEffect(() => {
     if (workspaceTab === "analytics" && !aiPrediction && !predictLoading && campaign) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- lazy-load AI prediction when the analytics tab opens
       fetchAIPrediction();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed only to tab + campaign id
   }, [workspaceTab, campaignId]);
 
   useEffect(() => {
     if (safetyReport && lastAuditedVersion !== selectedVersionNum) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- invalidate stale audit when the viewed version changes
       setSafetyReport(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the selected version changes
   }, [selectedVersionNum]);
 
   const appleSpring = {
@@ -378,13 +408,14 @@ export default function CampaignDetailPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard
     setMounted(true);
   }, []);
 
   // --- MESSAGING AND UTM ARCHITECT CODE ---
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTyping] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -398,12 +429,12 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (workspaceTab === "chat") {
       scrollToBottom();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear unread badge when chat tab is viewed
       setHasUnreadMessages(false);
     }
   }, [chatMessages, workspaceTab]);
 
-  const getInitialChatMessages = () => {
-    const creatorName = user?.role === "influencer" ? user.full_name : (campaign?.participants.find(p => p.id === activeParticipantId)?.fullName || "Marcus Vance");
+  const getInitialChatMessages = (): ChatMessage[] => {
     const brandName = "Sarah Jenkins (Brand)";
     
     return [
@@ -437,7 +468,7 @@ export default function CampaignDetailPage() {
     if (stored) {
       try {
         setChatMessages(JSON.parse(stored));
-      } catch (e) {
+      } catch {
         setChatMessages(getInitialChatMessages());
       }
     } else {
@@ -449,8 +480,10 @@ export default function CampaignDetailPage() {
 
   useEffect(() => {
     if (mounted && activeParticipantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- load persisted chat once participant is known
       loadChatMessages();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when participant or campaign changes
   }, [mounted, activeParticipantId, campaignId]);
 
   useEffect(() => {
@@ -466,7 +499,7 @@ export default function CampaignDetailPage() {
           schema: "public",
           table: "messages"
         },
-        (payload: any) => {
+        (payload: { new: ChatMessage }) => {
           const newMsg = payload.new;
           setChatMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev;
@@ -479,6 +512,7 @@ export default function CampaignDetailPage() {
     return () => {
       supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- channel is re-created per participant/mount
   }, [activeParticipantId, mounted]);
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -486,6 +520,7 @@ export default function CampaignDetailPage() {
     if (!text.trim() || !user || !activeParticipantId) return;
 
     setChatInput("");
+    // eslint-disable-next-line react-hooks/purity -- one-off id generated in an event handler, not during render
     const messageId = `msg_${Math.random().toString(36).substr(2, 9)}`;
     const brandName = "Sarah Jenkins (Brand)";
     const creatorName = campaign?.participants.find(p => p.id === activeParticipantId)?.fullName || user.full_name;
@@ -514,7 +549,7 @@ export default function CampaignDetailPage() {
           content: text
         });
       if (error) throw error;
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Failed to deliver message: " + (err instanceof Error ? err.message : String(err)));
     }
   };
@@ -529,7 +564,8 @@ export default function CampaignDetailPage() {
     if (storedState) {
       try {
         currentCampaign = JSON.parse(storedState) as CampaignDetailState;
-      } catch (e) {
+      } catch {
+        // eslint-disable-next-line react-hooks/immutability -- hoisted function declaration, safe at runtime
         currentCampaign = createDefaultCampaign(campaignId);
       }
     } else {
@@ -582,6 +618,7 @@ export default function CampaignDetailPage() {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the campaign id changes
   }, [campaignId]);
 
   // Persists the state to localStorage and re-triggers state loading
@@ -590,7 +627,7 @@ export default function CampaignDetailPage() {
     setCampaign(updatedCampaign);
   };
 
-  const createDefaultCampaign = (id: string): CampaignDetailState => {
+  function createDefaultCampaign(id: string): CampaignDetailState {
     let title = "Aether Lifestyle Launch";
     let budget = 4500;
     let status: "open" | "applied" | "escrowed" | "submitted" | "released" = "open";
@@ -708,7 +745,7 @@ export default function CampaignDetailPage() {
       timeline: defaultTimeline,
       participants: initialParticipants
     };
-  };
+  }
 
   if (!user || !campaign) return null;
 
@@ -811,8 +848,8 @@ export default function CampaignDetailPage() {
       } else {
         toast.error(res.error || "Funding failed.", { id: "fund-escrow" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred.", { id: "fund-escrow" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred.", { id: "fund-escrow" });
     } finally {
       setActionLoading(false);
     }
@@ -871,7 +908,7 @@ export default function CampaignDetailPage() {
           duration: 4000
         });
       }
-    } catch (err: any) {
+    } catch {
       toast.error("Link is private or rate-limited — manual entry still available", {
         id: "fetch-metrics",
         duration: 4000
@@ -1070,8 +1107,8 @@ export default function CampaignDetailPage() {
       } else {
         toast.error(res.error || "Release failed.", { id: "release-escrow" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred.", { id: "release-escrow" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred.", { id: "release-escrow" });
     } finally {
       setActionLoading(false);
     }
@@ -1388,10 +1425,12 @@ export default function CampaignDetailPage() {
     const historyData = [];
     for (let i = 1; i <= days; i++) {
       const ratio = i / days;
-      // Introduce slight randomness for realistic curves
+      // Introduce slight randomness for realistic curves (demo chart only)
+      /* eslint-disable react-hooks/purity -- cosmetic jitter for the demo history chart */
       const clicks = Math.round(metrics.clicks * ratio * (0.95 + (i * 0.01) * Math.random()));
       const conversions = Math.round(metrics.conversions * ratio * (0.95 + (i * 0.01) * Math.random()));
       const revenue = Math.round(metrics.attributed_value * ratio * (0.95 + (i * 0.01) * Math.random()));
+      /* eslint-enable react-hooks/purity */
       
       historyData.push({
         day: `Day ${i}`,
@@ -2493,7 +2532,7 @@ export default function CampaignDetailPage() {
                       </div>
                       {fetchedPreview.caption && (
                         <div className="text-[10px] text-muted-foreground italic line-clamp-2 bg-background/30 p-2.5 rounded-xl border border-border/5 leading-relaxed">
-                          "{fetchedPreview.caption}"
+                          &quot;{fetchedPreview.caption}&quot;
                         </div>
                       )}
                     </motion.div>
@@ -2596,7 +2635,7 @@ export default function CampaignDetailPage() {
               <div className="p-4 rounded-2xl bg-secondary/35 border border-border/10">
                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-1.5">{t("Proposed Pitch")}</span>
                 <p className="text-xs text-foreground leading-relaxed italic">
-                  "{selectedParticipant.pitch || "Hi, I am interested in collaborating on this campaign and creating high-quality content that matches your design language."}"
+                  &quot;{selectedParticipant.pitch || "Hi, I am interested in collaborating on this campaign and creating high-quality content that matches your design language."}&quot;
                 </p>
               </div>
 
@@ -2957,7 +2996,7 @@ export default function CampaignDetailPage() {
                     <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/10">
                       <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">{t("Audited Text Caption")}</span>
                       <p className="text-xs text-foreground italic leading-relaxed">
-                        "{currentSubmission?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether"}"
+                        &quot;{currentSubmission?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether"}&quot;
                       </p>
                     </div>
 
@@ -3057,7 +3096,7 @@ export default function CampaignDetailPage() {
                         {safetyReport.flaggedIssues && safetyReport.flaggedIssues.length > 0 ? (
                           <div className="space-y-2.5 pt-2 border-t border-border/10">
                             <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">{t("Required Adjustments")}</span>
-                            {safetyReport.flaggedIssues.map((issue: any, index: number) => (
+                            {safetyReport.flaggedIssues.map((issue, index: number) => (
                               <div key={index} className="p-3 bg-card border border-border/20 rounded-xl space-y-1.5">
                                 <div className="flex items-center gap-1.5">
                                   <span className={`w-1.5 h-1.5 rounded-full ${

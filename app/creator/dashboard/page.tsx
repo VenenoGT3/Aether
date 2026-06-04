@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   AreaChart, 
@@ -19,21 +18,14 @@ import {
   DollarSign, 
   Users, 
   TrendingUp, 
-  ArrowUpRight, 
   Bell,
   CheckCircle2,
-  Calendar,
   Lock,
   Wallet,
   Grid,
   BarChart3,
   Eye,
-  Share2,
-  ThumbsUp,
-  MessageSquare,
-  Mail,
-  ChevronRight,
-  X
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -60,7 +52,7 @@ export default function InfluencerDashboard() {
   const [showLegacy, setShowLegacy] = useState(false);
   const [user, setUser] = useState<Profile | null>(null);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
-  const { transactions, balances, refresh: refreshTransactions } = useTransactions();
+  const { transactions, refresh: refreshTransactions } = useTransactions();
   const { posts, aggregateMetrics, refresh: refreshPosts } = usePosts();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -72,7 +64,7 @@ export default function InfluencerDashboard() {
     try {
       {
         // Query the creator's posts and sync live metrics.
-        const { data: postsData, error } = await supabase
+        const { data: postsData } = await supabase
           .from("posts")
           .select("post_url, platform, participation_id, participations!inner(influencer_id)")
           .eq("participations.influencer_id", user.user_id);
@@ -107,8 +99,8 @@ export default function InfluencerDashboard() {
       refreshPosts();
       refreshTransactions();
 
-    } catch (err: any) {
-      toast.error(t("Failed to refresh metrics: ") + err.message, { id: "refresh-metrics" });
+    } catch (err) {
+      toast.error(t("Failed to refresh metrics: ") + (err instanceof Error ? err.message : ""), { id: "refresh-metrics" });
     } finally {
       setIsRefreshing(false);
     }
@@ -130,6 +122,7 @@ export default function InfluencerDashboard() {
   }, [refreshTransactions, refreshPosts]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard + fetch-on-mount
     setMounted(true);
     loadAll();
 
@@ -168,8 +161,8 @@ export default function InfluencerDashboard() {
       } else {
         toast.error(res.error || "Failed to generate onboarding session.", { id: "stripe-onboard" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred connecting to Stripe.", { id: "stripe-onboard" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred connecting to Stripe.", { id: "stripe-onboard" });
     } finally {
       setOnboardingLoading(false);
     }

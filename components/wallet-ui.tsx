@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
-  DollarSign, 
   ArrowDownLeft, 
   ArrowUpRight, 
   Lock, 
@@ -12,7 +11,6 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
-  AlertCircle,
   HelpCircle,
   Loader2
 } from "lucide-react";
@@ -84,6 +82,7 @@ export default function WalletUI() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadLedger();
     
     // Listen to local changes (e.g. if released campaign in detail view)

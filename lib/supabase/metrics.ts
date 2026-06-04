@@ -292,7 +292,6 @@ export function useTransactions() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     const channel = supabase
@@ -384,7 +383,6 @@ export function usePosts() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     const channel = supabase

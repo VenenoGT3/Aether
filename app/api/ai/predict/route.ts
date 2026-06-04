@@ -4,32 +4,6 @@ import { jsonError } from "@/lib/api/response";
 import { AiPredictBodySchema } from "@/lib/api/schemas";
 import { getGeminiApiKey } from "@/lib/env.server";
 
-interface PredictRequest {
-  campaign: {
-    title: string;
-    budget: number;
-    brief: {
-      objectives?: string[];
-      guidelines?: string[];
-    };
-  };
-  metrics: {
-    views: number;
-    likes: number;
-    comments: number;
-    shares: number;
-    clicks: number;
-    conversions: number;
-    budget_spent: number;
-    attributed_value: number;
-  };
-  creator?: {
-    followers?: number;
-    engagement?: number;
-    niches?: string[];
-  };
-}
-
 interface PredictResponse {
   predictedROI: number;
   predictedConversions: number;
@@ -211,7 +185,7 @@ interface PredictResponse {
 
     return NextResponse.json({ success: true, prediction, generatedBy: "heuristics" });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in predict route:", error);
     return jsonError(
       error instanceof Error ? error.message : "Internal Server Error",

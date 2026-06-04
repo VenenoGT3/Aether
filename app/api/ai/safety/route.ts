@@ -4,12 +4,6 @@ import { jsonError } from "@/lib/api/response";
 import { AiSafetyBodySchema } from "@/lib/api/schemas";
 import { getGeminiApiKey } from "@/lib/env.server";
 
-interface SafetyRequest {
-  text: string;
-  platform: string;
-  guidelines: string[];
-}
-
 interface SafetyResponse {
   isDisclosed: boolean;
   hasProhibitedClaims: boolean;
@@ -53,7 +47,7 @@ Draft Content Text to Audit:
 Platform: "${platform || "unknown"}"
 
 Campaign Guidelines to Check Against:
-${guidelines && guidelines.length > 0 ? guidelines.map((g, i) => `- ${g}`).join("\n") : "- None specified"}
+${guidelines && guidelines.length > 0 ? guidelines.map((g) => `- ${g}`).join("\n") : "- None specified"}
 
 Please evaluate the content for:
 1. Sponsorship Disclosure: Does it contain clear FTC disclosure (e.g., #ad, #sponsored, #brandpartner, or "paid partnership")? (On platforms like Instagram/TikTok, #ad is standard).
@@ -194,7 +188,7 @@ interface SafetyResponse {
 
     return NextResponse.json({ success: true, report, generatedBy: "fallback_heuristics" });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in safety route:", error);
     return jsonError(
       error instanceof Error ? error.message : "Internal Server Error",

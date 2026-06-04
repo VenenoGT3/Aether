@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,30 +19,25 @@ import {
   TrendingUp, 
   Layers, 
   Plus, 
-  ArrowUpRight, 
   Clock, 
   CheckCircle2, 
   HelpCircle, 
   Loader2, 
   RefreshCw,
-  ArrowRight,
   ShieldAlert,
   Wallet,
   Play,
   FileCheck,
   Check,
-  X,
-  ExternalLink,
   ChevronRight,
-  MessageSquare,
-  Sparkles,
   Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandPerformanceSummary } from "@/components/brand-performance-summary";
 import { getCampaignsAction, subscribeToCampaignChanges } from "@/lib/supabase/campaigns";
 import { getClientProfile, Profile, supabase } from "@/lib/supabase/client";
-import { useTransactions, getCampaignMetricsAction } from "@/lib/supabase/metrics";
+import { useTransactions, getCampaignMetricsAction, CampaignMetrics } from "@/lib/supabase/metrics";
+import { DbCampaign } from "@/types/database";
 import { fundEscrowAction, releaseEscrowAction, startStripeOnboardingAction } from "@/lib/stripe/actions";
 import { useTranslation } from "@/lib/translations";
 import { toast } from "sonner";
@@ -61,9 +56,27 @@ interface Participant {
     postUrl: string;
     imageUrl: string;
     caption?: string;
-    metrics?: any;
-    annotations?: any[];
+    metrics?: Record<string, number>;
+    annotations?: unknown[];
   }>;
+}
+
+/**
+ * Campaign row as surfaced on the dashboard: DB fields plus an optional joined
+ * influencer summary. `status` is widened to string because the legacy rich-data
+ * flows reuse this shape with non-DB statuses (escrowed/released/submitted).
+ */
+type DashboardCampaign = Omit<DbCampaign, "status"> & {
+  status: string;
+  influencer?: { name: string; handle: string } | null;
+};
+
+/** Locally-persisted rich campaign state (participants, timeline) for the review queue. */
+interface CampaignRichData {
+  title: string;
+  participants: Participant[];
+  timeline: Array<{ label: string; completed: boolean }>;
+  status?: string;
 }
 
 export default function BusinessDashboard() {
@@ -71,11 +84,11 @@ export default function BusinessDashboard() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<DashboardCampaign[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [campaignMetrics, setCampaignMetrics] = useState<Record<string, any>>({});
-  const [campaignDetails, setCampaignDetails] = useState<Record<string, any>>({});
-  const { transactions, balances, refresh: refreshTransactions } = useTransactions();
+  const [campaignMetrics, setCampaignMetrics] = useState<Record<string, CampaignMetrics>>({});
+  const [campaignDetails, setCampaignDetails] = useState<Record<string, CampaignRichData>>({});
+  const { transactions, balances } = useTransactions();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "review" | "billing">("overview");
   const [showLegacy, setShowLegacy] = useState(false);
@@ -151,8 +164,8 @@ export default function BusinessDashboard() {
       // Reload UI data
       await loadData();
 
-    } catch (err: any) {
-      toast.error(t("Failed to refresh metrics: ") + err.message, { id: "refresh-metrics" });
+    } catch (err) {
+      toast.error(t("Failed to refresh metrics: ") + (err instanceof Error ? err.message : ""), { id: "refresh-metrics" });
     } finally {
       setIsRefreshing(false);
     }
@@ -170,8 +183,8 @@ export default function BusinessDashboard() {
         setCampaigns(campRes.campaigns);
         
         // Fetch metrics and rich data details for each campaign
-        const metricsMap: Record<string, any> = {};
-        const detailsMap: Record<string, any> = {};
+        const metricsMap: Record<string, CampaignMetrics> = {};
+        const detailsMap: Record<string, CampaignRichData> = {};
         
         for (const camp of campRes.campaigns) {
           const mRes = await getCampaignMetricsAction(camp.id);
@@ -201,6 +214,7 @@ export default function BusinessDashboard() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard + fetch-on-mount
     setMounted(true);
     setLoading(true);
     loadData();
@@ -245,8 +259,8 @@ export default function BusinessDashboard() {
       } else {
         toast.error(res.error || "Failed to generate onboarding session.", { id: "stripe-onboard" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred connecting to Stripe.", { id: "stripe-onboard" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred connecting to Stripe.", { id: "stripe-onboard" });
     } finally {
       setOnboardingLoading(false);
     }
@@ -274,7 +288,7 @@ export default function BusinessDashboard() {
             return p;
           });
 
-          const updatedTimeline = richCampaign.timeline.map((t: any) => {
+          const updatedTimeline = richCampaign.timeline.map((t) => {
             if (t.label.includes("Stripe Escrow")) return { ...t, completed: true };
             return t;
           });
@@ -297,8 +311,8 @@ export default function BusinessDashboard() {
       } else {
         toast.error(res.error || "Funding failed.", { id: "escrow-funding" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred.", { id: "escrow-funding" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred.", { id: "escrow-funding" });
     } finally {
       setActionLoadingId(null);
     }
@@ -329,8 +343,8 @@ export default function BusinessDashboard() {
           description: "Influencer was moved out of active pipelines."
         });
       }
-    } catch (err: any) {
-      toast.error("Declining failed: " + err.message, { id: "decline-app" });
+    } catch (err) {
+      toast.error("Declining failed: " + (err instanceof Error ? err.message : ""), { id: "decline-app" });
     }
   };
 
@@ -353,7 +367,7 @@ export default function BusinessDashboard() {
             return p;
           });
 
-          const updatedTimeline = richCampaign.timeline.map((t: any) => {
+          const updatedTimeline = richCampaign.timeline.map((t) => {
             if (t.label.includes("Content Release") || t.label.includes("Draft Deliverable") || t.label.includes("Review")) {
               return { ...t, completed: true };
             }
@@ -386,8 +400,8 @@ export default function BusinessDashboard() {
       } else {
         toast.error(res.error || "Escrow release failed.", { id: "release-escrow" });
       }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred.", { id: "release-escrow" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "An error occurred.", { id: "release-escrow" });
     } finally {
       setActionLoadingId(null);
     }
@@ -904,7 +918,7 @@ export default function BusinessDashboard() {
 
                           {/* Pitch content */}
                           <p className="text-[11px] text-muted-foreground leading-relaxed italic bg-secondary/20 p-3 rounded-xl border border-border/5">
-                            "{participant.submissions?.[0]?.caption || `Hey! I love your brand and would love to collaborate on the ${campaignTitle} campaign. I will create a high quality aesthetic setup and highlight your layout details.`}"
+                            &quot;{participant.submissions?.[0]?.caption || `Hey! I love your brand and would love to collaborate on the ${campaignTitle} campaign. I will create a high quality aesthetic setup and highlight your layout details.`}&quot;
                           </p>
                         </div>
 
@@ -1005,7 +1019,7 @@ export default function BusinessDashboard() {
                               </h4>
                               
                               <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 max-w-xl">
-                                "{latestSub.caption}"
+                                &quot;{latestSub.caption}&quot;
                               </p>
 
                               <div className="flex gap-4 pt-1 text-[10px] text-muted-foreground/80 font-semibold">
@@ -1103,7 +1117,7 @@ export default function BusinessDashboard() {
                   </div>
                   <div className="text-[10px] text-muted-foreground/80 flex items-center gap-1.5 leading-normal mt-auto border-t border-border/10 pt-4">
                     <CheckCircle2 size={12} className="shrink-0 text-[#34C759]" />
-                    <span>Securely routed directly to creators' linked Stripe accounts.</span>
+                    <span>Securely routed directly to creators&apos; linked Stripe accounts.</span>
                   </div>
                 </div>
 

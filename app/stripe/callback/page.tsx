@@ -54,13 +54,16 @@ function CallbackContent() {
 
     if (action === "return") {
       handleOnboardingComplete();
-    } else if (action === "refresh") {
-      setStatus("error");
-      setErrorMsg("The onboarding session expired. Please restart the Stripe Connect setup flow.");
-    } else {
-      setStatus("error");
-      setErrorMsg("Invalid action code received.");
+      return;
     }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derive error state from URL action param
+    setStatus("error");
+    setErrorMsg(
+      action === "refresh"
+        ? "The onboarding session expired. Please restart the Stripe Connect setup flow."
+        : "Invalid action code received."
+    );
   }, [action, role, accountId]);
 
   return (

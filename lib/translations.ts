@@ -839,6 +839,7 @@ export function useTranslation() {
   const [locale, setLocale] = useState<Locale>("en");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync persisted locale on mount
     setLocale(getClientLocale());
     const handleLocaleChange = () => {
       setLocale(getClientLocale());

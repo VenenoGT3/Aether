@@ -1,23 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
   Search, 
   SlidersHorizontal, 
   Sparkles, 
   DollarSign, 
-  Calendar, 
   Zap, 
-  CheckCircle2, 
   Clock, 
   ArrowRight, 
   User, 
   Check, 
   Megaphone,
-  Briefcase,
-  X,
   FileText,
   Scissors,
   Eye
@@ -59,110 +54,20 @@ interface Campaign {
   cpm_rate?: number | null;
 }
 
-const initialMockCampaigns: Campaign[] = [
-  {
-    id: "camp_perf_1",
-    title: "Aether Clip Challenge — Earn Per View",
-    description: "Open clipping campaign. Cut short-form clips from our launch footage and earn per 1,000 views. No application needed — join and start posting.",
-    businessName: "Aether Labs",
-    budget_total: 10000,
-    target_niches: ["Tech", "Design", "Lifestyle"],
-    deliverables: [{ type: "clip", quantity: 1, description: "Short-form vertical clips (TikTok / Reels / Shorts)." }],
-    timeline: { start_date: "2026-05-25", end_date: "2026-06-30" },
-    payout_speed: "Pay per view (CPM)",
-    days_left: 28,
-    image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
-    campaign_type: "performance",
-    campaign_category: "clipping",
-    cpm_rate: 2.5
-  },
-  {
-    id: "camp_perf_ugc",
-    title: "Aether Desk Shelf — UGC Showcase",
-    description: "Open UGC campaign. Film your own short-form take on the Aether desk shelf from our brief and earn per view. Original creator content, no source footage.",
-    businessName: "Aether Labs",
-    budget_total: 6000,
-    target_niches: ["Tech", "Design", "Minimalism"],
-    deliverables: [{ type: "ugc_video", quantity: 1, description: "Original short-form vertical video from the brief." }],
-    timeline: { start_date: "2026-05-28", end_date: "2026-06-28" },
-    payout_speed: "Pay per view (CPM)",
-    days_left: 26,
-    image_url: "https://images.unsplash.com/photo-1481277542470-605612bd2d61?auto=format&fit=crop&w=800&q=80",
-    campaign_type: "performance",
-    campaign_category: "ugc",
-    cpm_rate: 3.0
-  },
-  {
-    id: "camp_2",
-    title: "Summer Linen Capsule Launch",
-    description: "Showcase our breathable, organic summer linen apparel in everyday casual-luxury styling clips.",
-    businessName: "Aura Aesthetics",
-    budget_total: 8000,
-    target_niches: ["Fashion", "Lifestyle", "Luxury"],
-    deliverables: [
-      { type: "tiktok_video", quantity: 1, description: "1x 30s TikTok lookbook styling linen collection" },
-      { type: "instagram_story", quantity: 3, description: "3x Stories with swipe up direct product links." }
-    ],
-    timeline: { start_date: "2026-05-15", end_date: "2026-06-15" },
-    payout_speed: "Instant Escrow",
-    days_left: 22,
-    image_url: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "camp_3",
-    title: "Clean Pre-Workout Boost Promo",
-    description: "Highlight the organic energy and crash-free formula of our new pre-workout boost powder.",
-    businessName: "Vigor Nutrition",
-    budget_total: 3500,
-    target_niches: ["Fitness", "Health", "Nutrition"],
-    deliverables: [{ type: "instagram_reel", quantity: 1, description: "1x Reel showing preparation and workout performance boost." }],
-    timeline: { start_date: "2026-05-01", end_date: "2026-05-20" },
-    payout_speed: "Standard (14 days)",
-    days_left: 0,
-    image_url: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "camp_4",
-    title: "Custom Mechanical Keyboards",
-    description: "Promote our hot-swappable mechanical split keyboard and custom keycap styles to creators.",
-    businessName: "Acme Tech",
-    budget_total: 4500,
-    target_niches: ["Tech", "Gaming", "Setup"],
-    deliverables: [{ type: "youtube_sponsor", quantity: 1, description: "1x 90s integrated sponsor slot in setup video." }],
-    timeline: { start_date: "2026-07-01", end_date: "2026-07-31" },
-    payout_speed: "Instant Escrow",
-    days_left: 15,
-    image_url: "https://images.unsplash.com/photo-1555538995-736e5429692a?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "camp_5",
-    title: "Eco-Friendly Bamboo Basics",
-    description: "Promote our core bamboo fabric basics, highlighting fabric longevity and ecological manufacturing.",
-    businessName: "Aura Aesthetics",
-    budget_total: 12000,
-    target_niches: ["Fashion", "Lifestyle", "Minimalism"],
-    deliverables: [
-      { type: "instagram_reel", quantity: 2, description: "2x Reels focusing on outfit repeating and durability" }
-    ],
-    timeline: { start_date: "2026-06-10", end_date: "2026-07-10" },
-    payout_speed: "Instant Escrow",
-    days_left: 19,
-    image_url: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "camp_6",
-    title: "Cinematic Travel Backpack Vlog",
-    description: "Capture beautiful transitions and drone views showcasing our smart travel backpack in real-world transit.",
-    businessName: "Atlas Gear",
-    budget_total: 5500,
-    target_niches: ["Travel", "Photography", "Adventure"],
-    deliverables: [{ type: "instagram_reel", quantity: 1, description: "1x Cinematic Reel showing backpack features in travel." }],
-    timeline: { start_date: "2026-06-15", end_date: "2026-07-15" },
-    payout_speed: "Instant Escrow",
-    days_left: 25,
-    image_url: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=800&q=80"
-  }
-];
+/** Raw campaign row as returned by the /api/campaigns/search endpoint. */
+interface RawSearchCampaign {
+  id: string;
+  title: string;
+  description?: string;
+  budget_total: number;
+  target_niches: string[];
+  deliverables?: Campaign["deliverables"];
+  timeline?: Campaign["timeline"];
+  campaign_type?: "fixed" | "performance";
+  campaign_category?: "ugc" | "clipping" | null;
+  brand_cpm_rate?: number | null;
+  cpm_rate?: number | null;
+}
 
 export default function DiscoverPage() {
   const { t } = useTranslation();
@@ -209,10 +114,10 @@ export default function DiscoverPage() {
 
       {
         const searchData = await apiGet<{
-          campaigns: Array<Record<string, unknown>>;
+          campaigns: RawSearchCampaign[];
         }>("/api/campaigns/search?page=1&limit=50");
 
-        rawCamps = (searchData.campaigns || []).map((c: any) => ({
+        rawCamps = (searchData.campaigns || []).map((c) => ({
           id: c.id,
           title: c.title,
           description: c.description || "",
@@ -254,7 +159,7 @@ export default function DiscoverPage() {
 
       // Rank and match raw campaigns using AI Matchmaking API
       try {
-        const creatorNiches: string[] = (profile as any)?.niches || (profile?.niche ? [profile.niche] : ["Tech", "Minimalism"]);
+        const creatorNiches: string[] = (profile as { niches?: string[] } | null)?.niches || (profile?.niche ? [profile.niche] : ["Tech", "Minimalism"]);
         try {
           const matchData = await apiPost<{
             success: boolean;
@@ -281,7 +186,7 @@ export default function DiscoverPage() {
         console.error("AI Matchmaking discover failed:", matchErr);
         setCampaigns(rawCamps);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error loading discover data:", err);
       toast.error(t("Failed to load campaigns."));
     } finally {
@@ -290,6 +195,7 @@ export default function DiscoverPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
     // Listen to changes in campaign status
@@ -302,6 +208,7 @@ export default function DiscoverPage() {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   // CONFETTI CELEBRATION EFFECT
@@ -330,8 +237,8 @@ export default function DiscoverPage() {
         description: t("Your stats and rate card have been sent to the brand.")
       });
       triggerConfetti();
-    } catch (err: any) {
-      toast.error(err.message || t("Failed to submit quick application"), { id: "express-interest" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to submit quick application"), { id: "express-interest" });
     }
   };
 
@@ -389,12 +296,11 @@ export default function DiscoverPage() {
             name: user?.full_name || "Marcus Vance",
             bio: user?.bio || "Tech creator and minimalist design specialist.",
             niches:
-              (user as any)?.niches ||
+              (user as { niches?: string[] } | null)?.niches ||
               (user?.niche ? [user.niche] : ["Tech", "Productivity"]),
             followers:
-              (user as any)?.follower_count || user?.followers || 48500,
-            engagement:
-              (user as any)?.engagement_rate || user?.engagement_rate || 4.8,
+              (user as { follower_count?: number } | null)?.follower_count || user?.followers || 48500,
+            engagement: user?.engagement_rate || 4.8,
           },
           tone: pitchTone,
         }
@@ -404,7 +310,7 @@ export default function DiscoverPage() {
         id: "ai-pitch",
         description: data.generatedBy === "gemini" ? t("Written with Gemini 1.5 Flash.") : t("Loaded matching template.")
       });
-    } catch (err: any) {
+    } catch {
       toast.error(t("AI Assistant is offline. Please write manually."), { id: "ai-pitch" });
     } finally {
       setIsAILoading(false);
@@ -432,8 +338,8 @@ export default function DiscoverPage() {
         description: t("The brand has been notified and will review your pitch.")
       });
       triggerConfetti();
-    } catch (err: any) {
-      toast.error(err.message || t("Failed to submit application"), { id: "apply" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("Failed to submit application"), { id: "apply" });
     } finally {
       setIsSubmitting(false);
     }
@@ -1007,7 +913,7 @@ export default function DiscoverPage() {
                   {/* Tone Picker */}
                   <select
                     value={pitchTone}
-                    onChange={(e) => setPitchTone(e.target.value as any)}
+                    onChange={(e) => setPitchTone(e.target.value as "professional" | "energetic" | "creative")}
                     className="px-2.5 py-1 rounded-xl bg-secondary/40 border border-border/20 text-[10px] font-bold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
                   >
                     <option value="professional">👔 {t("Professional")}</option>

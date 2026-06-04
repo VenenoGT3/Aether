@@ -26,8 +26,6 @@ function randomUuid(): string {
   });
 }
 
-const ROLES = ["business", "influencer", "admin"] as const;
-
 describe("RLS property invariants", () => {
   it("profile update: only self (100 random pairs)", () => {
     for (let i = 0; i < 100; i++) {

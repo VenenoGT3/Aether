@@ -76,14 +76,12 @@ Keep the pitch extremely concise, around 100-120 words. Begin directly with a co
     }
 
     // High quality local template fallback
-    const creatorName = creator.name || "Marcus Vance";
     const campaignTitle = campaign.title || "sponsorship campaign";
     const creatorNiches = Array.isArray(creator.niches) && creator.niches.length > 0
       ? creator.niches.join(" & ")
       : creator.niche || "Lifestyle & Tech";
     const followersText = creator.followers ? `${(creator.followers / 1000).toFixed(1)}k` : "48k";
     const engagementText = creator.engagement ? `${creator.engagement}%` : "4.8%";
-    const brandName = campaign.brandName || "your brand";
 
     let pitch = "";
 
@@ -97,7 +95,7 @@ Keep the pitch extremely concise, around 100-120 words. Begin directly with a co
     }
 
     return NextResponse.json({ pitch, generatedBy: "fallback_template" });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in AI pitch writer route:", error);
     return jsonError(
       error instanceof Error ? error.message : "Internal Server Error",

@@ -12,18 +12,10 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     categories: ["business", "social", "finance"],
     icons: [
-      {
-        src: "/icon.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any maskable" as any,
-      },
-      {
-        src: "/apple-icon.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any maskable" as any,
-      },
+      { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/apple-icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/apple-icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

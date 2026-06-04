@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { updateClientProfile } from "@/lib/supabase/client";
@@ -23,7 +22,6 @@ import {
 } from "lucide-react";
 
 export default function BusinessOnboarding() {
-  const router = useRouter();
   const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [stripeLoading, setStripeLoading] = useState(false);

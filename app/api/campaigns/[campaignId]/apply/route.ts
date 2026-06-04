@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { CampaignApplyBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";

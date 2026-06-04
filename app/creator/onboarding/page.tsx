@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
 import { CreatorOnboardingWelcome } from "@/components/creator-onboarding-welcome";
 import { 
-  Sparkles, 
   ArrowRight, 
   ArrowLeft, 
   CheckCircle2, 
@@ -259,7 +258,7 @@ export default function InfluencerOnboarding() {
 
       router.push("/creator/dashboard");
       router.refresh();
-    } catch (err) {
+    } catch {
       toast.error(t("An unexpected error occurred."));
       setLoading(false);
     }

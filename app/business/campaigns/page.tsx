@@ -13,8 +13,6 @@ import {
   DollarSign, 
   ArrowRight, 
   HelpCircle,
-  Lock,
-  Sparkles,
   Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +22,7 @@ import {
   updateCampaignStatusAction, 
   subscribeToCampaignChanges 
 } from "@/lib/supabase/campaigns";
-import { CampaignStatus } from "@/types/database";
+import { CampaignStatus, DbCampaign } from "@/types/database";
 import { useTranslation } from "@/lib/translations";
 
 const STATUS_COLUMNS: Array<{ id: CampaignStatus; label: string; color: string; bg: string; border: string }> = [
@@ -39,7 +37,7 @@ export default function CampaignsPage() {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<DbCampaign[]>([]);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   
   // Search & Filter State
@@ -68,6 +66,7 @@ export default function CampaignsPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard + fetch-on-mount
     setMounted(true);
     loadCampaigns();
 
@@ -101,9 +100,9 @@ export default function CampaignsPage() {
           description: res.error || t("Please try again.")
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error(t("An unexpected error occurred"), {
-        description: err.message
+        description: err instanceof Error ? err.message : undefined
       });
     }
   };

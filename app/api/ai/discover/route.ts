@@ -4,28 +4,6 @@ import { jsonError } from "@/lib/api/response";
 import { AiDiscoverBodySchema } from "@/lib/api/schemas";
 import { getGeminiApiKey } from "@/lib/env.server";
 
-interface CampaignItem {
-  id: string;
-  title: string;
-  description: string;
-  businessName: string;
-  budget_total: number;
-  target_niches: string[];
-  deliverables: any[];
-  timeline: any;
-  payout_speed: string;
-  days_left: number;
-  image_url: string;
-}
-
-interface CreatorProfile {
-  name: string;
-  bio: string;
-  niches: string[];
-  followers: number;
-  engagement: number;
-}
-
 interface MatchResponse {
   campaignId: string;
   matchScore: number;
@@ -121,7 +99,7 @@ interface MatchResponse {
                 matchScore: match ? match.matchScore : 75,
                 matchingReason: match ? match.matchingReason : "Matches your content focus niche."
               };
-            }).sort((a: any, b: any) => b.matchScore - a.matchScore);
+            }).sort((a, b) => b.matchScore - a.matchScore);
 
             return NextResponse.json({ success: true, campaigns: matchedCampaigns, generatedBy: "gemini" });
           }
@@ -164,7 +142,7 @@ interface MatchResponse {
 
     return NextResponse.json({ success: true, campaigns: matchedCampaigns, generatedBy: "fallback_heuristics" });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in discover route:", error);
     return jsonError(
       error instanceof Error ? error.message : "Internal Server Error",
