@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/translations";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
+import { getCampaignByIdAction } from "@/lib/supabase/campaigns";
 import { Profile } from "@/types";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,7 +31,9 @@ import {
   MousePointerClick,
   MessageCircle,
   Share2,
-  TrendingUp
+  TrendingUp,
+  Loader2,
+  Inbox
 } from "lucide-react";
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
@@ -190,6 +193,126 @@ interface ChatMessage {
   is_read: boolean;
 }
 
+/** Minimal profile shape resolved for participants. */
+interface ProfileLite {
+  user_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  social_handles: Record<string, string> | null;
+}
+
+/** A submitted post row joined onto a participation. */
+interface PostRow {
+  id: string;
+  post_url: string;
+  platform: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  engagement_rate: number | null;
+  submitted_at: string;
+}
+
+/** A participation row (creator on this campaign) with its posts. */
+interface ParticipationRow {
+  id: string;
+  status: string;
+  proposed_payout: number | null;
+  actual_payout: number | null;
+  influencer_id: string;
+  applied_at: string;
+  posts: PostRow[] | null;
+}
+
+/** A raw messages row (before display fields are derived). */
+interface RawMessage {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+}
+
+/** Map a DB participation status onto the workspace participant status. */
+function mapParticipantStatus(status: string, hasSubmissions: boolean): Participant["status"] {
+  if (status === "completed") return "released";
+  if (status === "declined" || status === "cancelled" || status === "banned") return "rejected";
+  if (hasSubmissions) return "submitted";
+  if (status === "accepted" || status === "active" || status === "offered") return "escrowed";
+  return "applied";
+}
+
+/** Map a DB campaign status onto the workspace campaign status. */
+function mapCampaignStatus(status: string): CampaignDetailState["status"] {
+  if (status === "completed") return "released";
+  if (status === "in_progress") return "escrowed";
+  return "open";
+}
+
+/** Map the campaign's stored deliverables JSON into the workspace shape. */
+function mapDeliverables(raw: unknown): CampaignDetailState["deliverables"] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const d = entry as {
+      type?: string;
+      details?: string;
+      description?: string;
+      quantity?: number;
+      count?: number;
+      platform?: string;
+    };
+    const typeLabel =
+      d.type === "post" ? "Aesthetic Post"
+      : d.type === "video" ? "Video Review"
+      : d.type === "story" ? "Social Story"
+      : d.type || "Deliverable";
+    const platform: "TikTok" | "Instagram" | "YouTube" =
+      d.platform === "TikTok" || d.platform === "YouTube" || d.platform === "Instagram"
+        ? d.platform
+        : d.type === "video" ? "TikTok" : "Instagram";
+    return {
+      type: typeLabel,
+      description: d.details || d.description || "",
+      platform,
+      count: d.quantity ?? d.count ?? 1,
+    };
+  });
+}
+
+/** Derive timeline milestones from the campaign's real dates + status. */
+function buildTimeline(c: {
+  status: string;
+  created_at?: string;
+  timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
+}): CampaignDetailState["timeline"] {
+  const fmt = (d?: string) =>
+    d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+  const tl = c.timeline || {};
+  const live = c.status !== "draft";
+  const done = c.status === "completed";
+  return [
+    { label: "Campaign Live", date: fmt(c.created_at), completed: live },
+    { label: "Draft Deliverable Due", date: fmt(tl.draftDueDate), completed: c.status === "in_progress" || done },
+    { label: "Content Release & Payout", date: fmt(tl.endDate), completed: done },
+  ];
+}
+
+/** Add display fields (name/avatar/role) to a raw message row for the viewer. */
+function enrichMessage(m: RawMessage, viewer: Profile, otherName: string, otherAvatar: string): ChatMessage {
+  const isViewer = m.sender_id === viewer.user_id;
+  return {
+    id: m.id,
+    sender_id: m.sender_id,
+    sender_name: isViewer ? viewer.full_name : otherName,
+    sender_avatar: isViewer ? viewer.avatar_url : otherAvatar,
+    role: isViewer ? viewer.role : viewer.role === "business" ? "influencer" : "business",
+    content: m.content,
+    created_at: m.created_at,
+    is_read: m.is_read,
+  };
+}
+
 const PRESET_IMAGES = [
   {
     name: "Minimal Tech",
@@ -215,6 +338,7 @@ export default function CampaignDetailPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<Profile | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Core Campaign detail state
   const [campaign, setCampaign] = useState<CampaignDetailState | null>(null);
@@ -223,7 +347,7 @@ export default function CampaignDetailPage() {
   
   // Workspace tabs toggler and metrics hooks
   const [workspaceTab, setWorkspaceTab] = useState<"workspace" | "analytics" | "chat">("workspace");
-  const campaignId = (params?.id as string) || "camp_1";
+  const campaignId = (params?.id as string) || "";
   const { metrics, updateMetrics } = useCampaignMetrics(campaignId);
   
   const [localAttributed, setLocalAttributed] = useState("0");
@@ -315,9 +439,7 @@ export default function CampaignDetailPage() {
         report?: unknown;
         error?: string;
       }>("/api/ai/safety", {
-        text:
-          sub.caption ||
-          "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
+        text: sub.caption || "",
         platform: campaign.deliverables[0]?.platform || "Instagram",
         guidelines: campaign.brief.guidelines || [],
       });
@@ -340,7 +462,6 @@ export default function CampaignDetailPage() {
     if (!campaign) return;
     setPredictLoading(true);
     try {
-      const part = campaign.participants.find(p => p.id === activeParticipantId);
       const data = await apiPost<{
         success: boolean;
         prediction?: unknown;
@@ -364,13 +485,6 @@ export default function CampaignDetailPage() {
           budget_spent: metrics.budget_spent,
           attributed_value: metrics.attributed_value,
         },
-        creator: part
-          ? {
-              followers: part.id === "mock-influencer-uuid" ? 48500 : 35000,
-              engagement: 4.8,
-              niches: campaign.brief.objectives,
-            }
-          : undefined,
       });
       if (data.success) {
         setAiPrediction(data.prediction as AiPrediction);
@@ -434,57 +548,25 @@ export default function CampaignDetailPage() {
     }
   }, [chatMessages, workspaceTab]);
 
-  const getInitialChatMessages = (): ChatMessage[] => {
-    const brandName = "Sarah Jenkins (Brand)";
-    
-    return [
-      {
-        id: "msg_init_1",
-        sender_id: "system",
-        sender_name: "System",
-        sender_avatar: "",
-        role: "system",
-        content: `Campaign Contract Initiated. Budget secured in escrow.`,
-        created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-        is_read: true
-      },
-      {
-        id: "msg_init_2",
-        sender_id: "mock-business-uuid",
-        sender_name: brandName,
-        sender_avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-        role: "business",
-        content: `Hi there! We are excited to collaborate with you on this campaign. Let us know if you have any questions about the deliverables brief!`,
-        created_at: new Date(Date.now() - 3600000 * 23).toISOString(),
-        is_read: true
-      }
-    ];
-  };
-
-  const loadChatMessages = () => {
-    if (!activeParticipantId) return;
-    const key = `aether-campaign-messages-${campaignId}-${activeParticipantId}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      try {
-        setChatMessages(JSON.parse(stored));
-      } catch {
-        setChatMessages(getInitialChatMessages());
-      }
-    } else {
-      const initialMsgs = getInitialChatMessages();
-      localStorage.setItem(key, JSON.stringify(initialMsgs));
-      setChatMessages(initialMsgs);
-    }
-  };
+  const loadChatMessages = useCallback(async () => {
+    if (!activeParticipantId || !user) return;
+    const { data } = await supabase
+      .from("messages")
+      .select("id, sender_id, content, created_at, is_read")
+      .eq("participation_id", activeParticipantId)
+      .order("created_at", { ascending: true });
+    const participant = campaign?.participants.find((p) => p.id === activeParticipantId);
+    const otherName = user.role === "business" ? participant?.fullName || "Creator" : "Brand";
+    const otherAvatar = user.role === "business" ? participant?.avatarUrl || "" : "";
+    setChatMessages(((data as RawMessage[] | null) ?? []).map((m) => enrichMessage(m, user, otherName, otherAvatar)));
+  }, [activeParticipantId, user, campaign]);
 
   useEffect(() => {
     if (mounted && activeParticipantId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- load persisted chat once participant is known
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch chat thread on mount / participant change
       loadChatMessages();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when participant or campaign changes
-  }, [mounted, activeParticipantId, campaignId]);
+  }, [mounted, activeParticipantId, loadChatMessages]);
 
   useEffect(() => {
     if (!activeParticipantId || !mounted) return;
@@ -499,11 +581,14 @@ export default function CampaignDetailPage() {
           schema: "public",
           table: "messages"
         },
-        (payload: { new: ChatMessage }) => {
-          const newMsg = payload.new;
+        (payload: { new: RawMessage }) => {
+          const raw = payload.new;
           setChatMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
+            if (prev.some(m => m.id === raw.id) || !user) return prev;
+            const participant = campaign?.participants.find((p) => p.id === activeParticipantId);
+            const otherName = user.role === "business" ? participant?.fullName || "Creator" : "Brand";
+            const otherAvatar = user.role === "business" ? participant?.avatarUrl || "" : "";
+            return [...prev, enrichMessage(raw, user, otherName, otherAvatar)];
           });
         }
       )
@@ -522,13 +607,11 @@ export default function CampaignDetailPage() {
     setChatInput("");
     // eslint-disable-next-line react-hooks/purity -- one-off id generated in an event handler, not during render
     const messageId = `msg_${Math.random().toString(36).substr(2, 9)}`;
-    const brandName = "Sarah Jenkins (Brand)";
-    const creatorName = campaign?.participants.find(p => p.id === activeParticipantId)?.fullName || user.full_name;
 
-    const myMsg = {
+    const myMsg: ChatMessage = {
       id: messageId,
       sender_id: user.user_id,
-      sender_name: user.role === "business" ? brandName : creatorName,
+      sender_name: user.full_name,
       sender_avatar: user.avatar_url,
       role: user.role,
       content: text,
@@ -554,200 +637,173 @@ export default function CampaignDetailPage() {
     }
   };
 
-  // --- LEGACY CAMPAIGN STATE LOADER ---
-  const loadCampaignState = (activeUser: Profile) => {
-    const key = `aether-campaign-rich-data-${campaignId}`;
-    const storedState = localStorage.getItem(key);
-    
-    let currentCampaign: CampaignDetailState;
-
-    if (storedState) {
-      try {
-        currentCampaign = JSON.parse(storedState) as CampaignDetailState;
-      } catch {
-        // eslint-disable-next-line react-hooks/immutability -- hoisted function declaration, safe at runtime
-        currentCampaign = createDefaultCampaign(campaignId);
-      }
-    } else {
-      currentCampaign = createDefaultCampaign(campaignId);
+  // --- REAL CAMPAIGN DATA LOADER (Supabase) ---
+  // Loads the campaign, its participations (+ each creator's profile and
+  // submitted posts) directly from Supabase. No mock seed, no localStorage.
+  const loadCampaign = useCallback(async () => {
+    const activeUser = await getClientProfile();
+    setUser(activeUser);
+    if (!activeUser || !campaignId) {
+      setCampaign(null);
+      setLoading(false);
+      return;
     }
 
-    // Auto-select active participant for Business
-    // If there are participants, select the first one. If Marcus Vance is one of them, prefer him for testing.
-    let selectedPartId = "";
-    if (activeUser.role === "business") {
-      const marcus = currentCampaign.participants.find(p => p.id === "mock-influencer-uuid");
-      if (marcus) {
-        selectedPartId = marcus.id;
-      } else if (currentCampaign.participants.length > 0) {
-        selectedPartId = currentCampaign.participants[0].id;
+    const campRes = await getCampaignByIdAction(campaignId);
+    if (!campRes.success || !campRes.campaign) {
+      setCampaign(null);
+      setLoading(false);
+      return;
+    }
+    const c = campRes.campaign as {
+      id: string;
+      title: string;
+      budget_total: number;
+      status: string;
+      description?: string | null;
+      deliverables?: unknown;
+      timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
+      content_rules?: { notes?: string } | null;
+      created_at?: string;
+    };
+
+    // Participations on this campaign, with each creator's submitted posts.
+    const { data: parts } = await supabase
+      .from("participations")
+      .select(
+        "id, status, proposed_payout, actual_payout, influencer_id, applied_at, posts ( id, post_url, platform, views, likes, comments, shares, engagement_rate, submitted_at )"
+      )
+      .eq("campaign_id", campaignId)
+      .order("applied_at", { ascending: true });
+
+    const rows = (parts as ParticipationRow[] | null) ?? [];
+
+    // Resolve creator display info (RLS exposes applicant profiles to the brand).
+    const influencerIds = [...new Set(rows.map((r) => r.influencer_id))];
+    const profilesById: Record<string, ProfileLite> = {};
+    if (influencerIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, avatar_url, social_handles")
+        .in("user_id", influencerIds);
+      for (const p of (profs as ProfileLite[] | null) ?? []) {
+        profilesById[p.user_id] = p;
       }
-    } else {
-      // Influencer logs in: select their own profile participant details
-      selectedPartId = activeUser.user_id;
     }
 
-    setCampaign(currentCampaign);
+    const participants: Participant[] = rows.map((r) => {
+      const prof = profilesById[r.influencer_id];
+      const handles = (prof?.social_handles ?? {}) as Record<string, string>;
+      const rawHandle = handles.instagram || handles.tiktok || handles.youtube || "";
+      const submissions: Submission[] = (r.posts ?? [])
+        .slice()
+        .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime())
+        .map((post, i) => ({
+          version: i + 1,
+          submittedAt: post.submitted_at,
+          postUrl: post.post_url,
+          imageUrl: "",
+          metrics: {
+            views: post.views ?? 0,
+            likes: post.likes ?? 0,
+            comments: post.comments ?? 0,
+            shares: post.shares ?? 0,
+            clicks: 0,
+            ctr: 0,
+            roi: 0,
+          },
+          annotations: [],
+        }));
+      return {
+        id: r.id,
+        fullName: prof?.full_name || "Creator",
+        handle: rawHandle ? `@${rawHandle.replace(/^@/, "")}` : "",
+        avatarUrl: prof?.avatar_url || "",
+        status: mapParticipantStatus(r.status, submissions.length > 0),
+        payout: Number(r.actual_payout) || Number(r.proposed_payout) || 0,
+        submissions,
+      };
+    });
+
+    const mapped: CampaignDetailState = {
+      id: c.id,
+      title: c.title,
+      budget: Number(c.budget_total) || 0,
+      status: mapCampaignStatus(c.status),
+      brief: {
+        objectives: [],
+        toneOfVoice: [],
+        guidelines: c.content_rules?.notes ? [c.content_rules.notes] : [],
+        keyMessaging: c.description || "",
+        kpis: [],
+      },
+      deliverables: mapDeliverables(c.deliverables),
+      timeline: buildTimeline(c),
+      participants,
+    };
+    setCampaign(mapped);
+
+    // Active participant: brand → first applicant; creator → their own row.
+    const selectedPartId =
+      activeUser.role === "business"
+        ? participants[0]?.id ?? ""
+        : rows.find((r) => r.influencer_id === activeUser.user_id)?.id ?? "";
     setActiveParticipantId(selectedPartId);
 
-    // Set active version based on selected participant
-    const part = currentCampaign.participants.find(p => p.id === selectedPartId);
-    if (part && part.submissions && part.submissions.length > 0) {
-      setSelectedVersionNum(part.submissions[part.submissions.length - 1].version);
-    } else {
-      setSelectedVersionNum(1);
-    }
-  };
+    const sel = participants.find((p) => p.id === selectedPartId);
+    setSelectedVersionNum(
+      sel && sel.submissions.length > 0 ? sel.submissions[sel.submissions.length - 1].version : 1
+    );
+    setLoading(false);
+  }, [campaignId]);
 
   useEffect(() => {
-    async function initPage() {
-      const activeUser = await getClientProfile();
-      if (activeUser) {
-        setUser(activeUser);
-        loadCampaignState(activeUser);
-      }
-    }
-    initPage();
-
-    const handleSync = () => {
-      initPage();
-    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch campaign + participants on mount
+    loadCampaign();
+    const handleSync = () => loadCampaign();
     window.addEventListener("storage", handleSync);
     window.addEventListener("role-change", handleSync);
     return () => {
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the campaign id changes
-  }, [campaignId]);
+  }, [loadCampaign]);
 
-  // Persists the state to localStorage and re-triggers state loading
+  // In-memory campaign-state update for ephemeral UI (pin annotations have no
+  // backing table yet). Server-backed mutations re-fetch via loadCampaign().
   const persistCampaignState = (updatedCampaign: CampaignDetailState) => {
-    localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updatedCampaign));
     setCampaign(updatedCampaign);
   };
 
-  function createDefaultCampaign(id: string): CampaignDetailState {
-    let title = "Aether Lifestyle Launch";
-    let budget = 4500;
-    let status: "open" | "applied" | "escrowed" | "submitted" | "released" = "open";
-
-    if (id === "camp_1") {
-      title = "Summer Tech Capsule";
-      budget = 2500;
-      status = "escrowed";
-    } else if (id === "camp_3") {
-      title = "Minimalist Workspace Review";
-      budget = 1200;
-      status = "released";
-    }
-
-    const defaultBrief = {
-      objectives: [
-        "Showcase summer workspace gear in natural, minimalist aesthetics.",
-        "Highlight durability, visual appeal, and workflow ergonomics.",
-        "Drive traffic to the product launch with custom discount codes."
-      ],
-      toneOfVoice: ["Minimalist", "Aesthetic", "Sophisticated", "Warm", "Product-centric"],
-      guidelines: [
-        "Position the product in the primary focal area within the first 3 seconds.",
-        "Incorporate clean camera pan movements under soft natural lighting.",
-        "Tag the brand and include the landing page link in the bio/caption.",
-        "Do not show competing workspace accessories in the same frames."
-      ],
-      keyMessaging: "Elevate your focus with Aether's precision-engineered workspace tools."
-    };
-
-    const defaultDeliverables = [
-      { type: "Video Review", description: "60s Dedicated review highlighting material craftsmanship.", platform: "TikTok" as const, count: 1 },
-      { type: "Aesthetic Post", description: "High-resolution carousel featuring the desk setup in context.", platform: "Instagram" as const, count: 1 }
-    ];
-
-    const defaultTimeline = [
-      { label: "Application & Verification", date: "May 25, 2026", completed: true },
-      { label: "Stripe Escrow Funding", date: "May 28, 2026", completed: id === "camp_3" || id === "camp_1" },
-      { label: "Draft Deliverable Upload", date: "June 5, 2026", completed: id === "camp_3" },
-      { label: "Review & Adjustments", date: "June 12, 2026", completed: id === "camp_3" },
-      { label: "Content Release & Payout", date: "June 15, 2026", completed: id === "camp_3" }
-    ];
-
-    const initialParticipants: Participant[] = [
-      {
-        id: "mock-influencer-uuid", // Marcus Vance
-        fullName: "Marcus Vance",
-        handle: "@marcusv",
-        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-        status: id === "camp_3" ? "released" : id === "camp_2" ? "applied" : "escrowed",
-        payout: budget,
-        submissions: id === "camp_3" ? [
-          {
-            version: 1,
-            submittedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            postUrl: "https://youtube.com/watch?v=marcusworkspacereview",
-            imageUrl: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80",
-            metrics: { views: 24500, likes: 1450, comments: 230, shares: 180, clicks: 1250, ctr: 5.1, roi: 3.2 },
-            annotations: [
-              { id: "ann_3", authorName: "Sarah Jenkins", authorRole: "business", text: "Love the lighting here. The desk shelf is displayed perfectly.", x: 50, y: 25, resolved: true, createdAt: "2026-05-20T10:00:00Z" }
-            ]
-          }
-        ] : []
-      },
-      {
-        id: "sofia-chen-uuid",
-        fullName: "Sofia Chen",
-        handle: "@sofiac",
-        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-        status: id === "camp_1" ? "submitted" : "escrowed",
-        payout: id === "camp_1" ? 2800 : 4200,
-        submissions: id === "camp_1" ? [
-          {
-            version: 1,
-            submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            postUrl: "https://instagram.com/p/C7W28z2yX8a",
-            imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80",
-            metrics: { views: 1800, likes: 120, comments: 14, shares: 5, clicks: 85, ctr: 4.7, roi: 1.8 },
-            annotations: [
-              { id: "ann_1", authorName: "Sarah Jenkins", authorRole: "business", text: "Please align the keyboard to the center. It looks slightly tilted here.", x: 45, y: 55, resolved: false, createdAt: "2026-05-23T14:15:00Z" },
-              { id: "ann_2", authorName: "Sofia Chen", authorRole: "influencer", text: "Got it! I will fix this in the next version.", x: 45, y: 55, resolved: true, createdAt: "2026-05-23T14:30:00Z" }
-            ]
-          }
-        ] : []
-      },
-      {
-        id: "dave-miller-uuid",
-        fullName: "Dave Miller",
-        handle: "@davem",
-        avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-        status: id === "camp_3" ? "released" : "applied",
-        payout: id === "camp_3" ? 1200 : 1500,
-        submissions: id === "camp_3" ? [
-          {
-            version: 1,
-            submittedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-            postUrl: "https://youtube.com/watch?v=daveworkspacereview",
-            imageUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=600&q=80",
-            metrics: { views: 12450, likes: 980, comments: 110, shares: 45, clicks: 520, ctr: 4.17, roi: 2.1 },
-            annotations: [
-              { id: "ann_4", authorName: "Sarah Jenkins", authorRole: "business", text: "Excellent branding integration.", x: 30, y: 40, resolved: true, createdAt: "2026-05-19T10:00:00Z" }
-            ]
-          }
-        ] : []
-      }
-    ];
-
-    return {
-      id,
-      title,
-      budget,
-      status,
-      brief: defaultBrief,
-      deliverables: defaultDeliverables,
-      timeline: defaultTimeline,
-      participants: initialParticipants
-    };
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-3">
+        <Loader2 size={28} className="animate-spin text-primary" />
+        <p className="text-xs text-muted-foreground">{t("Loading campaign workspace...")}</p>
+      </div>
+    );
   }
 
-  if (!user || !campaign) return null;
+  if (!user) return null;
+
+  if (!campaign) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4 px-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-secondary/40 border border-border/20 flex items-center justify-center text-muted-foreground">
+          <Inbox size={24} />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-bold tracking-tight">{t("Campaign not found")}</h2>
+          <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
+            {t("This campaign doesn't exist or you don't have access to it.")}
+          </p>
+        </div>
+        <Button onClick={() => router.back()} variant="outline" className="rounded-2xl text-xs px-5 cursor-pointer gap-1.5">
+          <ArrowLeft size={14} /> {t("Go back")}
+        </Button>
+      </div>
+    );
+  }
 
   const isBusiness = user.role === "business";
   const selectedParticipant = campaign.participants.find(p => p.id === activeParticipantId);
@@ -784,26 +840,10 @@ export default function CampaignDetailPage() {
       return;
     }
 
-    // Add the applicant as a participant in applied state
-    const marcusParticipant: Participant = {
-      id: user.user_id,
-      fullName: user.full_name,
-      handle: user.social_handle || `@${user.full_name.toLowerCase().replace(/\s+/g, "")}`,
-      avatarUrl: user.avatar_url,
-      status: "applied",
-      payout: proposedPayout,
-      submissions: []
-    };
-
-    const updated = {
-      ...campaign,
-      participants: [...campaign.participants.filter(p => p.id !== user.user_id), marcusParticipant]
-    };
-
-    persistCampaignState(updated);
-    setActiveParticipantId(user.user_id);
     setIsApplying(false);
-    
+    // Re-load from Supabase so the new participation (real id/status) shows up.
+    await loadCampaign();
+
     toast.success("Application submitted successfully!", {
       description: "The brand has been notified and will review your pitch."
     });
@@ -816,34 +856,14 @@ export default function CampaignDetailPage() {
     toast.loading("Initializing secure escrow funding...", { id: "fund-escrow" });
 
     try {
-      const res = await fundEscrowAction(campaignId, selectedParticipant.payout);
+      // Real Stripe escrow PaymentIntent for THIS participation.
+      const res = await fundEscrowAction(selectedParticipant.id, selectedParticipant.payout);
 
       if (res.success) {
-        const updatedParticipants = campaign.participants.map(p => {
-          if (p.id === selectedParticipant.id) {
-            return { ...p, status: "escrowed" as const };
-          }
-          return p;
-        });
-
-        // Also update timeline status
-        const updatedTimeline = campaign.timeline.map(t => {
-          if (t.label.includes("Stripe Escrow")) return { ...t, completed: true };
-          return t;
-        });
-
-        const updated = {
-          ...campaign,
-          participants: updatedParticipants,
-          timeline: updatedTimeline,
-          status: "escrowed" as const
-        };
-
-        persistCampaignState(updated);
-
-        toast.success("Escrow Funded successfully!", {
+        await loadCampaign();
+        toast.success("Escrow funding initialized", {
           id: "fund-escrow",
-          description: `Funds lock confirmed. Creator ${selectedParticipant.fullName} notified.`
+          description: `Secured escrow for ${selectedParticipant.fullName} via Stripe.`
         });
       } else {
         toast.error(res.error || "Funding failed.", { id: "fund-escrow" });
@@ -928,48 +948,15 @@ export default function CampaignDetailPage() {
 
     if (!selectedParticipant) return;
 
-    const viewsVal = parseInt(estViews) || (fetchedPreview?.views) || 12000;
-    const likesVal = parseInt(estLikes) || (fetchedPreview?.likes) || 800;
-    const commentsVal = parseInt(estComments) || (fetchedPreview?.comments) || 60;
-    const sharesVal = parseInt(estShares) || (fetchedPreview?.shares) || 20;
+    const viewsVal = parseInt(estViews) || fetchedPreview?.views || 0;
+    const likesVal = parseInt(estLikes) || fetchedPreview?.likes || 0;
+    const commentsVal = parseInt(estComments) || fetchedPreview?.comments || 0;
+    const sharesVal = parseInt(estShares) || fetchedPreview?.shares || 0;
     const savesVal = fetchedPreview?.saves || 0;
-    const erVal = fetchedPreview?.engagement_rate || parseFloat((((likesVal + commentsVal + sharesVal + savesVal) / (viewsVal || 1)) * 100).toFixed(2)) || 2.1;
-
-    const newVersionNum = (selectedParticipant.submissions.length || 0) + 1;
-    const newSubmission: Submission = {
-      version: newVersionNum,
-      submittedAt: new Date().toISOString(),
-      postUrl,
-      imageUrl: selectedPresetImage,
-      caption: postCaption || fetchedPreview?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether",
-      metrics: {
-        views: viewsVal,
-        likes: likesVal,
-        comments: commentsVal,
-        shares: sharesVal,
-        clicks: Math.round(viewsVal * 0.05), // 5% click baseline
-        ctr: 5.0,
-        roi: parseFloat(((Math.round(viewsVal * 0.05 * 0.02) * 85) / (selectedParticipant.payout || campaign.budget || 1000)).toFixed(2)) || 2.1
-      },
-      annotations: []
-    };
-
-    const updatedParticipants = campaign.participants.map(p => {
-      if (p.id === selectedParticipant.id) {
-        return {
-          ...p,
-          status: "submitted" as const,
-          submissions: [...p.submissions, newSubmission]
-        };
-      }
-      return p;
-    });
-
-    const updated = {
-      ...campaign,
-      participants: updatedParticipants,
-      status: "submitted" as const
-    };
+    const erVal =
+      fetchedPreview?.engagement_rate ||
+      parseFloat((((likesVal + commentsVal + sharesVal + savesVal) / (viewsVal || 1)) * 100).toFixed(2)) ||
+      0;
 
     try {
       await apiPost(`/api/participations/${selectedParticipant.id}/posts`, {
@@ -994,15 +981,15 @@ export default function CampaignDetailPage() {
       return;
     }
 
-    persistCampaignState(updated);
-    setSelectedVersionNum(newVersionNum);
-    
+    // Refresh real submissions from Supabase.
+    await loadCampaign();
+
     // Clear inputs and previews
     setPostUrl("");
     setPostCaption("");
     setFetchedPreview(null);
-    
-    toast.success(`Draft Version ${newVersionNum} submitted!`, {
+
+    toast.success("Draft submitted!", {
       description: "Brand has been notified to review your deliverable."
     });
   };
@@ -1066,32 +1053,11 @@ export default function CampaignDetailPage() {
     toast.loading("Releasing Stripe Connect payout...", { id: "release-escrow" });
 
     try {
-      const res = await releaseEscrowAction(campaignId);
+      // Real Stripe Connect transfer for THIS participation.
+      const res = await releaseEscrowAction(selectedParticipant.id);
 
       if (res.success) {
-        const updatedParticipants = campaign.participants.map(p => {
-          if (p.id === selectedParticipant.id) {
-            return { ...p, status: "released" as const };
-          }
-          return p;
-        });
-
-        // Also update timeline status
-        const updatedTimeline = campaign.timeline.map(t => {
-          if (t.label.includes("Content Release") || t.label.includes("Draft Deliverable") || t.label.includes("Review")) {
-            return { ...t, completed: true };
-          }
-          return t;
-        });
-
-        const updated = {
-          ...campaign,
-          participants: updatedParticipants,
-          timeline: updatedTimeline,
-          status: "released" as const
-        };
-
-        persistCampaignState(updated);
+        await loadCampaign();
 
         // Trigger premium celebration confetti!
         confetti({
@@ -1911,12 +1877,9 @@ export default function CampaignDetailPage() {
   const renderChatInterface = () => {
     if (!campaign || !user) return null;
 
-    const brandName = "Sarah Jenkins (Brand)";
-    const creatorName = campaign.participants.find(p => p.id === activeParticipantId)?.fullName || "Marcus Vance";
-    const partnerName = user.role === "business" ? creatorName : brandName;
-    const partnerAvatar = user.role === "business" 
-      ? (campaign.participants.find(p => p.id === activeParticipantId)?.avatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80")
-      : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80";
+    const chatPartner = campaign.participants.find(p => p.id === activeParticipantId);
+    const partnerName = user.role === "business" ? (chatPartner?.fullName || "Creator") : "Brand";
+    const partnerAvatar = user.role === "business" ? (chatPartner?.avatarUrl || "") : "";
 
     const chatTemplates = user.role === "influencer" 
       ? [
@@ -1938,7 +1901,14 @@ export default function CampaignDetailPage() {
         <div className="lg:col-span-2 p-6 md:p-8 apple-card flex flex-col h-[560px]">
           {/* Header */}
           <div className="flex items-center gap-3.5 pb-4 border-b border-border/10 mb-4 select-none">
-            <img src={partnerAvatar} alt={partnerName} className="w-10 h-10 rounded-full object-cover border border-border/20" />
+            {partnerAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={partnerAvatar} alt={partnerName} className="w-10 h-10 rounded-full object-cover border border-border/20" />
+            ) : (
+              <span className="w-10 h-10 rounded-full bg-primary/10 text-primary border border-border/20 flex items-center justify-center text-sm font-bold uppercase shrink-0">
+                {(partnerName || "?").charAt(0)}
+              </span>
+            )}
             <div>
               <h3 className="text-xs font-bold text-foreground leading-none">{partnerName}</h3>
               <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
@@ -2639,24 +2609,14 @@ export default function CampaignDetailPage() {
                 </p>
               </div>
 
-              {/* AI Match Badge */}
+              {/* Applicant guidance */}
               <div className="p-4 rounded-2xl bg-[#FF9500]/5 border border-[#FF9500]/15 space-y-2">
                 <span className="text-[10px] uppercase font-bold text-[#FF9500] tracking-wider flex items-center gap-1">
-                  <Sparkles size={11} className="fill-[#FF9500]" /> {t("Aether AI Matching")}
+                  <Sparkles size={11} className="fill-[#FF9500]" /> {t("Applicant")}
                 </span>
                 <p className="text-xs text-foreground font-semibold leading-relaxed">
-                  {selectedParticipant.id === "mock-influencer-uuid" 
-                    ? t("This creator has delivered 3.2× ROI for similar tech campaigns.")
-                    : selectedParticipant.fullName.includes("Sofia") 
-                    ? t("This creator has delivered 3.2× ROI for similar beauty campaigns.")
-                    : t("This creator is predicted to deliver 2.8x ROI for this category.")}
+                  {t("Review this creator's pitch and proposed rate, then fund escrow to start the collaboration.")}
                 </p>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-[10px] bg-[#FF9500]/10 text-[#FF9500] px-2 py-0.5 rounded-full font-bold">
-                    {selectedParticipant.id === "mock-influencer-uuid" ? "98%" : "96%"} {t("Match")}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-medium">{t("Based on past performance and ER")}</span>
-                </div>
               </div>
 
               {/* Proposed payout */}
@@ -2727,14 +2687,26 @@ export default function CampaignDetailPage() {
                     onClick={handleImageClick}
                     className="w-full h-full relative cursor-crosshair group overflow-hidden bg-[#16161a]"
                   >
-                    {/* Content Image */}
-                    {currentSubmission ? (
+                    {/* Content preview */}
+                    {currentSubmission && currentSubmission.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img 
                         ref={imageRef}
                         src={currentSubmission.imageUrl} 
                         alt="Draft deliverable" 
                         className="w-full h-full object-cover select-none"
                       />
+                    ) : currentSubmission ? (
+                      <a
+                        href={currentSubmission.postUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full h-full flex flex-col items-center justify-center gap-2 text-xs text-white/70 px-6 text-center"
+                      >
+                        <ExternalLink size={22} />
+                        <span className="font-semibold">{t("Live post submitted")}</span>
+                        <span className="text-[10px] text-white/50 break-all line-clamp-2">{currentSubmission.postUrl}</span>
+                      </a>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
                         {t("No Draft Uploaded")}
@@ -2769,7 +2741,7 @@ export default function CampaignDetailPage() {
                     <div className="absolute left-3.5 bottom-4 right-10 text-white z-10 select-none pointer-events-none">
                       <p className="text-[10px] font-bold">{selectedParticipant.handle}</p>
                       <p className="text-[8px] text-white/80 line-clamp-2 mt-1 leading-normal">
-                        {currentSubmission?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether"}
+                        {currentSubmission?.caption || t("No caption provided.")}
                       </p>
                     </div>
 
@@ -2996,7 +2968,7 @@ export default function CampaignDetailPage() {
                     <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/10">
                       <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block mb-1">{t("Audited Text Caption")}</span>
                       <p className="text-xs text-foreground italic leading-relaxed">
-                        &quot;{currentSubmission?.caption || "Taking my desktop productivity setup to the next level with campaign tools. #workspace #desk #aether"}&quot;
+                        &quot;{currentSubmission?.caption || t("No caption provided.")}&quot;
                       </p>
                     </div>
 

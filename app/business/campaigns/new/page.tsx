@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,16 +15,16 @@ import {
   Info,
   Loader2,
   Lock,
-  CreditCard,
-  CheckCircle2,
   Zap,
   Eye,
   FileText,
-  Scissors
+  Scissors,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { supabase } from "@/lib/supabase/client";
 import { createCampaignAction } from "@/lib/supabase/campaigns";
 import { fundCampaignPoolAction } from "@/lib/stripe/actions";
 import { PoolPaymentModal } from "@/components/pool-payment-modal";
@@ -43,14 +43,15 @@ const AVAILABLE_NICHES = [
   "Fashion", "Beauty", "Fitness", "Food", "Travel", "Gaming"
 ];
 
-// Seeded influencers for matchmaking preview
-const MOCK_CREATORS = [
-  { name: "Marcus Vance", handle: "@marcusv", niche: "Tech", ER: "4.8%", followers: "48.5K", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" },
-  { name: "Sofia Chen", handle: "@sofiac", niche: "Design", ER: "5.2%", followers: "62.0K", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" },
-  { name: "Dave Miller", handle: "@davem", niche: "Minimal", ER: "4.1%", followers: "12.5K", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" },
-  { name: "Emma Watson", handle: "@emmaw", niche: "Lifestyle", ER: "3.9%", followers: "28.0K", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" },
-  { name: "Julian Pierce", handle: "@julianp", niche: "Wellness", ER: "4.6%", followers: "34.2K", avatar: "https://images.unsplash.com/photo-1500048993953-d23a436266cf?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" }
-];
+/** Creator profile row used for the live matchmaking preview. */
+interface MatchCreator {
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  niches: string[] | null;
+  follower_count: number | null;
+  engagement_rate: number | null;
+}
 
 export default function NewCampaignWizard() {
   const router = useRouter();
@@ -60,12 +61,13 @@ export default function NewCampaignWizard() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [showAiModal, setShowAiModal] = useState(false);
   
-  // Payment States
+  // Fixed-fee publish confirmation modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [cardExpiry, setCardExpiry] = useState("12/28");
-  const [cardCvc, setCardCvc] = useState("342");
+
+  // Live matchmaking preview (real creator profiles matching the chosen niches)
+  const [matchedCreators, setMatchedCreators] = useState<MatchCreator[]>([]);
+  const [creatorsLoading, setCreatorsLoading] = useState(false);
 
   // Performance pool funding (real Stripe Elements)
   const [poolPublishing, setPoolPublishing] = useState(false);
@@ -87,9 +89,7 @@ export default function NewCampaignWizard() {
   
   // AI-generated Brief Details
   const [objectives, setObjectives] = useState<string[]>([]);
-  const [toneOfVoice, setToneOfVoice] = useState<string[]>([]);
   const [guidelines, setGuidelines] = useState<string[]>([]);
-  const [keyMessaging, setKeyMessaging] = useState("");
   const [kpis, setKpis] = useState<string[]>([]);
   
   const [deliverables, setDeliverables] = useState<Array<{ type: "post" | "video" | "story"; quantity: number; details: string }>>([
@@ -153,6 +153,33 @@ export default function NewCampaignWizard() {
     mass: 0.8
   };
 
+  // Live matchmaking: pull real creator profiles whose niches overlap the
+  // campaign's target niches. RLS only returns influencer profiles, so this is
+  // a real (possibly empty) preview — never seeded mock data.
+  useEffect(() => {
+    if (niches.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear/seed preview from current niche selection
+      setMatchedCreators([]);
+      return;
+    }
+    let active = true;
+    setCreatorsLoading(true);
+    supabase
+      .from("profiles")
+      .select("user_id, full_name, avatar_url, niches, follower_count, engagement_rate")
+      .overlaps("niches", niches)
+      .order("follower_count", { ascending: false })
+      .limit(6)
+      .then(({ data }) => {
+        if (!active) return;
+        setMatchedCreators((data as MatchCreator[] | null) ?? []);
+        setCreatorsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [niches]);
+
   const handleNicheToggle = (niche: string) => {
     if (niches.includes(niche)) {
       setNiches(niches.filter((n) => n !== niche));
@@ -206,9 +233,7 @@ export default function NewCampaignWizard() {
         setEndDate(brief.timeline.endDate);
         setDraftDueDate(brief.timeline.draftDueDate);
         setObjectives(brief.objectives || []);
-        setToneOfVoice(brief.tone_of_voice || []);
         setGuidelines(brief.guidelines || []);
-        setKeyMessaging(brief.key_messaging || "");
         setKpis(brief.kpis || []);
         
         toast.success(t("AI Brief Generated Successfully!"), {
@@ -329,27 +354,13 @@ export default function NewCampaignWizard() {
     }
   };
 
+  // Fixed-fee publish: create the campaign as 'open' so creators can apply.
+  // There is no upfront charge — escrow is funded per creator (fundEscrowAction)
+  // when the brand approves an applicant from the campaign workspace.
   const handleConfirmPayment = async () => {
     setPaying(true);
     try {
-      let perfCategoryMeta: {
-        category: CampaignCategory;
-        meta: Record<string, unknown>;
-      } | null = null;
-      if (isPerformance) {
-        const metaCheck = validateCategoryMeta(campaignCategory, buildCategoryMeta());
-        if (!metaCheck.ok) {
-          toast.error(t("Complete the campaign brief"), { description: metaCheck.error });
-          setPaying(false);
-          return;
-        }
-        perfCategoryMeta = { category: metaCheck.category, meta: metaCheck.meta };
-      }
-
-      // Simulate PaymentIntent verification delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      
-      const campaignPayload = {
+      const res = await createCampaignAction({
         title,
         description,
         budget_total: budgetTotal,
@@ -357,114 +368,24 @@ export default function NewCampaignWizard() {
         target_audience: { location, ageRange, gender, minFollowers },
         deliverables,
         timeline: { startDate, endDate, draftDueDate },
-        status: "open", // transition from draft to open after payment
-        campaign_type: campaignType,
-        ...(isPerformance && perfCategoryMeta
-          ? {
-              campaign_category: perfCategoryMeta.category,
-              category_meta: perfCategoryMeta.meta,
-              // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
-              brand_cpm_rate: cpmRate,
-              cpm_rate: cpmRate,
-              budget_pool: budgetTotal,
-              max_payout_per_creator:
-                maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
-              platforms,
-              view_holdback_hours: viewHoldbackHours,
-              content_rules: contentRules.trim()
-                ? { notes: contentRules.trim() }
-                : {},
-            }
-          : {}),
-      };
+        status: "open",
+        campaign_type: "fixed",
+      });
 
-      const res = await createCampaignAction(campaignPayload);
-      
       if (res.success && res.campaign) {
-        // Rich escrow detail state is only relevant to fixed-fee campaigns.
-        if (!isPerformance) {
-        // Construct and save the rich campaign detail state
-        const richData = {
-          id: res.campaign.id,
-          title,
-          budget: budgetTotal,
-          status: "escrowed", // Locked after checkout
-          brief: {
-            objectives: objectives.length > 0 ? objectives : [
-              `Showcase ${title} in natural, minimalist aesthetics.`,
-              `Highlight core product features and ergonomics.`,
-              `Drive conversions via customized creator discount codes.`
-            ],
-            toneOfVoice: toneOfVoice.length > 0 ? toneOfVoice : ["Minimalist", "Aesthetic", "Sophisticated", "Warm"],
-            guidelines: guidelines.length > 0 ? guidelines : [
-              "Position the product in primary visual focus in the first 3 seconds.",
-              "Tag the brand and include the landing page link in your bio.",
-              "Do not showcase competing products in the same content frames."
-            ],
-            keyMessaging: keyMessaging || `Elevate your daily focus with ${title}.`,
-            kpis: kpis.length > 0 ? kpis : [
-              `Deliver ${Math.max(50000, minFollowers * 5).toLocaleString()}+ total impressions`,
-              "Achieve 4.0% average engagement rate on posts",
-              "Generate a positive ROI on attributed sales"
-            ]
-          },
-          deliverables: deliverables.map(d => ({
-            type: d.type === "post" ? "Aesthetic Post" : d.type === "video" ? "Video Review" : "Social Story",
-            description: d.details || "Premium aesthetic visual content",
-            platform: d.type === "video" ? "TikTok" as const : "Instagram" as const,
-            count: d.quantity
-          })),
-          timeline: [
-            { label: "Application & Verification", date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), completed: true },
-            { label: "Stripe Escrow Funding", date: new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), completed: true },
-            { label: "Draft Deliverable Upload", date: new Date(draftDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), completed: false },
-            { label: "Review & Adjustments", date: new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), completed: false },
-            { label: "Content Release & Payout", date: new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), completed: false }
-          ],
-          participants: [
-            {
-              id: "mock-influencer-uuid", // Marcus Vance
-              fullName: "Marcus Vance",
-              handle: "@marcusv",
-              avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-              status: "applied",
-              payout: budgetTotal,
-              submissions: []
-            }
-          ]
-        };
-        localStorage.setItem(`aether-campaign-rich-data-${res.campaign.id}`, JSON.stringify(richData));
-        }
-
-        // Trigger confetti celebration!
+        // Celebration confetti
         const end = Date.now() + 2 * 1000;
         const frame = () => {
-          confetti({
-            particleCount: 5,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0 },
-            colors: ["#007AFF", "#34C759", "#FF9500"]
-          });
-          confetti({
-            particleCount: 5,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1 },
-            colors: ["#007AFF", "#34C759", "#FF9500"]
-          });
-          if (Date.now() < end) {
-            requestAnimationFrame(frame);
-          }
+          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
+          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
+          if (Date.now() < end) requestAnimationFrame(frame);
         };
         frame();
 
         toast.success(t("Campaign Published!"), {
-          description: isPerformance
-            ? t("Budget pool funded. Creators can now join and start clipping.")
-            : t("Escrow funds locked successfully. Live matchmaking is now active.")
+          description: t("Your campaign is live. Approve applicants and fund escrow per creator from the campaign workspace.")
         });
-        
+
         setShowPaymentModal(false);
         router.push("/business/dashboard");
       } else {
@@ -473,7 +394,7 @@ export default function NewCampaignWizard() {
         });
       }
     } catch (err) {
-      toast.error(t("Escrow payment failed"), {
+      toast.error(t("Could not publish campaign"), {
         description: err instanceof Error ? err.message : t("An unexpected error occurred.")
       });
     } finally {
@@ -483,11 +404,6 @@ export default function NewCampaignWizard() {
 
   // Platform fee split (performance pools): brand pays budgetTotal; creators earn 90%.
   const poolSplit = feeBreakdown(budgetTotal);
-
-  // Matchmaking Calculations
-  const recommendedCreatorsCount = Math.max(1, Math.min(25, Math.round(budgetTotal / 250)));
-  const matchingCreators = MOCK_CREATORS.filter(c => niches.includes(c.niche));
-  const suggestedCreatorsList = matchingCreators.length > 0 ? matchingCreators : MOCK_CREATORS.slice(0, 3);
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden">
@@ -1341,7 +1257,7 @@ export default function NewCampaignWizard() {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">{t("Matching Preview")}</span>
-                <h3 className="text-sm font-bold text-foreground">{t("Target Recommendations")}</h3>
+                <h3 className="text-sm font-bold text-foreground">{t("Creators in your niches")}</h3>
               </div>
               <span className="p-2 rounded-xl bg-primary/10 text-primary">
                 <Target size={14} />
@@ -1351,31 +1267,60 @@ export default function NewCampaignWizard() {
             <div className="space-y-4">
               <div className="text-center p-4 bg-secondary/20 rounded-2xl border border-border/10">
                 <span className="text-2xl font-extrabold text-foreground block">
-                  {recommendedCreatorsCount}
+                  {creatorsLoading ? "—" : matchedCreators.length}
                 </span>
                 <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">
-                  {t("Recommended Micro-Creators")}
+                  {t("Matching creators found")}
                 </span>
               </div>
 
               <div className="space-y-2.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Recommended in target niches")}</span>
-                {suggestedCreatorsList.map((creator) => (
-                  <div key={creator.handle} className="flex items-center gap-3 p-2.5 bg-secondary/15 hover:bg-secondary/25 rounded-xl transition-colors border border-border/5">
-                    <img 
-                      src={creator.avatar} 
-                      alt={creator.name} 
-                      className="w-8 h-8 rounded-full object-cover border border-border/10 shrink-0" 
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-bold text-foreground block truncate leading-tight">{creator.name}</span>
-                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">{creator.handle} • {creator.followers}</span>
-                    </div>
-                    <span className="text-[10px] font-bold bg-[#34C759]/10 text-[#34C759] px-2 py-0.5 rounded-full shrink-0">
-                      {creator.ER} ER
-                    </span>
+                {niches.length === 0 ? (
+                  <div className="py-6 text-center text-[11px] text-muted-foreground leading-relaxed">
+                    {t("Pick target niches to preview creators who match.")}
                   </div>
-                ))}
+                ) : creatorsLoading ? (
+                  <div className="space-y-2.5">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border border-border/5">
+                        <div className="w-8 h-8 rounded-full bg-secondary/60 animate-pulse shrink-0" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-2.5 w-24 bg-secondary/60 rounded animate-pulse" />
+                          <div className="h-2 w-16 bg-secondary/60 rounded animate-pulse" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : matchedCreators.length === 0 ? (
+                  <div className="py-6 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-border/40 rounded-2xl bg-secondary/10">
+                    <Users size={20} className="text-muted-foreground/50" />
+                    <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[200px]">
+                      {t("No creators match these niches yet — they'll appear here as creators join Aether.")}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Top matches in target niches")}</span>
+                    {matchedCreators.map((creator) => (
+                      <div key={creator.user_id} className="flex items-center gap-3 p-2.5 bg-secondary/15 hover:bg-secondary/25 rounded-xl transition-colors border border-border/5">
+                        <span className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-border/10 shrink-0 flex items-center justify-center text-xs font-bold uppercase">
+                          {(creator.full_name || "?").charAt(0)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-bold text-foreground block truncate leading-tight">{creator.full_name || t("Creator")}</span>
+                          <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                            {(creator.follower_count ?? 0).toLocaleString()} {t("followers")}
+                          </span>
+                        </div>
+                        {creator.engagement_rate ? (
+                          <span className="text-[10px] font-bold bg-[#34C759]/10 text-[#34C759] px-2 py-0.5 rounded-full shrink-0">
+                            {Number(creator.engagement_rate).toFixed(1)}% ER
+                          </span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1470,7 +1415,7 @@ export default function NewCampaignWizard() {
         )}
       </AnimatePresence>
 
-      {/* MODAL: Stripe Escrow Card Payment */}
+      {/* MODAL: Fixed-fee publish confirmation */}
       <AnimatePresence>
         {showPaymentModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1493,21 +1438,21 @@ export default function NewCampaignWizard() {
             >
               {paying && (
                 <div className="absolute inset-0 bg-popover/95 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-3 text-center">
-                  <Loader2 size={32} className="animate-spin text-[#34C759]" />
+                  <Loader2 size={32} className="animate-spin text-primary" />
                   <div>
-                    <h4 className="text-sm font-bold text-foreground">{t("Creating Stripe PaymentIntent...")}</h4>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("Securing funds in smart escrow contract holding.")}</p>
+                    <h4 className="text-sm font-bold text-foreground">{t("Publishing campaign...")}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("Creating your campaign and opening it for applications.")}</p>
                   </div>
                 </div>
               )}
 
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#34C759] block mb-0.5">{t("Stripe Escrow Wallet")}</span>
-                  <h3 className="text-lg font-bold text-foreground">{t("Secure Campaign Funding")}</h3>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary block mb-0.5">{t("Review & Publish")}</span>
+                  <h3 className="text-lg font-bold text-foreground">{t("Publish Fixed-Fee Campaign")}</h3>
                 </div>
-                <span className="p-2 rounded-xl bg-[#34C759]/10 border border-[#34C759]/25 text-[#34C759]">
-                  <Lock size={16} />
+                <span className="p-2 rounded-xl bg-primary/10 border border-primary/25 text-primary">
+                  <Check size={16} />
                 </span>
               </div>
 
@@ -1516,52 +1461,19 @@ export default function NewCampaignWizard() {
                   <span>{t("Campaign:")}</span>
                   <span className="text-foreground text-right truncate max-w-[200px]">{title || t("New Campaign")}</span>
                 </div>
+                <div className="flex justify-between font-semibold text-muted-foreground pt-1">
+                  <span>{t("Target niches:")}</span>
+                  <span className="text-foreground text-right truncate max-w-[200px]">{niches.length > 0 ? niches.join(", ") : "—"}</span>
+                </div>
                 <div className="flex justify-between font-bold text-sm border-t border-border/10 pt-2.5 mt-2.5">
-                  <span>{isPerformance ? t("Total Budget Pool:") : t("Total Escrow Hold:")}</span>
-                  <span className="text-[#34C759]">${budgetTotal.toLocaleString()}</span>
+                  <span>{t("Campaign Budget:")}</span>
+                  <span className="text-foreground">${budgetTotal.toLocaleString()}</span>
                 </div>
               </div>
 
-              {/* Simulated Card Element */}
-              <div className="space-y-4 mb-8">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t("Card Details")}</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all font-mono text-foreground"
-                    />
-                    <CreditCard size={14} className="absolute left-3.5 top-3.5 text-muted-foreground" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t("Expiration")}</label>
-                    <input
-                      type="text"
-                      value={cardExpiry}
-                      onChange={(e) => setCardExpiry(e.target.value)}
-                      className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all font-mono text-foreground"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t("CVC")}</label>
-                    <input
-                      type="text"
-                      value={cardCvc}
-                      onChange={(e) => setCardCvc(e.target.value)}
-                      className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all font-mono text-foreground"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 items-center text-[10px] text-muted-foreground leading-normal mt-2 bg-secondary/10 p-3 rounded-xl border border-border/5">
-                  <CheckCircle2 size={12} className="text-[#34C759] shrink-0" />
-                  <span>{t("Stripe sandbox cards pre-loaded. Escrow will fund automatically.")}</span>
-                </div>
+              <div className="flex gap-2 items-start text-[11px] text-muted-foreground leading-relaxed mb-8 bg-secondary/10 p-3 rounded-xl border border-border/5">
+                <Lock size={13} className="text-primary shrink-0 mt-0.5" />
+                <span>{t("No charge now. Your campaign opens for applications immediately — you fund Stripe escrow per creator when you approve them from the campaign workspace.")}</span>
               </div>
 
               <div className="flex gap-3 border-t border-border/10 pt-4">
@@ -1576,9 +1488,9 @@ export default function NewCampaignWizard() {
                 <Button
                   onClick={handleConfirmPayment}
                   disabled={paying}
-                  className="w-1/2 rounded-full py-3 text-xs font-bold bg-[#34C759] hover:bg-[#2fb350] hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 cursor-pointer shadow-md h-auto"
+                  className="w-1/2 rounded-full py-3 text-xs font-bold bg-primary hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-transform text-primary-foreground border-0 cursor-pointer shadow-md h-auto"
                 >
-                  {t("Fund & Publish")}
+                  {t("Publish Campaign")}
                 </Button>
               </div>
             </motion.div>

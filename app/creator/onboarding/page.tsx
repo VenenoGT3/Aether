@@ -95,26 +95,23 @@ export default function InfluencerOnboarding() {
   const [bio, setBio] = useState("");
   const [niche, setNiche] = useState("");
   
-  // Step 2: Social Links & Followers (simulated verification)
+  // Step 2: Social handles + self-reported audience (creator-provided, real data)
   const [instagram, setInstagram] = useState("");
   const [tiktok, setTiktok] = useState("");
   const [youtube, setYoutube] = useState("");
-  
-  const [verifyingInsta, setVerifyingInsta] = useState(false);
-  const [verifiedInsta, setVerifiedInsta] = useState(false);
-  const [verifyingTiktok, setVerifyingTiktok] = useState(false);
-  const [verifiedTiktok, setVerifiedTiktok] = useState(false);
+  const [followerCount, setFollowerCount] = useState("");
+  const [engagementRate, setEngagementRate] = useState("");
 
   // Step 3: Rate Card
   const [ratePost, setRatePost] = useState(300);
   const [rateVideo, setRateVideo] = useState(800);
   const [rateStory, setRateStory] = useState(150);
 
-  // Step 4: Portfolio
+  // Step 4: Portfolio (creator-provided links to real work)
   const [portfolioItems, setPortfolioItems] = useState<Array<{ title: string; description: string; url: string }>>([]);
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [newItemUrl, setNewItemUrl] = useState("");
 
   const appleSpring = {
     type: "spring" as const,
@@ -131,8 +128,8 @@ export default function InfluencerOnboarding() {
       }
       setStep(2);
     } else if (step === 2) {
-      if (!verifiedInsta && !verifiedTiktok && !youtube) {
-        toast.error(t("Please connect and verify at least one social handle."));
+      if (!instagram && !tiktok && !youtube) {
+        toast.error(t("Please add at least one social handle."));
         return;
       }
       setStep(3);
@@ -147,63 +144,24 @@ export default function InfluencerOnboarding() {
     }
   };
 
-  const verifySocialHandle = (platform: "instagram" | "tiktok") => {
-    const handle = platform === "instagram" ? instagram : tiktok;
-    if (!handle) {
-      toast.error(t("Please enter your {platform} handle first.").replace("{platform}", platform));
+  const addPortfolioItem = () => {
+    if (!newItemTitle.trim() || !newItemUrl.trim()) {
+      toast.error(t("Please provide a title and a link to your work."));
       return;
     }
 
-    if (platform === "instagram") {
-      setVerifyingInsta(true);
-      setTimeout(() => {
-        setVerifyingInsta(false);
-        setVerifiedInsta(true);
-        toast.success(t("Instagram account linked!"), {
-          description: t("Followers: 32.5k | Engagement: 5.2%"),
-        });
-      }, 1500);
-    } else {
-      setVerifyingTiktok(true);
-      setTimeout(() => {
-        setVerifyingTiktok(false);
-        setVerifiedTiktok(true);
-        toast.success(t("TikTok account linked!"), {
-          description: t("Followers: 114.2k | Engagement: 6.8%"),
-        });
-      }, 1500);
-    }
-  };
-
-  const handleSimulatedUpload = () => {
-    if (!newItemTitle || !newItemDesc) {
-      toast.error(t("Please provide a title and short description for the portfolio item."));
-      return;
-    }
-    
-    setUploading(true);
-    setTimeout(() => {
-      const randomImages = [
-        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80",
-        "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=400&q=80",
-        "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=400&q=80",
-        "https://images.unsplash.com/photo-1481487196290-c152efe083f5?auto=format&fit=crop&w=400&q=80"
-      ];
-      const selectedImg = randomImages[portfolioItems.length % randomImages.length];
-
-      setPortfolioItems([
-        ...portfolioItems,
-        {
-          title: newItemTitle,
-          description: newItemDesc,
-          url: selectedImg
-        }
-      ]);
-      setNewItemTitle("");
-      setNewItemDesc("");
-      setUploading(false);
-      toast.success(t("Portfolio item added."));
-    }, 1200);
+    setPortfolioItems([
+      ...portfolioItems,
+      {
+        title: newItemTitle.trim(),
+        description: newItemDesc.trim(),
+        url: newItemUrl.trim()
+      }
+    ]);
+    setNewItemTitle("");
+    setNewItemDesc("");
+    setNewItemUrl("");
+    toast.success(t("Portfolio item added."));
   };
 
   const removePortfolioItem = (index: number) => {
@@ -213,19 +171,14 @@ export default function InfluencerOnboarding() {
   const handleCompleteOnboarding = async () => {
     setLoading(true);
     try {
-      let totalFollowers = 0;
-      if (verifiedInsta) totalFollowers += 32500;
-      if (verifiedTiktok) totalFollowers += 114200;
-      if (youtube) totalFollowers += 12000;
-
-      const socialHandle = instagram ? `@${instagram}` : tiktok ? `@${tiktok}` : `@${youtube}`;
+      const socialHandle = instagram ? `@${instagram}` : tiktok ? `@${tiktok}` : youtube ? `@${youtube}` : "";
 
       const { error } = await updateClientProfile({
         bio,
         niche,
         social_handle: socialHandle,
-        followers: totalFollowers || 24000,
-        engagement_rate: 4.8,
+        followers: Number(followerCount) || 0,
+        engagement_rate: Number(engagementRate) || 0,
         social_links: {
           instagram: instagram || undefined,
           tiktok: tiktok || undefined,
@@ -236,13 +189,7 @@ export default function InfluencerOnboarding() {
           video: rateVideo,
           story: rateStory
         },
-        portfolio: portfolioItems.length > 0 ? portfolioItems : [
-          { 
-            title: "Acme Product Integration", 
-            description: "Dedicated carousel showcasing minimal desk accessories.", 
-            url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80" 
-          }
-        ],
+        portfolio: portfolioItems,
         onboarded: true
       });
 
@@ -394,7 +341,7 @@ export default function InfluencerOnboarding() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">{t("Connect your socials")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("Verify your accounts to sync follower and engagement counts.")}</p>
+                  <p className="text-xs text-muted-foreground">{t("Add the handles where you post and your current audience size.")}</p>
                 </div>
               </div>
 
@@ -404,36 +351,18 @@ export default function InfluencerOnboarding() {
                   <label htmlFor="instagram" className="text-xs font-semibold text-muted-foreground block">
                     {t("Instagram Handle")}
                   </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
-                        <InstagramIcon size={16} />
-                      </span>
-                      <input
-                        id="instagram"
-                        type="text"
-                        value={instagram}
-                        onChange={(e) => setInstagram(e.target.value)}
-                        placeholder={t("username")}
-                        className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
-                        disabled={verifiedInsta}
-                      />
-                    </div>
-                    {verifiedInsta ? (
-                      <div className="bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/30 rounded-2xl px-4 flex items-center gap-1.5 text-xs font-bold select-none">
-                        <CheckCircle2 size={14} /> {t("Linked")}
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => verifySocialHandle("instagram")}
-                        className="rounded-2xl border-border hover:bg-secondary/40 text-xs px-4 cursor-pointer"
-                        disabled={verifyingInsta || !instagram}
-                      >
-                        {verifyingInsta ? <Loader2 size={14} className="animate-spin" /> : t("Verify")}
-                      </Button>
-                    )}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                      <InstagramIcon size={16} />
+                    </span>
+                    <input
+                      id="instagram"
+                      type="text"
+                      value={instagram}
+                      onChange={(e) => setInstagram(e.target.value)}
+                      placeholder={t("username")}
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                    />
                   </div>
                 </div>
 
@@ -442,36 +371,18 @@ export default function InfluencerOnboarding() {
                   <label htmlFor="tiktok" className="text-xs font-semibold text-muted-foreground block">
                     {t("TikTok Handle")}
                   </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
-                        <TikTokIcon size={16} />
-                      </span>
-                      <input
-                        id="tiktok"
-                        type="text"
-                        value={tiktok}
-                        onChange={(e) => setTiktok(e.target.value)}
-                        placeholder={t("username")}
-                        className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
-                        disabled={verifiedTiktok}
-                      />
-                    </div>
-                    {verifiedTiktok ? (
-                      <div className="bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/30 rounded-2xl px-4 flex items-center gap-1.5 text-xs font-bold select-none">
-                        <CheckCircle2 size={14} /> {t("Linked")}
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => verifySocialHandle("tiktok")}
-                        className="rounded-2xl border-border hover:bg-secondary/40 text-xs px-4 cursor-pointer"
-                        disabled={verifyingTiktok || !tiktok}
-                      >
-                        {verifyingTiktok ? <Loader2 size={14} className="animate-spin" /> : t("Verify")}
-                      </Button>
-                    )}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                      <TikTokIcon size={16} />
+                    </span>
+                    <input
+                      id="tiktok"
+                      type="text"
+                      value={tiktok}
+                      onChange={(e) => setTiktok(e.target.value)}
+                      placeholder={t("username")}
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                    />
                   </div>
                 </div>
 
@@ -491,6 +402,39 @@ export default function InfluencerOnboarding() {
                       onChange={(e) => setYoutube(e.target.value)}
                       placeholder="https://youtube.com/c/channel"
                       className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Audience size + engagement (self-reported) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label htmlFor="followers" className="text-xs font-semibold text-muted-foreground block">
+                      {t("Total Followers")}
+                    </label>
+                    <input
+                      id="followers"
+                      type="number"
+                      min="0"
+                      value={followerCount}
+                      onChange={(e) => setFollowerCount(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="engagement" className="text-xs font-semibold text-muted-foreground block">
+                      {t("Avg Engagement Rate (%)")}
+                    </label>
+                    <input
+                      id="engagement"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={engagementRate}
+                      onChange={(e) => setEngagementRate(e.target.value)}
+                      placeholder="0.0"
+                      className="w-full px-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 transition-colors"
                     />
                   </div>
                 </div>
@@ -664,20 +608,21 @@ export default function InfluencerOnboarding() {
                     className="w-full px-4 py-2.5 rounded-xl bg-secondary/40 border border-border/20 text-xs focus:outline-none focus:border-primary/60 transition-colors resize-none"
                   />
 
+                  <input
+                    type="url"
+                    value={newItemUrl}
+                    onChange={(e) => setNewItemUrl(e.target.value)}
+                    placeholder={t("Link to the post or case study (https://...)")}
+                    className="w-full px-4 py-2.5 rounded-xl bg-secondary/40 border border-border/20 text-xs focus:outline-none focus:border-primary/60 transition-colors"
+                  />
+
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleSimulatedUpload}
-                    disabled={uploading}
+                    onClick={addPortfolioItem}
                     className="w-full rounded-xl text-xs py-4 cursor-pointer gap-1.5"
                   >
-                    {uploading ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <>
-                        <Plus size={14} /> {t("Add Campaign Integration")}
-                      </>
-                    )}
+                    <Plus size={14} /> {t("Add Portfolio Item")}
                   </Button>
                 </div>
 
@@ -689,16 +634,20 @@ export default function InfluencerOnboarding() {
                         key={idx} 
                         className="flex items-center justify-between p-3 border border-border/20 bg-secondary/20 rounded-xl"
                       >
-                        <div className="flex items-center gap-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img 
-                            src={item.url} 
-                            alt={item.title} 
-                            className="w-10 h-10 object-cover rounded-lg border border-border/10" 
-                          />
-                          <div>
-                            <h4 className="text-xs font-bold">{item.title}</h4>
-                            <p className="text-[10px] text-muted-foreground line-clamp-1">{item.description}</p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-10 h-10 rounded-lg border border-border/10 bg-secondary/40 flex items-center justify-center text-muted-foreground shrink-0">
+                            <FileText size={16} />
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold truncate">{item.title}</h4>
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-primary hover:underline line-clamp-1 break-all"
+                            >
+                              {item.url}
+                            </a>
                           </div>
                         </div>
                         <Button
