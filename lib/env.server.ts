@@ -15,6 +15,9 @@ export const SERVER_SECRET_NAMES = [
   "CRON_SECRET",
   "XAI_API_KEY",
   "SOCIAVAULT_API_KEY",
+  "YOUTUBE_DATA_API_KEY",
+  "TIKTOK_CLIENT_KEY",
+  "TIKTOK_CLIENT_SECRET",
   "AYRSHARE_API_KEY",
   "RESEND_API_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -77,6 +80,18 @@ export function getXaiModel(): string {
 
 export function getSociavaultApiKey(): string | undefined {
   return process.env.SOCIAVAULT_API_KEY?.trim() || undefined;
+}
+
+export function getYoutubeDataApiKey(): string | undefined {
+  return process.env.YOUTUBE_DATA_API_KEY?.trim() || undefined;
+}
+
+export function getTiktokClientKey(): string | undefined {
+  return process.env.TIKTOK_CLIENT_KEY?.trim() || undefined;
+}
+
+export function getTiktokClientSecret(): string | undefined {
+  return process.env.TIKTOK_CLIENT_SECRET?.trim() || undefined;
 }
 
 export function getAyrshareApiKey(): string | undefined {

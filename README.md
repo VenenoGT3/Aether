@@ -26,7 +26,7 @@ This is an **honest** status. The performance model is built end-to-end and the 
 
 ### 🚧 In progress / needs testing
 - **Live end-to-end run** — the schema, worker, and Stripe paths typecheck/build and are unit-tested, but have **never executed against a real Supabase + Redis + Stripe**. This is the top priority before launch.
-- **Ayrshare view tracking** — the provider and DB fields exist and `AYRSHARE_API_KEY` is **required** (the worker hard-fails without it), but **account linking is a placeholder** and the live provider response parsing is unverified against a real Ayrshare account.
+- **Official view tracking architecture** — the worker now routes payout-grade metrics through official YouTube Data API and TikTok Display API providers first, with Ayrshare as an optional fallback. TikTok still needs the creator OAuth connect flow before real TikTok clips can accrue.
 - **Worker deployment** — the worker is not deployed and there is no provisioned Redis.
 - **Fraud controls** — only a basic velocity check today.
 
@@ -36,7 +36,7 @@ See [HANDOFF.md](HANDOFF.md) → *Known limitations & risks* for the full list.
 
 ## Quick start
 
-Aether requires real services (Supabase, Stripe, Redis, Ayrshare). See **[SETUP.md](SETUP.md)** for the full walkthrough (migrations, auth, Stripe webhook, worker).
+Aether requires real services (Supabase, Stripe, Redis, and at least one trusted view provider). See **[SETUP.md](SETUP.md)** for the full walkthrough (migrations, auth, Stripe webhook, worker).
 
 ```bash
 git clone https://github.com/VenenoGT3/Aether.git
@@ -63,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | **`npm run worker:once`** | One view-sync + earnings cycle, **no Redis** — ideal for testing/cron |
 | **`npm run payouts:once`** | One payout batch, **no Redis** — ideal for testing/cron |
 
-> The worker is a **standalone Node process**, separate from the Next.js app. It uses the Supabase **service role**, Stripe (payouts), and Ayrshare (live views, required). See [SETUP.md](SETUP.md).
+> The worker is a **standalone Node process**, separate from the Next.js app. It uses the Supabase **service role**, Stripe (payouts), and at least one trusted live view provider (`YOUTUBE_DATA_API_KEY`, TikTok OAuth credentials, or `AYRSHARE_API_KEY`). See [SETUP.md](SETUP.md).
 
 ---
 
@@ -75,7 +75,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | Database & auth | Supabase (Postgres, RLS, Realtime) |
 | Payments | Stripe (PaymentIntents for pool/escrow funding, Connect transfers for payouts) |
 | Background worker | BullMQ + Redis (`worker/`), run with `tsx` |
-| View tracking | Ayrshare (live view tracking) |
+| View tracking | Official YouTube Data API + TikTok Display API, optional Ayrshare fallback |
 | UI | Tailwind CSS v4, shadcn/ui + Base UI, Framer Motion, Recharts |
 | Types / validation | TypeScript + Zod (`types/database.ts`, `lib/api/schemas.ts`) |
 | Tests | Vitest |
@@ -89,7 +89,7 @@ app/                     Next.js routes (business/, creator/, api/)
   api/campaigns/[id]/join Open-join endpoint (performance)
   api/clips/             Clip submission + moderation (approve/reject)
 worker/                  Standalone BullMQ worker (view-sync, earnings, payouts)
-  views-provider.ts      Ayrshare live view provider
+  views-provider.ts      Trusted view-provider router (YouTube/TikTok/Ayrshare)
   payout.ts              Payout batch logic
 lib/
   supabase/              Client/server/admin + clips & campaigns data layers
@@ -105,7 +105,7 @@ docs/                    Reference docs (SECRETS, SECURITY, PERMISSIONS, etc.)
 
 ## Documentation
 
-- **[SETUP.md](SETUP.md)** — set up Supabase, Stripe, Redis, Ayrshare, and the worker (migrations, env).
+- **[SETUP.md](SETUP.md)** — set up Supabase, Stripe, Redis, trusted view providers, and the worker (migrations, env).
 - **[HANDOFF.md](HANDOFF.md)** — migration summary, current state, risks, architecture, next steps.
 - **[docs/SECRETS.md](docs/SECRETS.md)** — where every secret lives (Vercel vs Supabase Edge vs worker).
 - **[docs/SECURITY.md](docs/SECURITY.md)** / **[docs/PERMISSIONS.md](docs/PERMISSIONS.md)** — RLS and permission model.

@@ -1,9 +1,9 @@
 /**
  * Centralized environment configuration for Aether.
  *
- * Production-only: every integration (Supabase, Stripe, Redis, Ayrshare) must be
- * configured. Missing required vars fail clearly at build/startup — there is no
- * mock/demo fallback.
+ * Production-only: every core integration (Supabase, Stripe, Redis/worker, live
+ * view providers) must be configured. Missing required vars fail clearly at
+ * build/startup — there is no mock/demo fallback.
  *
  * Secret placement:
  * - Vercel: app secrets only (no Supabase service role by default)

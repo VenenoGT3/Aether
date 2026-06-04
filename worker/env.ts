@@ -8,6 +8,7 @@
  */
 
 import { defaultFraudConfig, type FraudConfig } from "./fraud";
+import type { ViewProviderName } from "./types";
 
 /** Redis connection string for BullMQ (e.g. redis://localhost:6379). */
 export function getRedisUrl(): string {
@@ -30,9 +31,7 @@ export function getServiceRoleKey(): string {
 }
 
 /**
- * Ayrshare key for live view tracking. REQUIRED in production — the worker is
- * the system of record for billable views, and it never accrues earnings or
- * pays creators on unverified views.
+ * Optional Ayrshare key for aggregator-backed live view tracking.
  */
 export function getAyrshareApiKey(): string | undefined {
   return process.env.AYRSHARE_API_KEY?.trim() || undefined;
@@ -43,15 +42,48 @@ export function isAyrshareConfigured(): boolean {
   return !!getAyrshareApiKey();
 }
 
+/** Server-side YouTube Data API key for official video statistics. */
+export function getYoutubeDataApiKey(): string | undefined {
+  return process.env.YOUTUBE_DATA_API_KEY?.trim() || undefined;
+}
+
+export function isYoutubeConfigured(): boolean {
+  return !!getYoutubeDataApiKey();
+}
+
+/** TikTok Login Kit app credentials; creator OAuth tokens live in Supabase. */
+export function getTiktokClientKey(): string | undefined {
+  return process.env.TIKTOK_CLIENT_KEY?.trim() || undefined;
+}
+
+export function getTiktokClientSecret(): string | undefined {
+  return process.env.TIKTOK_CLIENT_SECRET?.trim() || undefined;
+}
+
+export function isTiktokConfigured(): boolean {
+  return !!getTiktokClientKey() && !!getTiktokClientSecret();
+}
+
+export function getConfiguredViewProviderNames(): ViewProviderName[] {
+  const providers: ViewProviderName[] = [];
+  if (isYoutubeConfigured()) providers.push("youtube_official");
+  if (isTiktokConfigured()) providers.push("tiktok_official");
+  if (isAyrshareConfigured()) providers.push("ayrshare");
+  return providers;
+}
+
+export function isTrustedViewSourceConfigured(): boolean {
+  return getConfiguredViewProviderNames().length > 0;
+}
+
 /**
  * Payout/earnings safety guard (defense-in-depth). Real money must NEVER move
- * without a live view source. validateWorkerEnv() already hard-fails at startup
- * when AYRSHARE_API_KEY is missing; this additionally halts the earnings-accrual
- * and payout paths if the key is ever removed at runtime, so nothing can accrue
- * or pay on unverified views.
+ * without at least one trusted live view source. validateWorkerEnv() already
+ * hard-fails at startup when none are configured; this additionally halts the
+ * earnings-accrual and payout paths if all providers are removed at runtime.
  */
 export function payoutSafetyBlocked(): boolean {
-  return !isAyrshareConfigured();
+  return !isTrustedViewSourceConfigured();
 }
 
 export interface EnvValidation {
@@ -64,7 +96,7 @@ export interface EnvValidation {
 /**
  * Validate the worker's environment at startup (fail fast with clear messages
  * instead of a deep stack trace mid-job). The worker requires Supabase URL +
- * service-role key and a live view source (Ayrshare), and surfaces warnings for
+ * service-role key and at least one live view source, and surfaces warnings for
  * missing Redis / Stripe so misconfiguration is obvious in the logs.
  */
 export function validateWorkerEnv(): EnvValidation {
@@ -77,9 +109,18 @@ export function validateWorkerEnv(): EnvValidation {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     errors.push("SUPABASE_SERVICE_ROLE_KEY is required (service-role key; bypasses RLS).");
   }
-  if (!getAyrshareApiKey()) {
+
+  const hasTikTokKey = !!getTiktokClientKey();
+  const hasTikTokSecret = !!getTiktokClientSecret();
+  if (hasTikTokKey !== hasTikTokSecret) {
     errors.push(
-      "AYRSHARE_API_KEY is required for live view tracking. The worker refuses to accrue earnings or pay creators on unverified views — set a valid Ayrshare key."
+      "TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET must be set together for TikTok official view tracking."
+    );
+  }
+
+  if (!isTrustedViewSourceConfigured()) {
+    errors.push(
+      "At least one trusted view provider is required: set YOUTUBE_DATA_API_KEY, TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET, or AYRSHARE_API_KEY. The worker refuses to accrue earnings or pay creators on unverified views."
     );
   }
   if (!process.env.REDIS_URL?.trim()) {
@@ -100,6 +141,24 @@ export function validateWorkerEnv(): EnvValidation {
 export function getAyrshareMinIntervalMs(): number {
   const raw = Number(process.env.AYRSHARE_MIN_INTERVAL_MS);
   return Number.isFinite(raw) && raw >= 0 ? raw : 350;
+}
+
+/** Minimum gap between YouTube Data API calls (ms). */
+export function getYoutubeMinIntervalMs(): number {
+  const raw = Number(process.env.YOUTUBE_MIN_INTERVAL_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 100;
+}
+
+/** Minimum gap between TikTok Display API calls (ms). */
+export function getTiktokMinIntervalMs(): number {
+  const raw = Number(process.env.TIKTOK_MIN_INTERVAL_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 350;
+}
+
+export function getViewProviderMinIntervalMs(provider: ViewProviderName): number {
+  if (provider === "youtube_official") return getYoutubeMinIntervalMs();
+  if (provider === "tiktok_official") return getTiktokMinIntervalMs();
+  return getAyrshareMinIntervalMs();
 }
 
 /** How often the repeatable view-sync fan-out runs (minutes). */
@@ -183,7 +242,7 @@ export function getHeartbeatIntervalMinutes(): number {
 
 /**
  * Views-provider errors within a single heartbeat window at or above this count
- * fire a [ALERT] (signals the Ayrshare provider is degraded).
+ * fire a [ALERT] (signals the configured view provider is degraded).
  */
 export function getProviderErrorAlertThreshold(): number {
   const raw = Number(process.env.WORKER_PROVIDER_ERROR_ALERT_THRESHOLD);

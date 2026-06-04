@@ -111,7 +111,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `SENTRY_TRACES_SAMPLE_RATE` | Performance trace sampling (e.g. `0.1`). |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Build-time source-map upload (CI only). |
 | `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §5. |
-| `GEMINI_API_KEY` | Optional AI campaign-brief generation; the brief action fails clearly without it (no simulated fallback). |
+| `XAI_API_KEY` / `XAI_MODEL` | Optional AI campaign-brief generation; defaults to `grok-4.3` when a key is present. |
 | `STRIPE_WEBHOOK_HANDLER` | `supabase` (default, recommended) or `vercel` (legacy). Must be `supabase` in prod. |
 
 ### Worker (separate host)
@@ -121,7 +121,9 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `REDIS_URL` | BullMQ connection (`redis://` / `rediss://`). |
 | `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | DB access for accrual/payouts. |
 | `STRIPE_SECRET_KEY` | Real payouts. |
-| `AYRSHARE_API_KEY` | **Required** — live view tracking. The worker hard-fails at startup without it, and the real-money safety guard blocks accrual/payouts if it's removed at runtime — see `SETUP.md`. |
+| `YOUTUBE_DATA_API_KEY` | Official YouTube Data API v3 statistics. |
+| `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | TikTok Login Kit credentials; creator OAuth rows with `video.list` scope are also required for TikTok direct polling. |
+| `AYRSHARE_API_KEY` | Optional fallback/aggregator. At least one trusted view provider is required; the worker hard-fails without one. |
 
 > **Secret placement:** `SUPABASE_SERVICE_ROLE_KEY` and `STRIPE_WEBHOOK_SECRET` belong in
 > Supabase Edge Function secrets (the `stripe-webhook` function), **not** on Vercel, when
@@ -232,7 +234,7 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 ## 6. Operational notes
 
 - **Production-only**: there is no mock/demo fallback. Every path uses real Supabase,
-  Stripe, Redis, and Ayrshare; missing required config fails clearly at build/startup.
+  Stripe, Redis, and trusted live view providers; missing required config fails clearly at build/startup.
 - **Circuit breakers** (`lib/circuit-breaker.ts`): process-local, 5 failures → open 30s →
   half-open trial. Protect Redis, Stripe, and Supabase reads; fail-open with fallbacks.
   State is surfaced in `/api/health`.

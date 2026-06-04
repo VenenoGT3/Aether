@@ -15,7 +15,7 @@ import type { ClipRow, ViewSyncOutcome } from "./types";
  */
 
 const CLIP_COLUMNS =
-  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, status, quality_status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_flagged, fraud_score_updated_at, fraud_overridden";
+  "id, campaign_id, participation_id, creator_id, platform, post_url, external_post_id, creator_social_account_id, view_provider, status, quality_status, counted_views, current_views, last_synced_at, submitted_at, fraud_score, fraud_flagged, fraud_score_updated_at, fraud_overridden";
 
 /**
  * Promote 'pending' clips past their 5-working-day approval deadline to
@@ -175,6 +175,41 @@ export async function runViewSyncForClip(
   }
 
   const metrics = await getViewsProvider().fetchViews(clip);
+
+  if (!metrics.trusted) {
+    const nowIso = new Date().toISOString();
+    const { error: snapErr } = await supabase.from("view_snapshots").insert({
+      clip_id: clipId,
+      views: clip.current_views,
+      likes: metrics.likes,
+      comments: metrics.comments,
+      shares: metrics.shares,
+      source: metrics.source,
+    });
+    if (snapErr) {
+      throw new Error(
+        `[view-sync] untrusted snapshot insert failed for ${clipId}: ${snapErr.message}`
+      );
+    }
+    const { error: updErr } = await supabase
+      .from("clips")
+      .update({ last_synced_at: nowIso })
+      .eq("id", clipId);
+    if (updErr) {
+      throw new Error(
+        `[view-sync] untrusted clip update failed for ${clipId}: ${updErr.message}`
+      );
+    }
+    log.warn("viewsync.skipped_untrusted", {
+      traceId,
+      clipId,
+      campaignId: clip.campaign_id,
+      platform: clip.platform,
+      source: metrics.source,
+      reason: "provider returned no fresh trusted metrics",
+    });
+    return { status: "skipped", clipId, reason: `untrusted_source=${metrics.source}` };
+  }
 
   // ---- Advanced fraud scoring ----
   // Load the clip's recent snapshot history for the trend/uniformity checks
@@ -362,7 +397,7 @@ export async function runViewSyncForClip(
     fraudScore: fraud.score,
     source: metrics.source,
   });
-  return { status: "synced", clipId, views: nextViews };
+  return { status: "synced", clipId, views: nextViews, source: metrics.source };
 }
 
 /**
@@ -374,6 +409,7 @@ export async function runViewSyncForClip(
 export async function runEarningsCalc(
   clipId: string,
   views: number,
+  source?: string,
   client?: SupabaseClient
 ): Promise<number> {
   // SAFETY GUARD: never accrue real earnings without a live view source.
@@ -383,8 +419,9 @@ export async function runEarningsCalc(
     log.warn("earnings.blocked.no_view_source", {
       clipId,
       views,
-      reason: "AYRSHARE_API_KEY missing — refusing to accrue earnings on unverified views",
-      hint: "set a valid AYRSHARE_API_KEY to restore live view tracking",
+      source,
+      reason: "no trusted view provider configured — refusing to accrue earnings on unverified views",
+      hint: "configure YOUTUBE_DATA_API_KEY, TikTok OAuth credentials, or AYRSHARE_API_KEY to restore live view tracking",
     });
     return 0;
   }
