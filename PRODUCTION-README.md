@@ -110,7 +110,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `SENTRY_DSN` | Sentry DSN (server + edge runtimes). |
 | `SENTRY_TRACES_SAMPLE_RATE` | Performance trace sampling (e.g. `0.1`). |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Build-time source-map upload (CI only). |
-| `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §4. |
+| `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §5. |
 | `GEMINI_API_KEY` | Optional AI campaign-brief generation; the brief action fails clearly without it (no simulated fallback). |
 | `STRIPE_WEBHOOK_HANDLER` | `supabase` (default, recommended) or `vercel` (legacy). Must be `supabase` in prod. |
 
@@ -134,8 +134,9 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 1. **Project**: import the repo; framework preset **Next.js**. Root = repo root.
 2. **Environment variables**: add all of §1 (Web app) for **Production** + **Preview**.
    - `STRIPE_WEBHOOK_HANDLER=supabase` (the default, required on Vercel Production).
-3. **Database**: run the SQL migrations in `supabase/migrations/` against the prod project
-   (in timestamp order), then deploy the `stripe-webhook` Edge Function with its secrets.
+3. **Database**: production Supabase project `baiyjsjocwccmlopqyqy` is migrated through
+   `20260604125713_function_search_path_hardening`. For future changes, run new SQL
+   migrations in timestamp order, then deploy the `stripe-webhook` Edge Function with its secrets.
 4. **Stripe**: point the webhook at the Supabase Edge Function URL
    (`<supabase-url>/functions/v1/stripe-webhook`); set `STRIPE_WEBHOOK_SECRET` in Supabase.
 5. **Redis (Upstash)**: provision and set `UPSTASH_REDIS_REST_URL` / `_TOKEN` for the app,
@@ -144,7 +145,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
    in CI for source maps.
 7. **Worker**: deploy separately (Docker/Procfile) with the §1 worker vars. Scale to N
    instances — leader-locked sweeps + BullMQ job dedup make this safe.
-8. **Verify** (see §3): hit `/api/health`, confirm `status: "ok"`, check `robots.txt` /
+8. **Verify** (see §4): hit `/api/health`, confirm `status: "ok"`, check `robots.txt` /
    `sitemap.xml`, and place a real test campaign + clip end-to-end on staging first.
 9. **Promote** to Production.
 
@@ -152,7 +153,32 @@ Pre-promotion gate: `npm run typecheck`, `npm run lint`, `npm run test` all gree
 
 ---
 
-## 3. Monitoring & alerting
+## 3. Supabase production state
+
+Detailed audit and policy notes live in [`SUPABASE-AUDIT.md`](./SUPABASE-AUDIT.md)
+and [`SUPABASE-SECURITY.md`](./SUPABASE-SECURITY.md).
+
+Current verified state:
+
+- `41` migrations applied and recorded remotely.
+- `18` public tables, all with RLS enabled.
+- No `PUBLIC` table/function grants.
+- No `anon` table grants.
+- Authenticated table grants are explicit and RLS-scoped.
+- All current public RLS policies have database comments.
+- Realtime is enabled only on `campaigns`, `messages`, `notifications`,
+  `participations`, `posts`, and `transactions`.
+- No Supabase Storage buckets are configured yet; portfolio/deliverable data is currently URL/metadata based.
+
+Residual advisor items to plan, not emergency blockers:
+
+- Move `vector` out of `public` only in a planned pgvector compatibility migration.
+- Consider moving implementation `SECURITY DEFINER` functions into a private schema later.
+- Optimize RLS policy expressions from `auth.uid()` to `(select auth.uid())` before high scale.
+
+---
+
+## 4. Monitoring & alerting
 
 ### Health endpoint — `GET /api/health`
 
@@ -189,7 +215,7 @@ instance isn't evicted from rotation).
 
 ---
 
-## 4. Feature flags (safe rollouts)
+## 5. Feature flags (safe rollouts)
 
 Flags resolve with precedence **remote (Upstash) → env → safe default**
 (`lib/feature-flags.ts` + `lib/feature-flags.server.ts`). Current flags
@@ -203,7 +229,7 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 
 ---
 
-## 5. Operational notes
+## 6. Operational notes
 
 - **Production-only**: there is no mock/demo fallback. Every path uses real Supabase,
   Stripe, Redis, and Ayrshare; missing required config fails clearly at build/startup.
@@ -225,7 +251,7 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 
 ---
 
-## 6. Load testing
+## 7. Load testing
 
 k6 scripts in `tests/load/` (discovery spike, clip submission, health). Run against a
 staging deployment first (never production):

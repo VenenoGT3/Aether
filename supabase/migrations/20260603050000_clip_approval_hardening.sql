@@ -209,11 +209,14 @@ AS $$
 DECLARE
     v_clip   public.clips%ROWTYPE;
     v_camp   public.campaigns%ROWTYPE;
+    v_locked record;
     v_now    timestamptz := now();
 BEGIN
     SELECT m.clip_row, m.campaign_row
-        INTO v_clip, v_camp
+        INTO v_locked
         FROM public._clip_moderation_lock_brand(p_clip_id) AS m;
+    v_clip := v_locked.clip_row;
+    v_camp := v_locked.campaign_row;
 
     IF v_clip.status = 'disqualified' THEN
         RAISE EXCEPTION 'clip_terminal'
@@ -300,11 +303,14 @@ AS $$
 DECLARE
     v_clip public.clips%ROWTYPE;
     v_camp public.campaigns%ROWTYPE;
+    v_locked record;
     v_now  timestamptz := now();
 BEGIN
     SELECT m.clip_row, m.campaign_row
-        INTO v_clip, v_camp
+        INTO v_locked
         FROM public._clip_moderation_lock_brand(p_clip_id) AS m;
+    v_clip := v_locked.clip_row;
+    v_camp := v_locked.campaign_row;
 
     IF v_clip.status = 'disqualified' THEN
         RAISE EXCEPTION 'clip_terminal'
@@ -384,6 +390,7 @@ AS $$
 DECLARE
     v_clip public.clips%ROWTYPE;
     v_camp public.campaigns%ROWTYPE;
+    v_locked record;
     v_now  timestamptz := now();
     v_note text;
 BEGIN
@@ -395,8 +402,10 @@ BEGIN
     END IF;
 
     SELECT m.clip_row, m.campaign_row
-        INTO v_clip, v_camp
+        INTO v_locked
         FROM public._clip_moderation_lock_brand(p_clip_id) AS m;
+    v_clip := v_locked.clip_row;
+    v_camp := v_locked.campaign_row;
 
     IF v_clip.status <> 'pending' THEN
         RAISE EXCEPTION 'invalid_transition'
@@ -471,11 +480,14 @@ AS $$
 DECLARE
     v_clip public.clips%ROWTYPE;
     v_camp public.campaigns%ROWTYPE;
+    v_locked record;
     v_now  timestamptz := now();
 BEGIN
     SELECT m.clip_row, m.campaign_row
-        INTO v_clip, v_camp
+        INTO v_locked
         FROM public._clip_moderation_lock_brand(p_clip_id) AS m;
+    v_clip := v_locked.clip_row;
+    v_camp := v_locked.campaign_row;
 
     IF v_clip.status = 'disqualified' THEN
         RETURN jsonb_build_object(
