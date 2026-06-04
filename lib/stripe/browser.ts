@@ -2,8 +2,7 @@ import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 /**
  * Browser Stripe.js singleton (publishable key only). Used by the performance
- * pool-funding Elements form. Only loaded in real mode — mock mode never
- * renders the real payment UI.
+ * pool-funding Elements form.
  */
 let stripePromise: Promise<Stripe | null> | null = null;
 

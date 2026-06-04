@@ -1,7 +1,7 @@
 /**
- * Per-video approval window helpers (UI + mock mode). Mirrors the SQL
- * add_business_days() so the brand's 5-working-day deadline reads the same on
- * the client. Pure — no React/Supabase.
+ * Per-video approval window helpers (UI). Mirrors the SQL add_business_days()
+ * so the brand's 5-working-day deadline reads the same on the client. Pure — no
+ * React/Supabase.
  */
 
 export const APPROVAL_WINDOW_BUSINESS_DAYS = 5;

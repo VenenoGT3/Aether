@@ -8,14 +8,12 @@
  * (stale-while-revalidate) and protected by a circuit breaker + backpressure, so
  * this validates that the spike is absorbed without latency/error blowups.
  *
- * AUTH: the route is auth-guarded. Easiest target is a MOCK-MODE deployment
- * (AETHER_MOCK_MODE=true) which bypasses auth (rate limits still apply) — no
- * token needed. For a real deployment, pass a Supabase session cookie via
- * AUTH_COOKIE.
+ * AUTH: the route is auth-guarded. Run against a seeded staging deployment and
+ * pass a Supabase session cookie via AUTH_COOKIE.
  *
  * Env vars:
  *   BASE_URL     — target origin (default http://localhost:3000)
- *   AUTH_COOKIE  — (real mode only) full Cookie header for a logged-in session
+ *   AUTH_COOKIE  — full Cookie header for a logged-in session
  *
  * Run:
  *   k6 run tests/load/load-test-discovery.js

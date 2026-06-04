@@ -5,7 +5,6 @@ export default defineConfig({
   test: {
     environment: "node",
     env: {
-      AETHER_MOCK_MODE: "true",
       NODE_ENV: "test",
     },
   },

@@ -27,7 +27,7 @@ export interface ViewData {
   likes: number;
   comments: number;
   shares: number;
-  source: "ayrshare" | "simulated";
+  source: "ayrshare";
 }
 
 /** Result of syncing one clip. */

@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { isMockMode } from "@/lib/env";
 import { getCronSecret } from "@/lib/env.server";
 import { unauthorizedError, forbiddenError } from "@/lib/api/response";
 import type { UserRole } from "@/types";
@@ -11,25 +10,13 @@ export type ApiAuthContext = {
 };
 
 /**
- * Resolves the authenticated user for API routes.
- * In mock mode, allows demo traffic without Supabase session (rate limits still apply).
+ * Resolves the authenticated user for API routes from the Supabase session.
  */
 export async function requireApiAuth(
   requiredRole?: UserRole
 ): Promise<
   { ok: true; auth: ApiAuthContext } | { ok: false; response: Response }
 > {
-  if (isMockMode) {
-    return {
-      ok: true,
-      auth: {
-        userId: "mock-api-user",
-        role: requiredRole ?? "influencer",
-        email: "demo@aether.local",
-      },
-    };
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,7 +54,6 @@ export async function requireApiAuth(
 
 /** Cron / internal service calls bypass user auth when bearer matches CRON_SECRET */
 export function isInternalCronCall(request: Request): boolean {
-  if (isMockMode) return false;
   const auth = request.headers.get("authorization");
   const secret = getCronSecret();
   if (!secret) return false;

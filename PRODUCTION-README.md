@@ -17,7 +17,7 @@ The worker is **not** deployed to Vercel (it's a long-lived process). See the
 
 ## 1. Environment variables
 
-### Web app — required in production (`AETHER_MOCK_MODE=false`)
+### Web app — required in production
 
 Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fails the build.
 
@@ -41,9 +41,8 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `SENTRY_TRACES_SAMPLE_RATE` | Performance trace sampling (e.g. `0.1`). |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Build-time source-map upload (CI only). |
 | `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §4. |
-| `GEMINI_API_KEY` | Optional AI campaign-brief generation (absent → simulated). |
+| `GEMINI_API_KEY` | Optional AI campaign-brief generation; the brief action fails clearly without it (no simulated fallback). |
 | `STRIPE_WEBHOOK_HANDLER` | `supabase` (default, recommended) or `vercel` (legacy). Must be `supabase` in prod. |
-| `AETHER_MOCK_MODE` | **Must be `false`** on Vercel Production (build refuses `true`). |
 
 ### Worker (separate host)
 
@@ -52,8 +51,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `REDIS_URL` | BullMQ connection (`redis://` / `rediss://`). |
 | `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | DB access for accrual/payouts. |
 | `STRIPE_SECRET_KEY` | Real payouts. |
-| `AYRSHARE_API_KEY` | **Real** view tracking. Without it in real mode, the worker refuses to accrue earnings / run payouts (real-money safety guard) — see `SETUP.md`. |
-| `AETHER_MOCK_MODE` | `false` in production. |
+| `AYRSHARE_API_KEY` | **Required** — live view tracking. The worker hard-fails at startup without it, and the real-money safety guard blocks accrual/payouts if it's removed at runtime — see `SETUP.md`. |
 
 > **Secret placement:** `SUPABASE_SERVICE_ROLE_KEY` and `STRIPE_WEBHOOK_SECRET` belong in
 > Supabase Edge Function secrets (the `stripe-webhook` function), **not** on Vercel, when
@@ -65,8 +63,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 
 1. **Project**: import the repo; framework preset **Next.js**. Root = repo root.
 2. **Environment variables**: add all of §1 (Web app) for **Production** + **Preview**.
-   - Production: `AETHER_MOCK_MODE=false`, `STRIPE_WEBHOOK_HANDLER=supabase`.
-   - Preview: may use `AETHER_MOCK_MODE=true` for demo builds.
+   - `STRIPE_WEBHOOK_HANDLER=supabase` (the default, required on Vercel Production).
 3. **Database**: run the SQL migrations in `supabase/migrations/` against the prod project
    (in timestamp order), then deploy the `stripe-webhook` Edge Function with its secrets.
 4. **Stripe**: point the webhook at the Supabase Edge Function URL
@@ -138,9 +135,8 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 
 ## 5. Operational notes
 
-- **Mock mode (`AETHER_MOCK_MODE=true`)**: full demo with no external dependencies —
-  auth is bypassed, data is local/seeded, no real money moves. Great for Preview deploys
-  and local dev. **Forbidden on Vercel Production** (the build throws).
+- **Production-only**: there is no mock/demo fallback. Every path uses real Supabase,
+  Stripe, Redis, and Ayrshare; missing required config fails clearly at build/startup.
 - **Circuit breakers** (`lib/circuit-breaker.ts`): process-local, 5 failures → open 30s →
   half-open trial. Protect Redis, Stripe, and Supabase reads; fail-open with fallbacks.
   State is surfaced in `/api/health`.
@@ -162,10 +158,10 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 ## 6. Load testing
 
 k6 scripts in `tests/load/` (discovery spike, clip submission, health). Run against a
-mock-mode deployment first:
+staging deployment first (never production):
 
 ```bash
-AETHER_MOCK_MODE=true npm run dev   # target
+npm run dev   # or point the scripts at a staging URL
 npm run loadtest:health
 npm run loadtest:discovery
 npm run loadtest:clips

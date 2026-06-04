@@ -1,5 +1,5 @@
 import "server-only";
-import { isMockMode, canUseServiceRoleInNextRuntime } from "@/lib/env";
+import { canUseServiceRoleInNextRuntime } from "@/lib/env";
 
 /**
  * Server-only secrets for the Next.js runtime (Vercel).
@@ -23,24 +23,17 @@ export const SERVER_SECRET_NAMES = [
 function requireServerSecret(name: string): string {
   const value = process.env[name]?.trim();
   if (value) return value;
-  if (isMockMode) return "";
-  throw new Error(
-    `[Aether] Missing server secret: ${name}. Required outside AETHER_MOCK_MODE.`
-  );
+  throw new Error(`[Aether] Missing required server secret: ${name}.`);
 }
 
-/** Optional secret for mock/local paths — never throws. */
+/** Optional secret — never throws (caller decides how to handle absence). */
 function optionalServerSecret(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value || undefined;
 }
 
 export function getStripeSecretKey(): string {
-  const key = requireServerSecret("STRIPE_SECRET_KEY");
-  if (isMockMode) {
-    return key || "sk_test_placeholder";
-  }
-  return key;
+  return requireServerSecret("STRIPE_SECRET_KEY");
 }
 
 export function getOptionalCronSecret(): string | undefined {

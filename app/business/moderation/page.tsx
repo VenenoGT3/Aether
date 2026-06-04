@@ -18,8 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
-import { isMockMode, supabase } from "@/lib/supabase/client";
-import { getCampaignsAction } from "@/lib/supabase/campaigns";
+import { supabase } from "@/lib/supabase/client";
 import { useBrandModeration } from "@/lib/supabase/clips";
 import { approvalCountdownLabel, workingDaysLeft } from "@/lib/approval";
 import { Clock } from "lucide-react";
@@ -72,15 +71,6 @@ export default function BrandModerationPage() {
   const [scores, setScores] = useState<Record<string, number>>({});
 
   const loadCampaigns = useCallback(async () => {
-    if (isMockMode) {
-      const res = await getCampaignsAction();
-      setCampaigns(
-        ((res.campaigns || []) as (PerfCampaign & { campaign_type?: string })[]).filter(
-          (c) => c.campaign_type === "performance"
-        )
-      );
-      return;
-    }
     const { data } = await supabase
       .from("campaigns")
       .select("id, title, status, budget_pool, available_pool, budget_reserved, budget_paid")
@@ -89,12 +79,6 @@ export default function BrandModerationPage() {
   }, []);
 
   const loadClips = useCallback(async () => {
-    if (isMockMode) {
-      if (typeof window === "undefined") return;
-      const raw = localStorage.getItem("aether-mock-clips");
-      setAllClips(raw ? (JSON.parse(raw) as BrandClip[]) : []);
-      return;
-    }
     const { data } = await supabase
       .from("clips")
       .select("campaign_id, status, current_views, platform, post_url");

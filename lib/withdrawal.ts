@@ -1,5 +1,5 @@
 /**
- * Creator withdrawal constants + math (pure; shared by UI, mock, and server).
+ * Creator withdrawal constants + math (pure; shared by UI and server).
  *
  * A creator can withdraw once their AVAILABLE balance (approved earnings that
  * have cleared holdback) is >= WITHDRAWAL_MIN. The platform takes a flat

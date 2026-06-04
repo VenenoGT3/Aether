@@ -13,21 +13,19 @@ describe("secret runtime boundaries", () => {
     vi.resetModules();
   });
 
-  it("service role disabled on Next when handler is supabase and not mock", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
+  it("service role disabled on Next when handler is supabase (default)", async () => {
     process.env.STRIPE_WEBHOOK_HANDLER = "supabase";
     const { canUseServiceRoleInNextRuntime } = await import("@/lib/env");
     expect(canUseServiceRoleInNextRuntime()).toBe(false);
   });
 
-  it("service role allowed on Next for mock mode", async () => {
-    process.env.AETHER_MOCK_MODE = "true";
+  it("service role disabled on Next when handler is unset (defaults to supabase)", async () => {
+    delete process.env.STRIPE_WEBHOOK_HANDLER;
     const { canUseServiceRoleInNextRuntime } = await import("@/lib/env");
-    expect(canUseServiceRoleInNextRuntime()).toBe(true);
+    expect(canUseServiceRoleInNextRuntime()).toBe(false);
   });
 
   it("service role allowed on Next when STRIPE_WEBHOOK_HANDLER=vercel", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
     process.env.STRIPE_WEBHOOK_HANDLER = "vercel";
     const { canUseServiceRoleInNextRuntime } = await import("@/lib/env");
     expect(canUseServiceRoleInNextRuntime()).toBe(true);

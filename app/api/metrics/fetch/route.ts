@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isMockMode } from "@/lib/env";
 import { getSociavaultApiKey } from "@/lib/env.server";
 import { guardApiPost } from "@/lib/api/guard";
 import { MetricsFetchBodySchema } from "@/lib/api/schemas";
@@ -25,38 +24,6 @@ function detectPlatform(url: string): "instagram" | "tiktok" | null {
     return "tiktok";
   }
   return null;
-}
-
-/**
- * Generate simulated metrics for development and quick mocking
- */
-function generateSimulatedMetrics(url: string, platform: "instagram" | "tiktok") {
-  // Use URL length or content to seed the random numbers to keep them semi-stable
-  const seed = url.length || 42;
-  const multiplier = (seed % 10) + 1; // 1 to 10 multiplier
-  
-  const views = 5000 * multiplier + (seed * 17) % 3000;
-  const likes = Math.round(views * 0.08 + (seed % 50));
-  const comments = Math.round(likes * 0.07 + (seed % 10));
-  const shares = Math.round(likes * 0.03 + (seed % 5));
-  const saves = Math.round(likes * 0.04 + (seed % 6));
-  
-  const engagement_rate = parseFloat((((likes + comments + shares + saves) / views) * 100).toFixed(2));
-  const caption = platform === "instagram" 
-    ? "Loving my new mechanical keyboard and desk setup from @Aether! Super clean aesthetics. #minimalist #desksetup #productivity #ad"
-    : "This setup is next level 💻 workspace design by Aether. What do you think? #workspace #desk #setup #mindfulness";
-
-  return {
-    views,
-    likes,
-    comments,
-    shares,
-    saves,
-    engagement_rate,
-    caption,
-    platform,
-    fetched_at: new Date().toISOString()
-  };
 }
 
 export const GET = () => methodNotAllowed(["POST"]);
@@ -90,7 +57,7 @@ export async function POST(request: Request) {
           "submit_post"
         );
         if (!access.ok) return access.response;
-      } else if (!isMockMode) {
+      } else {
         return forbiddenError("participation_id is required");
       }
     }
@@ -110,15 +77,17 @@ export async function POST(request: Request) {
     }
 
     const apiKey = getSociavaultApiKey();
-    const isMockKey = !apiKey || apiKey.includes("your_sociavault");
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: "Metrics provider is not configured (SOCIAVAULT_API_KEY)." },
+        { status: 503 }
+      );
+    }
 
     let metricsData;
 
-    if (isMockKey) {
-      // Return simulated metrics for seamless developer setup
-      metricsData = generateSimulatedMetrics(post_url, platform);
-    } else {
-      // Call actual SociaVault public scraping endpoints
+    {
+      // Call the SociaVault public scraping endpoints.
       try {
         const endpoint = platform === "instagram"
           ? `https://api.sociavault.com/v1/scrape/instagram/post-info?url=${encodeURIComponent(post_url)}`
@@ -127,24 +96,19 @@ export async function POST(request: Request) {
         const response = await fetch(endpoint, {
           method: "GET",
           headers: {
-            "x-api-key": apiKey || ""
+            "x-api-key": apiKey,
           },
           next: { revalidate: 60 } // Cache results for 1 minute
         });
 
         if (!response.ok) {
-          // If public API fails (e.g. rate-limit, invalid url or private post), fallback to mock in non-prod
-          if (process.env.NODE_ENV !== "production") {
-            metricsData = generateSimulatedMetrics(post_url, platform);
-          } else {
-            return NextResponse.json(
-              { 
-                success: false, 
-                error: `SociaVault API returned status ${response.status}. Link might be private or rate-limited.` 
-              },
-              { status: 502 }
-            );
-          }
+          return NextResponse.json(
+            {
+              success: false,
+              error: `SociaVault API returned status ${response.status}. Link might be private or rate-limited.`,
+            },
+            { status: 502 }
+          );
         } else {
           const json = await response.json();
           const raw = json.data || json;
@@ -206,22 +170,20 @@ export async function POST(request: Request) {
             };
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("SociaVault scraper call failed:", err);
-        // Fail gracefully to mock data if in local dev
-        if (process.env.NODE_ENV !== "production") {
-          metricsData = generateSimulatedMetrics(post_url, platform);
-        } else {
-          return NextResponse.json(
-            { success: false, error: `Connection to metrics provider failed: ${err.message}` },
-            { status: 500 }
-          );
-        }
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Connection to metrics provider failed: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          { status: 500 }
+        );
       }
     }
 
-    // Save/update to Database if in Live Database mode (not mock mode)
-    if (!isMockMode && metricsData) {
+    // Save/update to the database.
+    if (metricsData) {
       try {
         const supabase = await createClient();
         const { views, likes, comments, shares, saves, engagement_rate, fetched_at } = metricsData;
@@ -327,13 +289,13 @@ export async function POST(request: Request) {
             if (partUpdateErr) throw partUpdateErr;
           }
         }
-      } catch (dbErr: any) {
+      } catch (dbErr) {
         console.error("Database sync operation failed:", dbErr);
-        // Still return the metrics even if DB write fails, but include warning
+        // Still return the metrics even if DB write fails, but include a warning.
         return NextResponse.json({
           success: true,
           metrics: metricsData,
-          warning: `Metrics fetched but failed to sync to database: ${dbErr.message}`
+          warning: `Metrics fetched but failed to sync to database: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
         });
       }
     }
@@ -341,13 +303,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       metrics: metricsData,
-      isSimulated: isMockKey
     });
-
-  } catch (err: any) {
+  } catch (err) {
     console.error("Route handler crashed:", err);
     return NextResponse.json(
-      { success: false, error: `Server error: ${err.message}` },
+      { success: false, error: `Server error: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
     );
   }

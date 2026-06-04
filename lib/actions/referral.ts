@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { getServerUser, createClient } from "@/lib/supabase/server";
-import { isMockMode } from "@/lib/env";
 import { safeParse, uuidField } from "@/lib/validate";
 import { toActionError, reportError, UnauthorizedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -11,7 +10,6 @@ import {
   isValidReferralCode,
   buildReferralUrl,
   generateReferralCode,
-  calculateReferralReward,
 } from "@/lib/referral";
 import type { ReferralOverview, ReferredUser } from "@/types/referral";
 
@@ -32,13 +30,11 @@ const referralCodeField = z
  */
 export async function applyReferralCodeAction(
   rawCode: string
-): Promise<{ success: boolean; error?: string; isMock?: boolean }> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const parsed = safeParse(referralCodeField, rawCode);
     if (!parsed.ok) return { success: false, error: parsed.error };
     const code = parsed.data;
-
-    if (isMockMode) return { success: true, isMock: true };
 
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
@@ -59,7 +55,7 @@ export async function applyReferralCodeAction(
     }
 
     logger.info({ event: "referral.attached", userId: me.user_id }, "referral code applied");
-    return { success: true, isMock: false };
+    return { success: true };
   } catch (error) {
     return toActionError(error, { action: "applyReferralCode" });
   }
@@ -71,14 +67,10 @@ export async function applyReferralCodeAction(
  */
 export async function claimReferralBonusAction(
   referredUserId: string
-): Promise<{ success: boolean; error?: string; isMock?: boolean; reward?: number }> {
+): Promise<{ success: boolean; error?: string; reward?: number }> {
   try {
     const parsed = safeParse(uuidField, referredUserId);
     if (!parsed.ok) return { success: false, error: parsed.error };
-
-    if (isMockMode) {
-      return { success: true, isMock: true, reward: calculateReferralReward().referrer };
-    }
 
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
@@ -103,7 +95,7 @@ export async function claimReferralBonusAction(
       { event: "referral.bonus.claimed", userId: me.user_id, referredUserId: parsed.data },
       "referral bonus claimed"
     );
-    return { success: true, isMock: false, reward: res.referrer_amount };
+    return { success: true, reward: res.referrer_amount };
   } catch (error) {
     return toActionError(error, { action: "claimReferralBonus" });
   }
@@ -116,27 +108,6 @@ export async function getReferralOverviewAction(): Promise<{
   overview?: ReferralOverview;
 }> {
   try {
-    if (isMockMode) {
-      const code = "AETHER42";
-      const now = new Date().toISOString();
-      return {
-        success: true,
-        overview: {
-          code,
-          link: buildReferralUrl(code, appBaseUrl()),
-          referral_count: 2,
-          total_earned: 10,
-          pending_count: 1,
-          referrals: [
-            { referred_id: "mock-ref-1", name: "Giulia R.", status: "rewarded", qualified: true, claimable: false, created_at: now },
-            { referred_id: "mock-ref-2", name: "Marco V.", status: "qualified", qualified: true, claimable: true, created_at: now },
-            { referred_id: "mock-ref-3", name: "Sofia B.", status: "pending", qualified: false, claimable: false, created_at: now },
-          ],
-          isMock: true,
-        },
-      };
-    }
-
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
     const supabase = await createClient();
@@ -212,7 +183,6 @@ export async function getReferralOverviewAction(): Promise<{
         total_earned,
         pending_count,
         referrals,
-        isMock: false,
       },
     };
   } catch (error) {

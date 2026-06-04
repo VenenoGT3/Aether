@@ -133,7 +133,7 @@ function LoginForm() {
                 <Link
                   href="#"
                   className="text-xs font-medium text-primary hover:underline"
-                  onClick={() => toast.info(t("Reset password flow simulated."), { description: t("Use any credentials to login via mock mode.") })}
+                  onClick={() => toast.info(t("Password reset is coming soon."), { description: t("Please contact support to reset your password.") })}
                 >
                   {t("Forgot password?")}
                 </Link>

@@ -1,15 +1,16 @@
-import { supabase, isMockMode, getMockUser } from "./client";
+import { supabase } from "./client";
 import { CampaignStatus, CampaignStatusSchema } from "@/types/database";
 import { PLATFORM_FEE_PCT, feeBreakdown } from "@/lib/campaign-budget";
 import { isCampaignCategory } from "@/lib/campaign-category";
 import { z } from "zod";
 import { safeParse, uuidField } from "@/lib/validate";
+import { validateCategoryMeta } from "@/lib/campaign-category-meta";
+import { apiLog } from "@/lib/api/trace-log";
 
 /**
  * Core campaign-payload shape (UX + defense-in-depth). The authoritative
  * integrity boundary is the database (RLS + the brand_cpm_rate / category_meta /
  * budget triggers); this catches malformed input early with a clear message.
- * Unknown keys are ignored (we keep using the original payload downstream).
  */
 const CampaignCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required.").max(200, "Title is too long."),
@@ -24,14 +25,6 @@ const CampaignCreateSchema = z.object({
   cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
   budget_pool: z.number().finite().nonnegative().max(10_000_000).nullable().optional(),
 });
-import { validateCategoryMeta } from "@/lib/campaign-category-meta";
-import { apiLog } from "@/lib/api/trace-log";
-
-const LOCAL_STORAGE_KEY = "aether-campaigns";
-
-/** A campaign as stored in mock localStorage / accepted by create. Loosely typed
- * (extra performance fields vary) but free of `any`. */
-type CampaignRecord = Record<string, unknown>;
 
 /** Fields read off the campaign-creation payload (extra keys are passed through). */
 interface CampaignInput {
@@ -62,172 +55,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Pre-seeded mock campaigns for initial development
-const DEFAULT_MOCK_CAMPAIGNS = [
-  {
-    id: "camp_1",
-    business_id: "mock-business-uuid",
-    title: "Summer Tech Capsule",
-    description: "Looking for minimal design and aesthetic creators to review the Aether mechanical keyboard and desk mat capsule collection.",
-    budget_total: 2500,
-    budget_allocated: 2500,
-    target_niches: ["Tech", "Design", "Minimal"],
-    target_audience: {
-      location: "United States",
-      ageRange: "18-34",
-      gender: "All",
-      minimumFollowers: 15000
-    },
-    deliverables: [
-      { type: "post", quantity: 1, details: "Instagram carousel showing desk setup aesthetics" },
-      { type: "video", quantity: 1, details: "15s TikTok showcasing keyboard sound profile" }
-    ],
-    timeline: {
-      startDate: "2026-06-01",
-      endDate: "2026-06-15",
-      draftDueDate: "2026-06-08"
-    },
-    status: "in_progress" as CampaignStatus,
-    campaign_type: "fixed",
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    influencer: {
-      name: "Marcus Vance",
-      handle: "@marcusv",
-      avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-    }
-  },
-  {
-    id: "camp_2",
-    business_id: "mock-business-uuid",
-    title: "Aether Lifestyle Launch",
-    description: "Launch campaign for the new Aether workspace organization application. Emphasize digital productivity and mindfulness.",
-    budget_total: 4500,
-    budget_allocated: 0,
-    target_niches: ["Lifestyle", "Design", "Wellness"],
-    target_audience: {
-      location: "Global",
-      ageRange: "21-45",
-      gender: "All",
-      minimumFollowers: 30000
-    },
-    deliverables: [
-      { type: "video", quantity: 1, details: "YouTube integration (60s dedicated review section)" },
-      { type: "story", quantity: 3, details: "Instagram stories with links to sign up page" }
-    ],
-    timeline: {
-      startDate: "2026-06-15",
-      endDate: "2026-06-30",
-      draftDueDate: "2026-06-22"
-    },
-    status: "open" as CampaignStatus,
-    campaign_type: "fixed",
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
-  },
-  {
-    id: "camp_3",
-    business_id: "mock-business-uuid",
-    title: "Minimalist Workspace Review",
-    description: "Review of aesthetic workspace desk setups and recommendations for minimalist organizer trays.",
-    budget_total: 1200,
-    budget_allocated: 1200,
-    target_niches: ["Minimal", "Design"],
-    target_audience: {
-      location: "Europe",
-      ageRange: "18-30",
-      gender: "All",
-      minimumFollowers: 8000
-    },
-    deliverables: [
-      { type: "post", quantity: 2, details: "High-resolution photos showcasing organizer tray placement" }
-    ],
-    timeline: {
-      startDate: "2026-05-10",
-      endDate: "2026-05-25",
-      draftDueDate: "2026-05-18"
-    },
-    status: "completed" as CampaignStatus,
-    campaign_type: "fixed",
-    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    influencer: {
-      name: "Dave Miller",
-      handle: "@davem",
-      avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-    }
-  },
-  {
-    id: "camp_perf_1",
-    business_id: "mock-business-uuid",
-    title: "Aether Clip Challenge — Earn Per View",
-    description: "Open clipping campaign. Cut short-form clips from our launch footage and earn for every view. No application needed — join, post, get paid per 1,000 views.",
-    budget_total: 10000,
-    budget_pool: 10000,
-    platform_fee_pct: 0.1,
-    available_pool: 9000,
-    budget_reserved: 1840,
-    budget_paid: 920,
-    cpm_rate: 2.5,
-    max_payout_per_creator: 1500,
-    view_holdback_hours: 48,
-    platforms: ["tiktok", "instagram", "youtube"],
-    campaign_category: "clipping",
-    category_meta: {
-      source_url: "https://drive.google.com/aether-launch-footage",
-      min_duration_sec: 10,
-      max_duration_sec: 60,
-      requirements: "Hook in first 2s, vertical 9:16, tag @aether.",
-    },
-    content_rules: { notes: "Hook in first 2s, tag @aether, no competing brands, keep it vertical." },
-    target_niches: ["Tech", "Design", "Lifestyle"],
-    target_audience: { location: "Global", ageRange: "18-34", gender: "All", minimumFollowers: 0 },
-    deliverables: [],
-    timeline: { startDate: "2026-05-25", endDate: "2026-06-30", draftDueDate: "2026-06-30" },
-    status: "open" as CampaignStatus,
-    campaign_type: "performance",
-    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
-  }
-];
-
-// Helper to load mock campaigns from localStorage
-function getMockCampaigns(): CampaignRecord[] {
-  if (typeof window === "undefined") return DEFAULT_MOCK_CAMPAIGNS;
-  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_MOCK_CAMPAIGNS));
-    return DEFAULT_MOCK_CAMPAIGNS;
-  }
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return DEFAULT_MOCK_CAMPAIGNS;
-  }
-}
-
-// Helper to save mock campaigns to localStorage
-function saveMockCampaigns(campaigns: CampaignRecord[]) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(campaigns));
-    window.dispatchEvent(new Event("campaigns-update"));
-  }
-}
-
-/**
- * Fetch all campaigns for the current business
- */
+/** Fetch all campaigns for the current business. */
 export async function getCampaignsAction() {
-  if (isMockMode) {
-    const campaigns = getMockCampaigns();
-    return { success: true, campaigns };
-  }
-
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Fetch campaigns created by this business
     const { data, error } = await supabase
       .from("campaigns")
       .select("*")
@@ -242,17 +75,8 @@ export async function getCampaignsAction() {
   }
 }
 
-/**
- * Get campaign by ID
- */
+/** Get campaign by ID. */
 export async function getCampaignByIdAction(id: string) {
-  if (isMockMode) {
-    const campaigns = getMockCampaigns();
-    const campaign = campaigns.find((c) => c.id === id);
-    if (!campaign) return { success: false, error: "Campaign not found" };
-    return { success: true, campaign };
-  }
-
   try {
     const { data, error } = await supabase
       .from("campaigns")
@@ -268,17 +92,13 @@ export async function getCampaignByIdAction(id: string) {
   }
 }
 
-/**
- * Create a new campaign
- */
+/** Create a new campaign. */
 export async function createCampaignAction(campaignData: CampaignInput) {
   // Reject malformed payloads early with a clear, safe message.
   const baseCheck = safeParse(CampaignCreateSchema, campaignData);
   if (!baseCheck.ok) {
     return { success: false, error: baseCheck.error };
   }
-
-  const mockUser = getMockUser();
 
   // Brand-set CPM: performance campaigns MUST carry a positive brand rate. We
   // derive it from brand_cpm_rate (preferred) or the legacy cpm_rate, and write
@@ -320,44 +140,6 @@ export async function createCampaignAction(campaignData: CampaignInput) {
     normalizedMeta = metaCheck.meta;
   }
 
-  if (isMockMode) {
-    const campaigns = getMockCampaigns();
-    const mockPool = campaignData.budget_pool ?? campaignData.budget_total;
-    const mockFee = feeBreakdown(Number(mockPool));
-    const newCampaign = {
-      ...campaignData,
-      id: "camp_" + Math.random().toString(36).substring(2, 9),
-      business_id: mockUser.user_id,
-      budget_allocated: 0,
-      campaign_type: campaignData.campaign_type || "fixed",
-      // Performance pool accounting (starts empty). Platform retains 10%; creators
-      // earn from available_pool (90%).
-      ...(isPerformance
-        ? {
-            budget_pool: mockPool,
-            platform_fee_pct: PLATFORM_FEE_PCT,
-            available_pool: mockFee.creators,
-            budget_reserved: 0,
-            budget_paid: 0,
-            funded_at: null,
-            campaign_category: normalizedCategory,
-            category_meta: normalizedMeta,
-            // Brand-set CPM is the single source of truth; keep cpm_rate in sync.
-            brand_cpm_rate: brandCpm,
-            cpm_rate: brandCpm,
-          }
-        : {}),
-      // Performance campaigns must be funded before going live → always 'draft' here.
-      status: isPerformance ? "draft" : campaignData.status || "draft",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    
-    campaigns.unshift(newCampaign);
-    saveMockCampaigns(campaigns);
-    return { success: true, campaign: newCampaign };
-  }
-
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
@@ -375,7 +157,6 @@ export async function createCampaignAction(campaignData: CampaignInput) {
         timeline: campaignData.timeline || {},
         // Performance campaigns must be funded before going live → always 'draft' here.
         status: isPerformance ? "draft" : campaignData.status || "draft",
-        // Performance-clipping fields (Phase 6)
         campaign_type: campaignData.campaign_type || "fixed",
         // UGC vs Clipping sub-type (performance only); fixed campaigns stay NULL.
         campaign_category: normalizedCategory,
@@ -409,39 +190,14 @@ export async function createCampaignAction(campaignData: CampaignInput) {
   }
 }
 
-/**
- * Update campaign status
- */
+/** Update campaign status. */
 export async function updateCampaignStatusAction(id: string, status: CampaignStatus) {
-  // Status is mode-agnostic; id format differs (mock ids aren't UUIDs), so the
-  // id is validated as a bounded non-empty string here and as a UUID in real mode.
   const statusCheck = safeParse(CampaignStatusSchema, status);
   if (!statusCheck.ok) return { success: false, error: statusCheck.error };
-  const idCheck = safeParse(z.string().trim().min(1, "Invalid ID.").max(128, "Invalid ID."), id);
+  const idCheck = safeParse(uuidField, id);
   if (!idCheck.ok) return { success: false, error: idCheck.error };
 
-  if (isMockMode) {
-    const campaigns = getMockCampaigns();
-    const index = campaigns.findIndex((c) => c.id === id);
-    if (index === -1) return { success: false, error: "Campaign not found" };
-    
-    campaigns[index] = {
-      ...campaigns[index],
-      status,
-      updated_at: new Date().toISOString()
-    };
-    
-    saveMockCampaigns(campaigns);
-    return { success: true, campaign: campaigns[index] };
-  }
-
   try {
-    // Real-mode ids are UUIDs — enforce strictly before the DB write.
-    const realIdCheck = safeParse(uuidField, id);
-    if (!realIdCheck.ok) {
-      return { success: false, error: realIdCheck.error };
-    }
-
     const { data, error } = await supabase
       .from("campaigns")
       .update({ status })
@@ -457,20 +213,8 @@ export async function updateCampaignStatusAction(id: string, status: CampaignSta
   }
 }
 
-/**
- * Helper to subscribe to campaign changes (Realtime)
- */
+/** Subscribe to campaign changes (Supabase Realtime). */
 export function subscribeToCampaignChanges(callback: (payload: unknown) => void) {
-  if (isMockMode) {
-    // Client-side local storage event triggers
-    const handleUpdate = () => {
-      const campaigns = getMockCampaigns();
-      callback({ new: campaigns });
-    };
-    window.addEventListener("campaigns-update", handleUpdate);
-    return () => window.removeEventListener("campaigns-update", handleUpdate);
-  }
-
   const channel = supabase
     .channel("custom-campaigns-channel")
     .on(

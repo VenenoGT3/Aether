@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripeServer } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  isMockMode,
   getStripeWebhookHandler,
   getSupabaseStripeWebhookUrl,
 } from "@/lib/env";
-import {
-  getOptionalStripeWebhookSecret,
-  getStripeWebhookSecret,
-} from "@/lib/env.server";
+import { getStripeWebhookSecret } from "@/lib/env.server";
 import { verifyStripeWebhookSignature } from "@/lib/campaign-lifecycle";
 import { handleStripeWebhookEvent } from "@/lib/stripe/webhook-handler";
 import { guardRateLimitOnly } from "@/lib/api/guard";
@@ -18,7 +14,7 @@ export async function POST(req: NextRequest) {
   const rateLimited = guardRateLimitOnly(req, "webhooks/stripe", "webhook");
   if (rateLimited) return rateLimited;
 
-  if (!isMockMode && getStripeWebhookHandler() === "supabase") {
+  if (getStripeWebhookHandler() === "supabase") {
     const edgeUrl = getSupabaseStripeWebhookUrl();
     return NextResponse.json(
       {
@@ -34,15 +30,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.text();
   const sig = req.headers.get("stripe-signature") || "";
-  const webhookSecret = isMockMode
-    ? getOptionalStripeWebhookSecret()
-    : getStripeWebhookSecret();
+  const webhookSecret = getStripeWebhookSecret();
 
-  const sigCheck = verifyStripeWebhookSignature(
-    !!webhookSecret,
-    !!sig,
-    isMockMode
-  );
+  const sigCheck = verifyStripeWebhookSignature(!!webhookSecret, !!sig);
   if (!sigCheck.valid) {
     return NextResponse.json({ error: sigCheck.error }, { status: 401 });
   }
@@ -50,24 +40,15 @@ export async function POST(req: NextRequest) {
   let event: { type: string; data: { object: Record<string, unknown> } };
 
   try {
-    if (isMockMode) {
-      event = JSON.parse(body);
-    } else {
-      event = stripeServer.webhooks.constructEvent(
-        body,
-        sig,
-        webhookSecret!
-      ) as unknown as typeof event;
-    }
+    event = stripeServer.webhooks.constructEvent(
+      body,
+      sig,
+      webhookSecret
+    ) as unknown as typeof event;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Invalid signature";
     console.error(`Webhook Error: ${message}`);
     return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 });
-  }
-
-  if (isMockMode) {
-    console.log(`[MOCK DB Webhook] Event received: ${event.type}`);
-    return NextResponse.json({ received: true, mock: true });
   }
 
   const supabase = createAdminClient();

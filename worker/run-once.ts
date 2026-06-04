@@ -3,21 +3,16 @@ import {
   runViewSyncForClip,
   runEarningsCalc,
 } from "./processors";
-import { isMockMode, shouldSimulateViews } from "./env";
 import { log, errMessage } from "./logger";
 
 /**
  * One-shot runner: executes a single view-sync + earnings cycle WITHOUT Redis.
- * Run with `npm run worker:once`. Ideal for local testing or cron-style
- * invocation. With AETHER_MOCK_MODE=true it uses simulated view growth, so you
- * can watch the views -> snapshots -> earnings flow end to end against a
- * Supabase project without Ayrshare or BullMQ.
+ * Run with `npm run worker:once`. Ideal for cron-style invocation. Pulls live
+ * view counts from Ayrshare (AYRSHARE_API_KEY required) and runs the full
+ * views -> snapshots -> earnings flow against Supabase without BullMQ.
  */
 async function main(): Promise<void> {
-  log.info("once.start", {
-    mock: isMockMode,
-    viewProvider: shouldSimulateViews() ? "simulated" : "ayrshare",
-  });
+  log.info("once.start", { viewProvider: "ayrshare" });
 
   const clipIds = await fetchTrackingClipIds();
   log.info("once.tracking", { clips: clipIds.length });

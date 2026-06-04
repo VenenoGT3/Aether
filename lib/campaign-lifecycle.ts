@@ -84,14 +84,12 @@ export function assertCanApprovePost(
 
 export function verifyCronAuth(
   authHeader: string | null,
-  cronSecret: string | undefined,
-  mock: boolean
+  cronSecret: string | undefined
 ): { authorized: boolean; error?: string } {
-  if (mock) return { authorized: true };
   if (!cronSecret?.trim()) {
     return {
       authorized: false,
-      error: "CRON_SECRET is required when AETHER_MOCK_MODE is not true",
+      error: "CRON_SECRET is required.",
     };
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
@@ -102,10 +100,8 @@ export function verifyCronAuth(
 
 export function verifyStripeWebhookSignature(
   hasSecret: boolean,
-  hasSignature: boolean,
-  mock: boolean
+  hasSignature: boolean
 ): { valid: boolean; error?: string } {
-  if (mock) return { valid: true };
   if (!hasSecret || !hasSignature) {
     return {
       valid: false,

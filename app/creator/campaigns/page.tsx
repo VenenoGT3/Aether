@@ -16,7 +16,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getClientProfile, isMockMode, supabase } from "@/lib/supabase/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { Profile } from "@/types";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
@@ -33,33 +33,6 @@ interface CampaignParticipation {
   deliverableType: string;
 }
 
-const defaultMockParticipations = [
-  {
-    id: "part_1",
-    campaign_id: "camp_1",
-    influencer_id: "mock-influencer-uuid",
-    status: "applied",
-    proposed_payout: 2500,
-    applied_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2 days ago
-  },
-  {
-    id: "part_2",
-    campaign_id: "camp_2",
-    influencer_id: "mock-influencer-uuid",
-    status: "escrowed",
-    proposed_payout: 4500,
-    applied_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() // 5 days ago
-  },
-  {
-    id: "part_3",
-    campaign_id: "camp_3",
-    influencer_id: "mock-influencer-uuid",
-    status: "released",
-    proposed_payout: 1200,
-    applied_at: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString() // 12 days ago
-  }
-];
-
 export default function InfluencerCampaignsPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<Profile | null>(null);
@@ -72,88 +45,35 @@ export default function InfluencerCampaignsPage() {
       setLoading(true);
       const profile = await getClientProfile();
       setUser(profile);
-      const influencerId = profile?.user_id || "mock-influencer-uuid";
-
-      if (isMockMode) {
-        // Seed default mock participations if not in LocalStorage
-        let storedPartsStr = localStorage.getItem("aether-mock-participations");
-        let partsList = [];
-        if (!storedPartsStr) {
-          localStorage.setItem("aether-mock-participations", JSON.stringify(defaultMockParticipations));
-          partsList = defaultMockParticipations;
-        } else {
-          partsList = JSON.parse(storedPartsStr);
-        }
-
-        // Fetch mock campaigns to join names & niches
-        let storedCampsStr = localStorage.getItem("aether-mock-campaigns");
-        let campsList = storedCampsStr ? JSON.parse(storedCampsStr) : [];
-
-        // Map and synchronize with detailed campaign state
-        const mappedList: CampaignParticipation[] = partsList
-          .filter((p: any) => p.influencer_id === influencerId)
-          .map((part: any) => {
-            const campaign = campsList.find((c: any) => c.id === part.campaign_id) || {
-              title: "Aether Lifestyle Launch",
-              businessName: "Aether Labs",
-              deliverables: [{ type: "instagram_reel" }]
-            };
-
-            // SYNCHRONIZATION WITH CAMPAIGN DETAIL STATES
-            // Check individual negotiation logs/statuses (e.g. standard details page keys)
-            let status = part.status;
-            let proposedPayout = part.proposed_payout;
-            
-            const detailedKey = `aether-campaign-state-${part.campaign_id}`;
-            const detailedStateStr = localStorage.getItem(detailedKey);
-            if (detailedStateStr) {
-              try {
-                const detailed = JSON.parse(detailedStateStr);
-                status = detailed.status;
-                proposedPayout = detailed.budget;
-              } catch (e) {}
-            }
-
-            return {
-              participationId: part.id,
-              campaignId: part.campaign_id,
-              title: campaign.title,
-              brandName: campaign.businessName || "Acme Brand",
-              proposedPayout: proposedPayout,
-              status: status,
-              appliedAt: part.applied_at || new Date().toISOString(),
-              dueDate: "June 25, 2026",
-              deliverableType: campaign.deliverables?.[0]?.type || "instagram_reel"
-            };
-          });
-
-        setParticipations(mappedList);
-      } else {
-        // Supabase Live Mode
-        const { data, error } = await supabase
-          .from("participations")
-          .select(`
-            *,
-            campaign:campaign_id (*)
-          `)
-          .eq("influencer_id", influencerId);
-        
-        if (error) throw error;
-
-        const formatted: CampaignParticipation[] = (data || []).map((p: any) => ({
-          participationId: p.id,
-          campaignId: p.campaign_id,
-          title: p.campaign?.title || "Sponsorship Campaign",
-          brandName: "Brand Client",
-          proposedPayout: Number(p.proposed_payout),
-          status: p.status,
-          appliedAt: p.applied_at || new Date().toISOString(),
-          dueDate: "June 25, 2026",
-          deliverableType: p.campaign?.deliverables?.[0]?.type || "instagram_reel"
-        }));
-
-        setParticipations(formatted);
+      const influencerId = profile?.user_id;
+      if (!influencerId) {
+        setParticipations([]);
+        return;
       }
+
+      const { data, error } = await supabase
+        .from("participations")
+        .select(`
+          *,
+          campaign:campaign_id (*)
+        `)
+        .eq("influencer_id", influencerId);
+
+      if (error) throw error;
+
+      const formatted: CampaignParticipation[] = (data || []).map((p: any) => ({
+        participationId: p.id,
+        campaignId: p.campaign_id,
+        title: p.campaign?.title || "Sponsorship Campaign",
+        brandName: "Brand Client",
+        proposedPayout: Number(p.proposed_payout),
+        status: p.status,
+        appliedAt: p.applied_at || new Date().toISOString(),
+        dueDate: "June 25, 2026",
+        deliverableType: p.campaign?.deliverables?.[0]?.type || "instagram_reel"
+      }));
+
+      setParticipations(formatted);
     } catch (err: any) {
       console.error("Error loading creator campaigns:", err);
       toast.error(t("Failed to load campaign contracts."));

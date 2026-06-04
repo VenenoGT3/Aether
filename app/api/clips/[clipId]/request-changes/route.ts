@@ -3,7 +3,6 @@ import { RequestChangesClipBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { requestChangesClip } from "@/lib/api/services/clip-moderation";
-import { isMockMode } from "@/lib/env";
 import { endRequest } from "@/lib/logger";
 import { getLimiter, busyResponse } from "@/lib/backpressure";
 
@@ -46,19 +45,6 @@ async function handleModeration(
   });
   if (!guarded.ok) return guarded.response;
   const { log, startTime } = guarded.ctx;
-
-  if (isMockMode) {
-    endRequest(log, { statusCode: 200, startTime });
-    return jsonSuccess({
-      clip: {
-        id: clipId,
-        status: "pending",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: guarded.ctx.auth!.userId,
-      },
-      mock: true,
-    });
-  }
 
   const result = await requestChangesClip(
     clipId,

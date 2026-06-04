@@ -263,8 +263,8 @@ export default function NewCampaignWizard() {
 
   /**
    * Performance publish: create the campaign as a DRAFT, then fund its pool.
-   * Real mode opens a Stripe Elements form and the webhook flips it to 'open' on
-   * payment. Mock mode simulates funding by activating the campaign directly.
+   * Opens a Stripe Elements form; the webhook flips the campaign to 'open' once
+   * the pool-funding PaymentIntent succeeds.
    */
   const startPerformancePublish = async () => {
     setPoolPublishing(true);
@@ -309,18 +309,6 @@ export default function NewCampaignWizard() {
       if (!fund.success) {
         toast.error(t("Failed to start pool funding"), { description: fund.error });
         setPoolPublishing(false);
-        return;
-      }
-
-      if (fund.isMock) {
-        // Mock: simulate successful funding by activating the campaign.
-        await updateCampaignStatusAction(res.campaign.id, "open");
-        celebrate();
-        toast.success(t("Pool funded!"), {
-          description: t("Budget pool funded (simulated). Creators can now join and clip."),
-        });
-        setPoolPublishing(false);
-        router.push("/business/dashboard");
         return;
       }
 

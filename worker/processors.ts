@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "./supabase";
 import { getViewsProvider } from "./views-provider";
 import { scoreClipFraud } from "./fraud";
-import { getFraudConfig, getViewSyncBatchSize, simulatedEarningsBlocked } from "./env";
+import { getFraudConfig, getViewSyncBatchSize, payoutSafetyBlocked } from "./env";
 import { log, errMessage } from "./logger";
 import type { ClipRow, ViewSyncOutcome } from "./types";
 
@@ -376,15 +376,15 @@ export async function runEarningsCalc(
   views: number,
   client?: SupabaseClient
 ): Promise<number> {
-  // SAFETY GUARD: never accrue real earnings on simulated views in real mode.
+  // SAFETY GUARD: never accrue real earnings without a live view source.
   // View-sync still runs (snapshots / current_views update for visibility), but
   // no earnings row is created — so nothing can ever be promoted or paid.
-  if (simulatedEarningsBlocked()) {
-    log.warn("earnings.blocked.simulated_views", {
+  if (payoutSafetyBlocked()) {
+    log.warn("earnings.blocked.no_view_source", {
       clipId,
       views,
-      reason: "real mode but views are simulated — refusing to accrue real earnings",
-      hint: "set AYRSHARE_API_KEY for real views, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only)",
+      reason: "AYRSHARE_API_KEY missing — refusing to accrue earnings on unverified views",
+      hint: "set a valid AYRSHARE_API_KEY to restore live view tracking",
     });
     return 0;
   }

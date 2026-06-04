@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { withdrawFundsAction, getTransactionLedgerAction } from "@/lib/stripe/actions";
-import { getMockUser } from "@/lib/supabase/client";
 
 interface Transaction {
   id: string;
@@ -42,18 +41,12 @@ interface Transaction {
  * filter in loadLedger).
  */
 
-// Mock ledger seeds a $2,500 'payout' (withdrawal) transaction. Add it back into
-// "Gross Earnings" so that figure reflects total earned (available + pending +
-// already-paid-out). Real mode derives gross from the live ledger instead.
-const MOCK_GROSS_PAYOUT_OFFSET = 2500;
-
 export default function WalletUI() {
   const [loading, setLoading] = useState(false);
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [availableBalance, setAvailableBalance] = useState(0);
   const [pendingBalance, setPendingBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isMock, setIsMock] = useState(true);
 
   const appleSpring = {
     type: "spring" as const,
@@ -65,97 +58,29 @@ export default function WalletUI() {
   const loadLedger = async () => {
     try {
       setLedgerLoading(true);
-      const res = await getTransactionLedgerAction();
-      setIsMock(!!res.isMock);
-
-      if (res.isMock) {
-        // Load mock ledger from localStorage if present
-        const stored = localStorage.getItem("aether-mock-transactions");
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored) as Transaction[];
-            setTransactions(parsed);
-            calculateMockBalances(parsed);
-            setLedgerLoading(false);
-            return;
-          } catch (e) {
-            // fallback to default mock
-          }
-        }
-
-        // Initialize default mock transactions if empty
-        const defaultMockTransactions: Transaction[] = [
-          {
-            id: "tx_mock_1",
-            amount: 4500,
-            type: "escrow",
-            status: "succeeded",
-            created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-            campaignTitle: "Aether Lifestyle Launch"
-          },
-          {
-            id: "tx_mock_2",
-            amount: 5800,
-            type: "release",
-            status: "succeeded",
-            created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-            campaignTitle: "iPad Pro Creator Flow"
-          },
-          {
-            id: "tx_mock_3",
-            amount: 2500,
-            type: "payout",
-            status: "succeeded",
-            created_at: new Date(Date.now() - 86400000 * 8).toISOString()
-          }
-        ];
-        
-        localStorage.setItem("aether-mock-transactions", JSON.stringify(defaultMockTransactions));
-        setTransactions(defaultMockTransactions);
-        calculateMockBalances(defaultMockTransactions);
-      } else {
-        // Legacy fixed-fee wallet: hide performance-clipping payouts (they carry
-        // a payout_id and are surfaced on the creator's "Clips & Earnings" page).
-        const fixedFeeTx = ((res.transactions as Transaction[]) || []).filter(
-          (tx) => !tx.payout_id
-        );
-        setTransactions(fixedFeeTx);
-        setAvailableBalance(res.availableBalance || 0);
-        setPendingBalance(res.pendingBalance || 0);
+      const res = (await getTransactionLedgerAction()) as {
+        success: boolean;
+        transactions?: Transaction[];
+        availableBalance?: number;
+        pendingBalance?: number;
+        error?: string;
+      };
+      if (!res.success) {
+        toast.error(res.error || "Error loading wallet balances.");
+        return;
       }
+      // Legacy fixed-fee wallet: hide performance-clipping payouts (they carry a
+      // payout_id and are surfaced on the creator's "Clips & Earnings" page).
+      const fixedFeeTx = (res.transactions || []).filter((tx) => !tx.payout_id);
+      setTransactions(fixedFeeTx);
+      setAvailableBalance(res.availableBalance || 0);
+      setPendingBalance(res.pendingBalance || 0);
     } catch (error) {
       console.error("Failed to load transactions ledger:", error);
       toast.error("Error loading wallet balances.");
     } finally {
       setLedgerLoading(false);
     }
-  };
-
-  const calculateMockBalances = (txList: Transaction[]) => {
-    let avail = 0;
-    let pend = 0;
-
-    txList.forEach((tx) => {
-      if (tx.status !== "succeeded") return;
-      
-      if (tx.type === "release" || tx.type === "bonus") {
-        avail += tx.amount;
-      } else if (tx.type === "payout") {
-        avail -= tx.amount;
-      } else if (tx.type === "escrow") {
-        // In this simulated setup, if we funded an escrow, but haven't released it, it counts as pending
-        // If there exists a corresponding release transaction, we don't count it as pending anymore
-        const hasRelease = txList.some(
-          (t) => t.type === "release" && t.campaignTitle === tx.campaignTitle
-        );
-        if (!hasRelease) {
-          pend += tx.amount;
-        }
-      }
-    });
-
-    setAvailableBalance(avail < 0 ? 0 : avail);
-    setPendingBalance(pend);
   };
 
   useEffect(() => {
@@ -187,22 +112,7 @@ export default function WalletUI() {
       const res = await withdrawFundsAction(withdrawAmount);
 
       if (res.success) {
-        if (res.isMock) {
-          // Update simulated localStorage
-          const newTx: Transaction = {
-            id: "tx_mock_" + Math.random().toString(36).substring(7),
-            amount: withdrawAmount,
-            type: "payout",
-            status: "succeeded",
-            created_at: new Date().toISOString()
-          };
-          const updatedList = [newTx, ...transactions];
-          localStorage.setItem("aether-mock-transactions", JSON.stringify(updatedList));
-          setTransactions(updatedList);
-          calculateMockBalances(updatedList);
-        } else {
-          await loadLedger();
-        }
+        await loadLedger();
 
         // Fire premium confetti explosion!
         triggerConfetti();
@@ -215,9 +125,9 @@ export default function WalletUI() {
           description: res.error || "An error occurred with Stripe Connect."
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Withdrawal failed", {
-        description: err.message || "An unexpected error occurred."
+        description: err instanceof Error ? err.message : "An unexpected error occurred."
       });
     } finally {
       setLoading(false);
@@ -347,11 +257,6 @@ export default function WalletUI() {
                 </>
               )}
             </Button>
-            {isMock && (
-              <span className="text-[9px] text-muted-foreground/60 text-center block mt-1.5 font-medium">
-                Simulated payouts environment (Test Mode)
-              </span>
-            )}
           </div>
         </div>
 
@@ -392,7 +297,7 @@ export default function WalletUI() {
                 {ledgerLoading ? (
                   <span className="h-9 w-32 bg-secondary/60 animate-pulse rounded-lg block" />
                 ) : (
-                  formatCurrency(availableBalance + pendingBalance + (isMock ? MOCK_GROSS_PAYOUT_OFFSET : 0))
+                  formatCurrency(availableBalance + pendingBalance)
                 )}
               </h2>
             </div>

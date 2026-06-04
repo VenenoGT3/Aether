@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 import { validateEnv } from "./lib/env";
 
-// Fail the build early when production keys are missing (skipped if AETHER_MOCK_MODE=true)
+// Fail the build early when required production env vars are missing.
 validateEnv();
 
 const nextConfig: NextConfig = {

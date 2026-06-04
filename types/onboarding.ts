@@ -24,5 +24,4 @@ export interface OnboardingProgress {
   totalCount: number;
   /** All steps done AND no pending bonus to claim → safe to hide the checklist. */
   allComplete: boolean;
-  isMock?: boolean;
 }

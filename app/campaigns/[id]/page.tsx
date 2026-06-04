@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/translations";
-import { getClientProfile, supabase, isMockMode } from "@/lib/supabase/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { Profile } from "@/types";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -165,7 +165,7 @@ interface CampaignDetailState {
   participants: Participant[];
 }
 
-const MOCK_PRESET_IMAGES = [
+const PRESET_IMAGES = [
   {
     name: "Minimal Tech",
     url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80"
@@ -240,7 +240,7 @@ export default function CampaignDetailPage() {
   // Submission form state (Influencer side)
   const [postUrl, setPostUrl] = useState("");
   const [postCaption, setPostCaption] = useState("");
-  const [selectedPresetImage, setSelectedPresetImage] = useState(MOCK_PRESET_IMAGES[0].url);
+  const [selectedPresetImage, setSelectedPresetImage] = useState(PRESET_IMAGES[0].url);
   const [estViews, setEstViews] = useState("15000");
   const [estLikes, setEstLikes] = useState("950");
   const [estComments, setEstComments] = useState("70");
@@ -454,8 +454,8 @@ export default function CampaignDetailPage() {
   }, [mounted, activeParticipantId, campaignId]);
 
   useEffect(() => {
-    if (isMockMode || !activeParticipantId || !mounted) return;
-    
+    if (!activeParticipantId || !mounted) return;
+
     // Live mode realtime subscription for messages table
     const channel = supabase
       .channel(`chat-messages-${campaignId}-${activeParticipantId}`)
@@ -504,99 +504,22 @@ export default function CampaignDetailPage() {
     const updatedMsgs = [...chatMessages, myMsg];
     setChatMessages(updatedMsgs);
 
-    if (isMockMode) {
-      const key = `aether-campaign-messages-${campaignId}-${activeParticipantId}`;
-      localStorage.setItem(key, JSON.stringify(updatedMsgs));
-      
-      // Auto-reply logic (Brand / Creator automated responder)
-      setIsTyping(true);
-      setTimeout(async () => {
-        setIsTyping(false);
-        const replyId = `msg_${Math.random().toString(36).substr(2, 9)}`;
-        let replyContent = "";
-
-        if (user.role === "influencer") {
-          const lowerText = text.toLowerCase();
-          if (lowerText.includes("draft") || lowerText.includes("upload") || lowerText.includes("reel")) {
-            replyContent = "Awesome! We will review the draft deliverable shortly. Please verify that the annotations pins are resolved if you resubmitted.";
-          } else if (lowerText.includes("payment") || lowerText.includes("escrow") || lowerText.includes("stripe")) {
-            replyContent = "Yes, your contract budget is securely locked in Stripe Connect escrow. Payout will release automatically upon approval.";
-          } else if (lowerText.includes("hi") || lowerText.includes("hello") || lowerText.includes("hey")) {
-            replyContent = "Hey Marcus! Hope you're doing great. Let us know if you need anything from the brand brief assets.";
-          } else {
-            replyContent = "Thanks for the message! Our marketing team will review this and get back to you shortly.";
-          }
-        } else {
-          const lowerText = text.toLowerCase();
-          if (lowerText.includes("review") || lowerText.includes("change") || lowerText.includes("fix")) {
-            replyContent = "Understood! I'll update the clip according to your pinned comments and upload version " + (selectedVersionNum + 1) + " soon.";
-          } else if (lowerText.includes("status") || lowerText.includes("progress")) {
-            replyContent = "Just finished the main sequence edits. I will upload the draft here for your review in a few hours!";
-          } else {
-            replyContent = "Hey Sarah! Got it, I am on it. Let's make this launch look amazing.";
-          }
-        }
-
-        const replyMsg = {
-          id: replyId,
-          sender_id: user.role === "business" ? activeParticipantId : "mock-business-uuid",
-          sender_name: user.role === "business" ? creatorName : brandName,
-          sender_avatar: user.role === "business" 
-            ? "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" 
-            : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-          role: user.role === "business" ? "influencer" : "business",
-          content: replyContent,
-          created_at: new Date().toISOString(),
-          is_read: false
-        };
-
-        const finalMsgs = [...updatedMsgs, replyMsg];
-        setChatMessages(finalMsgs);
-        localStorage.setItem(key, JSON.stringify(finalMsgs));
-
-        // Create notification & mock email
-        import("@/lib/supabase/notifications").then(n => {
-          n.createNotification(
-            user.user_id,
-            `New message on ${campaign?.title || "Campaign"}`,
-            replyContent,
-            "message"
-          );
+    // Supabase live insert; the realtime subscription delivers replies.
+    try {
+      const { error } = await supabase
+        .from("messages")
+        .insert({
+          participation_id: activeParticipantId,
+          sender_id: user.user_id,
+          content: text
         });
-
-        import("@/lib/resend").then(r => {
-          r.sendNewMessageEmail(
-            user.email || "",
-            user.role === "business" ? creatorName : brandName,
-            replyContent,
-            campaign?.title || "Campaign"
-          );
-        });
-
-        // Trigger unread dot if not on chat tab
-        if (workspaceTab !== "chat") {
-          setHasUnreadMessages(true);
-        }
-
-      }, 1500);
-    } else {
-      // Supabase Live insert
-      try {
-        const { error } = await supabase
-          .from("messages")
-          .insert({
-            participation_id: activeParticipantId,
-            sender_id: user.user_id,
-            content: text
-          });
-        if (error) throw error;
-      } catch (err: any) {
-        toast.error("Failed to deliver message: " + err.message);
-      }
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error("Failed to deliver message: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
-  // --- MOCK DATABASE INITIALIZER ---
+  // --- LEGACY CAMPAIGN STATE LOADER ---
   const loadCampaignState = (activeUser: Profile) => {
     const key = `aether-campaign-rich-data-${campaignId}`;
     const storedState = localStorage.getItem(key);
@@ -812,22 +735,19 @@ export default function CampaignDetailPage() {
 
     const proposedPayout = parseFloat(pitchRate) || campaign.budget;
 
-    if (!isMockMode) {
-      try {
-        await apiPost(`/api/campaigns/${campaignId}/apply`, {
-          proposed_payout: proposedPayout,
-          pitch: pitchText.trim(),
-
-        });
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to submit application.";
-        toast.error(message);
-        return;
-      }
+    try {
+      await apiPost(`/api/campaigns/${campaignId}/apply`, {
+        proposed_payout: proposedPayout,
+        pitch: pitchText.trim(),
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to submit application.";
+      toast.error(message);
+      return;
     }
 
-    // Add Marcus Vance as participant in applied state
+    // Add the applicant as a participant in applied state
     const marcusParticipant: Participant = {
       id: user.user_id,
       fullName: user.full_name,
@@ -883,23 +803,6 @@ export default function CampaignDetailPage() {
         };
 
         persistCampaignState(updated);
-
-        // Store transaction locally if mock mode
-        if (res.isMock) {
-          const stored = localStorage.getItem("aether-mock-transactions");
-          const txList = stored ? JSON.parse(stored) : [];
-          const newTx = {
-            id: "tx_mock_" + Math.random().toString(36).substring(7),
-            amount: selectedParticipant.payout,
-            type: "escrow",
-            status: "succeeded",
-            created_at: new Date().toISOString(),
-            campaignTitle: campaign.title,
-            partner: selectedParticipant.fullName
-          };
-          localStorage.setItem("aether-mock-transactions", JSON.stringify([newTx, ...txList]));
-          window.dispatchEvent(new Event("storage"));
-        }
 
         toast.success("Escrow Funded successfully!", {
           id: "fund-escrow",
@@ -1031,75 +934,27 @@ export default function CampaignDetailPage() {
       status: "submitted" as const
     };
 
-    if (!isMockMode) {
-      try {
-        await apiPost(`/api/participations/${selectedParticipant.id}/posts`, {
-          post_url: postUrl,
-          platform:
-            fetchedPreview?.platform ||
-            (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
-          caption: postCaption || undefined,
-          metrics: {
-            views: viewsVal,
-            likes: likesVal,
-            comments: commentsVal,
-            shares: sharesVal,
-            saves: savesVal,
-            engagement_rate: erVal,
-          },
-
-        });
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to submit post.";
-        toast.error(message);
-        return;
-      }
-    }
-
-    // In mock mode, update campaign metrics in local storage
-    if (isMockMode) {
-      const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
-      const current = allMetrics[campaignId] || { clicks: 0, impressions: 0, conversions: 0, attributed_value: 0, budget_spent: 0 };
-      
-      const clicks = Math.round(viewsVal * 0.05);
-      const conversions = Math.round(clicks * 0.02);
-      const attributed_value = conversions * 85;
-
-      allMetrics[campaignId] = {
-        clicks: current.clicks + clicks,
-        impressions: current.impressions + viewsVal,
-        conversions: current.conversions + conversions,
-        attributed_value: current.attributed_value + attributed_value,
-        budget_spent: current.budget_spent || campaign.budget || 1000
-      };
-      localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
-
-      // Sync mock posts table in localStorage for usePosts hook compatibility
-      const storedPosts = localStorage.getItem("aether-mock-posts");
-      const postsList = storedPosts ? JSON.parse(storedPosts) : [];
-      const mockPostRecord = {
-        id: "post_mock_" + Math.random().toString(36).substring(7),
-        participation_id: selectedParticipant.id,
-        platform: fetchedPreview?.platform || (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
+    try {
+      await apiPost(`/api/participations/${selectedParticipant.id}/posts`, {
         post_url: postUrl,
+        platform:
+          fetchedPreview?.platform ||
+          (postUrl.includes("tiktok.com") ? "tiktok" : "instagram"),
+        caption: postCaption || undefined,
         metrics: {
+          views: viewsVal,
           likes: likesVal,
-          reach: Math.round(viewsVal * 0.8),
-          shares: sharesVal,
           comments: commentsVal,
-          impressions: viewsVal,
-          engagement_rate: erVal
+          shares: sharesVal,
+          saves: savesVal,
+          engagement_rate: erVal,
         },
-        submitted_at: new Date().toISOString(),
-        approved_at: null,
-        campaignTitle: campaign.title
-      };
-      localStorage.setItem("aether-mock-posts", JSON.stringify([mockPostRecord, ...postsList]));
-
-      window.dispatchEvent(new Event("aether-metrics-update"));
-      window.dispatchEvent(new Event("aether-posts-update"));
-      window.dispatchEvent(new Event("storage"));
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to submit post.";
+      toast.error(message);
+      return;
     }
 
     persistCampaignState(updated);
@@ -1200,23 +1055,6 @@ export default function CampaignDetailPage() {
         };
 
         persistCampaignState(updated);
-
-        // Store transaction locally if mock mode
-        if (res.isMock) {
-          const stored = localStorage.getItem("aether-mock-transactions");
-          const txList = stored ? JSON.parse(stored) : [];
-          const newTx = {
-            id: "tx_mock_" + Math.random().toString(36).substring(7),
-            amount: selectedParticipant.payout,
-            type: "release",
-            status: "succeeded",
-            created_at: new Date().toISOString(),
-            campaignTitle: campaign.title,
-            partner: selectedParticipant.fullName
-          };
-          localStorage.setItem("aether-mock-transactions", JSON.stringify([newTx, ...txList]));
-          window.dispatchEvent(new Event("storage"));
-        }
 
         // Trigger premium celebration confetti!
         confetti({
@@ -2315,73 +2153,6 @@ export default function CampaignDetailPage() {
                   </div>
                 </div>
 
-                {/* Simulate Traffic widget */}
-                <div className="p-3.5 rounded-2xl bg-secondary/35 border border-border/10 space-y-3.5 mt-2.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] font-bold text-foreground uppercase tracking-wider flex items-center gap-1">
-                      <Sparkles size={11} className="text-[#FF9500] fill-[#FF9500]" /> {t("Simulation Controller")}
-                    </span>
-                    <span className="text-[8px] text-muted-foreground">{t("Mock mode active")}</span>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        toast.loading(t("Simulating clicks traffic..."), { id: "sim-load" });
-                        await new Promise((resolve) => setTimeout(resolve, 800));
-                        
-                        const newClicks = metrics ? metrics.clicks + 75 : 75;
-                        const newImps = metrics ? metrics.impressions + 1200 : 1200;
-                        
-                        await updateMetrics({
-                          clicks: newClicks,
-                          impressions: newImps
-                        });
-                        
-                        setLocalClicks(newClicks.toString());
-                        setLocalImpressions(newImps.toString());
-                        
-                        toast.success(t("Simulated 75 clicks & 1200 impressions!"), { 
-                          id: "sim-load",
-                          description: t("Analytics tables and graphs updated.")
-                        });
-                        window.dispatchEvent(new Event("aether-metrics-update"));
-                      }}
-                      className="flex-1 py-2 px-1 text-[9px] font-bold rounded-xl bg-secondary hover:bg-secondary/70 border border-border/15 transition-all text-center cursor-pointer active:scale-95"
-                    >
-                      {t("+75 Clicks")}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        toast.loading(t("Simulating promo sales..."), { id: "sim-load" });
-                        await new Promise((resolve) => setTimeout(resolve, 800));
-                        
-                        const newConvs = metrics ? metrics.conversions + 4 : 4;
-                        const newAttributed = metrics ? metrics.attributed_value + 380 : 380;
-                        const newSpend = metrics ? metrics.budget_spent + 50 : 50;
-                        
-                        await updateMetrics({
-                          conversions: newConvs,
-                          attributed_value: newAttributed,
-                          budget_spent: newSpend
-                        });
-                        
-                        setLocalConversions(newConvs.toString());
-                        setLocalAttributed(newAttributed.toString());
-                        setLocalSpend(newSpend.toString());
-                        
-                        toast.success(t("Simulated 4 conversions ($380 value)!"), { 
-                          id: "sim-load",
-                          description: t("Estimated ROI metrics recalculated.")
-                        });
-                        window.dispatchEvent(new Event("aether-metrics-update"));
-                      }}
-                      className="flex-1 py-2 px-1 text-[9px] font-bold rounded-xl bg-secondary hover:bg-secondary/70 border border-border/15 transition-all text-center cursor-pointer active:scale-95"
-                    >
-                      {t("+4 Purchases")}
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -2741,7 +2512,7 @@ export default function CampaignDetailPage() {
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground block mb-1.5 uppercase">{t("Select Aesthetic Preset Image")}</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {MOCK_PRESET_IMAGES.map((img) => (
+                      {PRESET_IMAGES.map((img) => (
                         <button
                           key={img.name}
                           type="button"

@@ -1,4 +1,3 @@
-import { isMockMode } from "@/lib/env";
 import { stripeServer } from "./client";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
 
@@ -8,7 +7,7 @@ import { getCircuitBreaker } from "@/lib/circuit-breaker";
 const stripeBreaker = getCircuitBreaker("stripe", { failureThreshold: 5, openDurationMs: 30_000 });
 
 /**
- * Stripe Connect Marketplace onboarding, balance management, and transfer wrappers
+ * Stripe Connect Marketplace onboarding, balance management, and transfer wrappers.
  */
 
 export interface ConnectAccount {
@@ -21,29 +20,10 @@ export interface ConnectAccount {
   currency: string;
 }
 
-/** @deprecated Use `isMockMode` from `@/lib/env` — Stripe mock follows AETHER_MOCK_MODE only */
-export function getIsStripeMockMode(): boolean {
-  return isMockMode;
-}
-
-/**
- * Retrieves the details of a Connected Stripe Account
- */
+/** Retrieves the details of a Connected Stripe Account. */
 export async function getConnectAccount(
   accountId: string
 ): Promise<ConnectAccount | null> {
-  if (isMockMode || accountId.startsWith("acct_mock_")) {
-    return {
-      id: accountId,
-      userId: "mock-user-id",
-      isOnboarded: true,
-      chargesEnabled: true,
-      payoutsEnabled: true,
-      country: "US",
-      currency: "usd",
-    };
-  }
-
   try {
     const account = await stripeBreaker.exec(() => stripeServer.accounts.retrieve(accountId));
     return {
@@ -61,24 +41,12 @@ export async function getConnectAccount(
   }
 }
 
-/**
- * Creates a Stripe Express account and generates an onboarding link
- */
+/** Creates a Stripe Express account and generates an onboarding link. */
 export async function createStripeExpressAccount(
   userId: string,
   role: "business" | "influencer",
   origin: string
 ) {
-  if (isMockMode) {
-    const mockAccountId =
-      "acct_mock_" + Math.random().toString(36).substring(2, 10);
-    const url = `${origin}/stripe/callback?action=return&role=${role}&accountId=${mockAccountId}&mock=true`;
-    return {
-      url,
-      accountId: mockAccountId,
-    };
-  }
-
   try {
     const account = await stripeBreaker.exec(() =>
       stripeServer.accounts.create({
@@ -120,14 +88,6 @@ export async function createEscrowPaymentIntent(
   amount: number,
   metadata: Record<string, string>
 ) {
-  if (isMockMode) {
-    const mockIntentId = "pi_mock_" + Math.random().toString(36).substring(2, 11);
-    return {
-      clientSecret: `${mockIntentId}_secret_${Math.random().toString(36).substring(2, 6)}`,
-      paymentIntentId: mockIntentId,
-    };
-  }
-
   try {
     const paymentIntent = await stripeBreaker.exec(() =>
       stripeServer.paymentIntents.create({
@@ -148,7 +108,7 @@ export async function createEscrowPaymentIntent(
 }
 
 /**
- * Transfers funds from the platform Stripe balance to the Creator's Connected Account
+ * Transfers funds from the platform Stripe balance to the Creator's Connected Account.
  */
 export async function releaseEscrowPayment(
   amount: number,
@@ -161,16 +121,6 @@ export async function releaseEscrowPayment(
    */
   idempotencyKey?: string
 ) {
-  if (isMockMode || influencerStripeAccountId.startsWith("acct_mock_")) {
-    console.log(
-      `[MOCK] Releasing escrow payment of $${amount} to Connected Account ${influencerStripeAccountId} for Campaign ${campaignId}`
-    );
-    return {
-      success: true,
-      transferId: "tr_mock_" + Math.random().toString(36).substring(2, 11),
-    };
-  }
-
   try {
     const transfer = await stripeBreaker.exec(() =>
       stripeServer.transfers.create(
@@ -201,9 +151,6 @@ export async function releaseEscrowPayment(
 export async function retrievePaymentIntentStatus(
   paymentIntentId: string
 ): Promise<{ status: string } | null> {
-  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
-    return { status: "succeeded" };
-  }
   try {
     const pi = await stripeBreaker.exec(() =>
       stripeServer.paymentIntents.retrieve(paymentIntentId)
@@ -235,10 +182,6 @@ export async function refundPoolPayment(
   paymentIntentId: string,
   idempotencyKey: string
 ): Promise<RefundResult> {
-  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
-    return { refunded: true, refundId: "re_mock_" + Math.random().toString(36).substring(2, 11) };
-  }
-
   const pi = await stripeBreaker.exec(() =>
     stripeServer.paymentIntents.retrieve(paymentIntentId, {
       expand: ["latest_charge"],

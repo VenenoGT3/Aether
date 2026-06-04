@@ -1,77 +1,44 @@
-const MOCK_EMAILS_KEY = "aether-mock-sent-emails";
-
-export interface SentEmailMock {
-  id: string;
-  to: string;
-  subject: string;
-  html: string;
-  sentAt: string;
-  type: string;
-}
-
-function saveMockEmail(to: string, subject: string, html: string, type: string) {
-  if (typeof window !== "undefined") {
-    const newEmail: SentEmailMock = {
-      id: `email_${Math.random().toString(36).substr(2, 9)}`,
-      to,
-      subject,
-      html,
-      sentAt: new Date().toISOString(),
-      type
-    };
-
-    const stored = localStorage.getItem(MOCK_EMAILS_KEY);
-    const list = stored ? JSON.parse(stored) : [];
-    list.unshift(newEmail);
-    localStorage.setItem(MOCK_EMAILS_KEY, JSON.stringify(list));
-    window.dispatchEvent(new Event("aether-emails-sync"));
-  }
-}
-
 export async function sendEmail({
   to,
   subject,
   html,
-  type = "general"
+  type = "general",
 }: {
   to: string;
   subject: string;
   html: string;
   type?: string;
-}): Promise<{ success: boolean; id?: string; error?: any }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const isMock = !apiKey || apiKey.includes("re_") === false || apiKey === "placeholder-resend-key";
-
-  if (isMock) {
-    console.log(`[MOCK EMAIL] To: ${to} | Subject: ${subject}`);
-    saveMockEmail(to, subject, html, type);
-    return { success: true, id: `mock-email-id-${Math.random().toString(36).substring(7)}` };
+}): Promise<{ success: boolean; id?: string; error?: unknown }> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    // Email is best-effort (notifications): fail clearly, never silently mock.
+    console.error(`[email] RESEND_API_KEY is not configured — email "${subject}" to ${to} (${type}) not sent.`);
+    return { success: false, error: "RESEND_API_KEY is not configured." };
   }
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         from: "Aether <notifications@aether.co>",
         to,
         subject,
-        html
-      })
+        html,
+      }),
     });
 
     const data = await response.json();
     if (response.ok) {
       return { success: true, id: data.id };
-    } else {
-      return { success: false, error: data };
     }
-  } catch (err: any) {
-    console.error("Error sending live Resend email:", err);
-    return { success: false, error: err.message || err };
+    return { success: false, error: data };
+  } catch (err) {
+    console.error("Error sending Resend email:", err);
+    return { success: false, error: err instanceof Error ? err.message : err };
   }
 }
 

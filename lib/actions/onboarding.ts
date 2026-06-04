@@ -1,7 +1,6 @@
 "use server";
 
 import { getServerUser, createClient } from "@/lib/supabase/server";
-import { isMockMode } from "@/lib/env";
 import { toActionError, reportError, UnauthorizedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { OnboardingProgress } from "@/types/onboarding";
@@ -34,22 +33,6 @@ export async function getOnboardingProgressAction(): Promise<{
   progress?: OnboardingProgress;
 }> {
   try {
-    if (isMockMode) {
-      // Demo: profile done + first clip approved (bonus ready), invite/payouts pending.
-      return {
-        success: true,
-        progress: assemble({
-          profileComplete: true,
-          firstClipPosted: true,
-          firstClipApproved: true,
-          firstClipBonus: { amount: FIRST_CLIP_BONUS, claimable: true, claimed: false },
-          invitedFriend: false,
-          payoutsConnected: false,
-          isMock: true,
-        }),
-      };
-    }
-
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
     const supabase = await createClient();
@@ -89,7 +72,6 @@ export async function getOnboardingProgressAction(): Promise<{
         },
         invitedFriend: Number(referralRes.count ?? 0) > 0,
         payoutsConnected: !!me.stripe_connect_id && !!me.stripe_onboarding_completed,
-        isMock: false,
       }),
     };
   } catch (error) {
@@ -102,14 +84,9 @@ export async function getOnboardingProgressAction(): Promise<{
 export async function claimFirstClipBonusAction(): Promise<{
   success: boolean;
   error?: string;
-  isMock?: boolean;
   reward?: number;
 }> {
   try {
-    if (isMockMode) {
-      return { success: true, isMock: true, reward: FIRST_CLIP_BONUS };
-    }
-
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
     const supabase = await createClient();
@@ -127,7 +104,7 @@ export async function claimFirstClipBonusAction(): Promise<{
     }
 
     logger.info({ event: "bonus.first_clip.claimed", userId: me.user_id }, "first clip bonus claimed");
-    return { success: true, isMock: false, reward: res.amount };
+    return { success: true, reward: res.amount };
   } catch (error) {
     return toActionError(error, { action: "claimFirstClipBonus" });
   }

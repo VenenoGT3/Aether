@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { getSupabaseAnonKey, getSupabaseUrl, isMockMode } from "@/lib/env";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 import { logger, genRequestId } from "@/lib/logger";
 import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
@@ -59,74 +59,59 @@ function correlateApiRequest(request: NextRequest): NextResponse {
 async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const res = NextResponse.next();
-  const cookieStore = request.cookies;
 
   let isLoggedIn = false;
   let userRole: "business" | "influencer" = "business";
   let isOnboarded = false;
 
-  if (isMockMode) {
-    const sessionCookie = cookieStore.get("aether-session")?.value;
-    const roleCookie = cookieStore.get("aether-role")?.value;
-    const onboardedCookie = cookieStore.get("aether-onboarded")?.value;
+  try {
+    const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            res.cookies.set(name, value, options);
+          });
+        },
+      },
+    });
 
-    isLoggedIn = !!sessionCookie;
-    userRole = roleCookie === "influencer" ? "influencer" : "business";
-    isOnboarded = onboardedCookie === "true";
-  } else {
-    try {
-      const supabase = createServerClient(
-        getSupabaseUrl(),
-        getSupabaseAnonKey(),
-        {
-          cookies: {
-            getAll() {
-              return request.cookies.getAll();
-            },
-            setAll(cookiesToSet) {
-              cookiesToSet.forEach(({ name, value, options }) => {
-                request.cookies.set(name, value);
-                res.cookies.set(name, value, options);
-              });
-            },
-          },
-        }
-      );
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    isLoggedIn = !!user;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      isLoggedIn = !!user;
+    if (user) {
+      userRole =
+        (user.app_metadata?.role as "business" | "influencer") || "influencer";
 
-      if (user) {
-        userRole =
-          (user.app_metadata?.role as "business" | "influencer") || "influencer";
-
-        const { data: userRow } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-        if (userRow?.role) {
-          userRole = userRow.role as "business" | "influencer";
-        }
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("onboarded")
-          .eq(PROFILE_PK_COLUMN, user.id)
-          .single();
-        isOnboarded = profile?.onboarded ?? false;
-
-        res.cookies.set("aether-onboarded", isOnboarded ? "true" : "false", {
-          path: "/",
-          maxAge: 31536000,
-          sameSite: "lax",
-        });
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (userRow?.role) {
+        userRole = userRow.role as "business" | "influencer";
       }
-    } catch {
-      isLoggedIn = false;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarded")
+        .eq(PROFILE_PK_COLUMN, user.id)
+        .single();
+      isOnboarded = profile?.onboarded ?? false;
+
+      res.cookies.set("aether-onboarded", isOnboarded ? "true" : "false", {
+        path: "/",
+        maxAge: 31536000,
+        sameSite: "lax",
+      });
     }
+  } catch {
+    isLoggedIn = false;
   }
 
   const userRolePath = userRole === "influencer" ? "creator" : "business";

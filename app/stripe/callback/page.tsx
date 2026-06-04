@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Loader2, AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { updateClientProfile, getMockUser } from "@/lib/supabase/client";
+import { updateClientProfile } from "@/lib/supabase/client";
 
 function CallbackContent() {
   const router = useRouter();
@@ -17,7 +17,6 @@ function CallbackContent() {
   const action = searchParams.get("action");
   const role = searchParams.get("role") as "business" | "influencer" | null;
   const accountId = searchParams.get("accountId");
-  const isMock = searchParams.get("mock") === "true";
 
   const appleSpring = {
     type: "spring" as const,
@@ -35,36 +34,21 @@ function CallbackContent() {
       }
 
       try {
-        if (isMock) {
-          // Mock mode: Update client-side mock profile
-          const profile = getMockUser();
-          const updated = {
-            ...profile,
-            stripe_connect_id: accountId,
-            stripe_onboarding_completed: true,
-            onboarded: true
-          };
-          localStorage.setItem(`aether-profile-${profile.user_id}`, JSON.stringify(updated));
-          document.cookie = `aether-onboarded=true; path=/; max-age=31536000; SameSite=Lax`;
-          window.dispatchEvent(new Event("role-change"));
-        } else {
-          // Production/Supabase mode: Update profile table
-          const { error } = await updateClientProfile({
-            stripe_connect_id: accountId,
-            stripe_onboarding_completed: true,
-            onboarded: true
-          });
-          if (error) throw error;
-        }
+        const { error } = await updateClientProfile({
+          stripe_connect_id: accountId,
+          stripe_onboarding_completed: true,
+          onboarded: true,
+        });
+        if (error) throw error;
 
         setStatus("success");
         toast.success("Stripe Connect setup complete!", {
           description: "Your platform wallet is now ready for payments and payouts."
         });
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
         setStatus("error");
-        setErrorMsg(err.message || "Failed to update profile status.");
+        setErrorMsg(err instanceof Error ? err.message : "Failed to update profile status.");
       }
     }
 
@@ -77,7 +61,7 @@ function CallbackContent() {
       setStatus("error");
       setErrorMsg("Invalid action code received.");
     }
-  }, [action, role, accountId, isMock]);
+  }, [action, role, accountId]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 bg-secondary/10 min-h-[calc(100vh-4rem)] relative">

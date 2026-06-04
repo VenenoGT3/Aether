@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Eye, Layers, Zap, ArrowRight, Megaphone, Clock, DollarSign } from "lucide-react";
-import { isMockMode, supabase } from "@/lib/supabase/client";
-import { getCampaignsAction } from "@/lib/supabase/campaigns";
+import { supabase } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
 import { campaignCategoryLabel } from "@/lib/campaign-category";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -35,8 +34,8 @@ const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 /**
  * Performance-campaigns-at-a-glance for the brand dashboard. Self-contained:
- * loads performance campaigns + clips (mock localStorage / real Supabase) and
- * renders nothing intrusive when the brand has no performance campaigns yet.
+ * loads performance campaigns + clips from Supabase and renders nothing
+ * intrusive when the brand has no performance campaigns yet.
  */
 export function BrandPerformanceSummary() {
   const { t } = useTranslation();
@@ -44,19 +43,6 @@ export function BrandPerformanceSummary() {
   const [clips, setClips] = useState<BrandClipLite[]>([]);
 
   const load = useCallback(async () => {
-    if (isMockMode) {
-      const res = await getCampaignsAction();
-      setCampaigns(
-        ((res.campaigns || []) as (PerfCampaign & { campaign_type?: string })[]).filter(
-          (c) => c.campaign_type === "performance"
-        )
-      );
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem("aether-mock-clips");
-        setClips(raw ? (JSON.parse(raw) as BrandClipLite[]) : []);
-      }
-      return;
-    }
     const [{ data: camps }, { data: clipRows }] = await Promise.all([
       supabase
         .from("campaigns")

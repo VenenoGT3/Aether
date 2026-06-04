@@ -23,7 +23,6 @@ import { getServiceClient } from "./supabase";
 import { QUEUE_NAMES, JOB_NAMES } from "./types";
 import type { SyncClipJob, CalcEarningJob } from "./types";
 import {
-  allowSimulatedPayoutsInRealMode,
   getHeartbeatIntervalMinutes,
   getPayoutBatchIntervalMinutes,
   getPoolReconciliationIntervalMinutes,
@@ -33,9 +32,6 @@ import {
   getHealthPort,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
-  isMockMode,
-  isRealModeSimulatingViews,
-  shouldSimulateViews,
   validateWorkerEnv,
 } from "./env";
 import { randomUUID } from "node:crypto";
@@ -410,14 +406,6 @@ async function emitHeartbeat(): Promise<void> {
       });
     }
 
-    // Keep paging while the worker is in the dangerous real-mode-simulated state.
-    if (isRealModeSimulatingViews()) {
-      log.alert("simulated_views_in_real_mode", {
-        earningsBlocked: !allowSimulatedPayoutsInRealMode(),
-        overrideEnabled: allowSimulatedPayoutsInRealMode(),
-      });
-    }
-
     // Fleet-wide work runs on ONE instance per tick (see tryAcquireAuditLeadership).
     // The per-instance heartbeat LOG above already ran on every instance.
     const heartbeatMs = getHeartbeatIntervalMinutes() * 60_000;
@@ -471,30 +459,16 @@ async function main(): Promise<void> {
     env.errors.forEach((note) => log.alert("env.invalid", { note }));
     throw new Error(`Worker environment invalid: ${env.errors.join(" | ")}`);
   }
-  log.info("env.validated", { mode: isMockMode ? "mock" : "real" });
+  log.info("env.validated", {});
 
   log.info("startup", {
-    mock: isMockMode,
-    viewProvider: shouldSimulateViews() ? "simulated" : "ayrshare",
+    viewProvider: "ayrshare",
     viewSyncEveryMin: getViewSyncIntervalMinutes(),
     payoutEveryMin: getPayoutBatchIntervalMinutes(),
     batchSize: getViewSyncBatchSize(),
     nodeVersion: process.version,
     pid: process.pid,
   });
-
-  // Loud startup alert for the dangerous real-mode-with-simulated-views state.
-  if (isRealModeSimulatingViews()) {
-    if (allowSimulatedPayoutsInRealMode()) {
-      log.alert("startup.simulated_payouts_override", {
-        note: "REAL mode + SIMULATED views, but ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true — real money may move on simulated views. Use for testing only.",
-      });
-    } else {
-      log.alert("startup.simulated_views_guard", {
-        note: "REAL mode + SIMULATED views (no AYRSHARE_API_KEY) — earnings accrual and payouts are BLOCKED. Set AYRSHARE_API_KEY for real views, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only).",
-      });
-    }
-  }
 
   // Health endpoint first, so orchestrator probes get a (not-yet-ready) response
   // immediately instead of connection-refused during startup.

@@ -1,6 +1,6 @@
 # Setup Guide
 
-How to run Aether in **mock mode** (no external services) and **real mode** (Supabase + Stripe + Redis). For the bigger picture, read [HANDOFF.md](HANDOFF.md).
+How to run Aether (Supabase + Stripe + Redis + Ayrshare). For the bigger picture, read [HANDOFF.md](HANDOFF.md).
 
 ---
 
@@ -8,27 +8,18 @@ How to run Aether in **mock mode** (no external services) and **real mode** (Sup
 
 - Node.js 20+
 - npm
-- (Real mode only) a Supabase project, a Stripe account, and a Redis instance
+- A Supabase project, a Stripe account, a Redis instance, and an Ayrshare account
 
 ---
 
-## Mock mode (fastest — no backend)
+## Setup
 
-Mock mode runs the full UI in the browser on `localStorage`. No Supabase, Stripe, or Redis required.
+Install dependencies and create your env file, then fill in real credentials (see the reference below) and complete the steps that follow.
 
 ```bash
 npm install
-cp .env.example .env.local      # AETHER_MOCK_MODE=true by default
-npm run dev                      # http://localhost:3000
+cp .env.example .env.local      # fill in real credentials
 ```
-
-Use the role switcher in the nav to move between Brand and Creator views. Campaigns, clips, joins, earnings, and payouts are simulated in `localStorage`.
-
-> **Worker in mock mode:** `npm run worker:once` simulates the *view source* (no Ayrshare), but it still writes to a **real Supabase database** — it does not use `localStorage`. To actually exercise the worker, follow the real-mode setup below and set `AETHER_MOCK_MODE=true` only to keep views simulated.
-
----
-
-## Real mode
 
 ### 1. Supabase project
 
@@ -101,9 +92,9 @@ npm run payouts:once     # one payout batch (no Redis)
 
 > The worker reads `process.env` directly and uses the Supabase **service role** (bypasses RLS). Deploy it somewhere it can hold that key securely. It must **not** run in the Vercel app runtime.
 
-**Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), **repeated views-provider errors** in one window (`views.provider.repeated_errors`), and the **real-mode-with-simulated-views** state (`simulated_views_in_real_mode`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
+**Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), **repeated views-provider errors** in one window (`views.provider.repeated_errors`), and a **payout batch blocked** because the live view source is missing (`payout.blocked.no_view_source`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
 
-**Real-money safety guard.** In real mode (`AETHER_MOCK_MODE=false`) without an `AYRSHARE_API_KEY`, views are *simulated* — so the worker **refuses to accrue earnings or run payouts** (it would otherwise pay real money for fake views). View-sync still runs (snapshots update for visibility), but no `earnings` rows are created and payout batches no-op, with a loud `[ALERT]` at startup and each heartbeat. Set `AYRSHARE_API_KEY` for real views, or `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true` to override on staging (never in production). Mock mode is unaffected.
+**Real-money safety guard.** The worker requires `AYRSHARE_API_KEY` for a live view source and **hard-fails at startup without it**. As defense-in-depth, if the key is ever removed at runtime the worker **refuses to accrue earnings or run payouts** — view-sync still runs (snapshots update for visibility), but no `earnings` rows are created and payout batches no-op, with a loud `[ALERT]`. This guarantees real money is never paid out on unverified views.
 
 **Pool-funding reconciliation.** A repeatable worker job (every `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES`) recovers performance campaigns stuck in `draft` after pool funding when the `payment_intent.succeeded` webhook is missed or delayed. It finds draft performance campaigns that have a `funding_payment_intent_id`, checks the PaymentIntent status in Stripe, and **activates** (`status: open` + `funded_at`) those that have succeeded — idempotently (guarded on `status='draft'`, so it can't race the webhook or touch live campaigns). Canceled/failed PaymentIntents are **left in draft** (cancellation + refund stays an explicit owner action via the cancel endpoint); a campaign stuck too long fires `campaign.funding_stuck` `[ALERT]`. This complements the manual `POST /api/campaigns/[id]/reconcile-funding` endpoint.
 
@@ -111,12 +102,12 @@ npm run payouts:once     # one payout batch (no Redis)
 
 The worker is a **long-running background process with no HTTP port**, and must run **separately from the Next.js app** (the app deploys to Vercel; the worker does **not**). It needs a **managed Redis** instance plus the Supabase service-role key.
 
-**What it needs (real mode):**
+**What it needs:**
 
 - `REDIS_URL` — managed Redis (Upstash, Railway, Render, Redis Cloud…). TLS URLs (`rediss://`) are supported.
 - `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — **required** (service role bypasses RLS; keep it only on the worker host, never in the Vercel app).
-- `STRIPE_SECRET_KEY` — required for **live** creator payouts.
-- `AYRSHARE_API_KEY` — required for **real** views; without it the real-money safety guard blocks earnings/payouts.
+- `STRIPE_SECRET_KEY` — required for creator payouts.
+- `AYRSHARE_API_KEY` — **required** for live views; the worker hard-fails at startup without it.
 
 On startup the worker **validates its environment** and aborts with a clear `[worker][ALERT] env.invalid` line if a required var is missing; missing optional vars log `env.warning` and continue.
 
@@ -165,7 +156,6 @@ The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livene
 
 | Variable | Used by | Notes |
 |----------|---------|-------|
-| `AETHER_MOCK_MODE` | app, worker | `true` = simulated; `false` = real (validated at build/startup) |
 | `NEXT_PUBLIC_SUPABASE_URL` | app, worker | Supabase URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | app | Public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | worker, Edge Function | **Never** in the Vercel app runtime (unless `STRIPE_WEBHOOK_HANDLER=vercel`) |
@@ -176,7 +166,7 @@ The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livene
 | `NEXT_PUBLIC_APP_URL` | app | Redirects / cron callbacks |
 | `CRON_SECRET` | app | Bearer for `/api/cron/metrics` |
 | `REDIS_URL` | worker | BullMQ (`npm run worker`); not needed for `worker:once`/`payouts:once` |
-| `AYRSHARE_API_KEY` | worker | Set + `AETHER_MOCK_MODE=false` → real view tracking; else simulated |
+| `AYRSHARE_API_KEY` | worker | **Required** — live Ayrshare view tracking (worker hard-fails without it) |
 | `AYRSHARE_MIN_INTERVAL_MS` | worker | Rate-limit gap between Ayrshare calls (default 350) |
 | `VIEW_SYNC_INTERVAL_MINUTES` | worker | View-sync cadence (default 10) |
 | `VIEW_SYNC_BATCH_SIZE` | worker | Max clips per sync (default 200) |
@@ -189,7 +179,6 @@ The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livene
 | `VIEW_HOLDBACK_HOURS` | worker | Fallback holdback (per-campaign value overrides; default 48) |
 | `MIN_PAYOUT_THRESHOLD` | worker | Min creator balance to pay out (default 10) |
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |
-| `ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE` | worker | Override the simulated-views safety guard (testing only; default false — **never enable in production**) |
 | `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES` | worker | Cadence of the pool-funding reconciliation safety net (default 15) |
 | `POOL_FUNDING_STUCK_ALERT_MINUTES` | worker | A draft+funded campaign stuck longer than this fires a `[ALERT]` (default 120) |
 | `GEMINI_API_KEY` / `RESEND_API_KEY` / `SOCIAVAULT_API_KEY` | app | Optional (AI brief, email, legacy scraping) |

@@ -8,13 +8,11 @@
  * (429/503) under burst load and NEVER returns 5xx — not to maximize throughput.
  *
  * AUTH / TARGET:
- *   - Easiest: a MOCK-MODE deployment (AETHER_MOCK_MODE=true) — auth is bypassed
- *     and submissions return a mock clip (no DB writes). NOTE: in mock mode every
- *     request shares one demo user, so the per-user rate limit (8/min) will 429
- *     most traffic — that's the rate limiter working, and is the expected result.
- *   - Real throughput testing: run against a seeded staging env, supply a creator
- *     session via AUTH_COOKIE and an OPEN performance campaign via CAMPAIGN_ID.
- *     Use several creator sessions to exercise true concurrency.
+ *   - Run against a seeded staging env: supply a creator session via AUTH_COOKIE
+ *     and an OPEN performance campaign via CAMPAIGN_ID. Use several creator
+ *     sessions to exercise true concurrency.
+ *   - Unauthenticated requests are rejected (401) by the auth guard, which still
+ *     exercises the rate limiter + backpressure shedding (429/503) under burst.
  *
  * Env vars:
  *   BASE_URL     — target origin (default http://localhost:3000)

@@ -11,7 +11,6 @@
  */
 
 import {
-  isMockMode,
   getStripeWebhookHandler,
   getRequiredEnvVarNames,
   isVercelProductionDeploy,
@@ -71,8 +70,6 @@ function checkSentry(): void {
     ok("Sentry DSN set for server + browser.");
   } else if (server || client) {
     warn(`Sentry DSN only partially set (${server ? "server" : "browser"} only) — set both.`);
-  } else if (isMockMode) {
-    ok("Sentry DSN unset (mock mode) — Sentry no-ops.");
   } else {
     warn("Sentry DSN unset — error tracking disabled. Set SENTRY_DSN + NEXT_PUBLIC_SENTRY_DSN.");
   }
@@ -86,21 +83,16 @@ function checkFlags(): void {
 }
 
 async function main(): Promise<void> {
-  const mode = isMockMode ? "MOCK" : "REAL";
   const env = isVercelProductionDeploy() ? " · vercel-production" : "";
   console.log(`\n  Aether preflight — validating critical configuration`);
-  console.log(`  mode: ${mode}${env}\n`);
+  console.log(`  mode: production${env}\n`);
 
   // 1. Required env + production safety — the only HARD failure.
   try {
     validateEnv();
-    if (isMockMode) {
-      ok("Mock mode — production vars not enforced.");
-    } else {
-      ok(
-        `Required env present (${getRequiredEnvVarNames().length} vars) · webhook handler: ${getStripeWebhookHandler()}.`
-      );
-    }
+    ok(
+      `Required env present (${getRequiredEnvVarNames().length} vars) · webhook handler: ${getStripeWebhookHandler()}.`
+    );
   } catch (e) {
     fail((e as Error).message);
   }

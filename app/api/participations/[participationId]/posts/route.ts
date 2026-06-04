@@ -3,7 +3,6 @@ import { PostSubmitBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { submitParticipationPost } from "@/lib/api/services/post-submit";
-import { isMockMode } from "@/lib/env";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
@@ -24,16 +23,6 @@ export async function POST(
     auth: "influencer",
   });
   if (!guarded.ok) return guarded.response;
-
-  if (isMockMode) {
-    return jsonSuccess({
-      post: {
-        id: `post_mock_${Date.now()}`,
-        participation_id: participationId,
-      },
-      mock: true,
-    });
-  }
 
   const result = await submitParticipationPost(
     participationId,

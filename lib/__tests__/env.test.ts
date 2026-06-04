@@ -30,34 +30,13 @@ describe("lib/env", () => {
     }
   }
 
-  it("isMockMode is true only when AETHER_MOCK_MODE=true", async () => {
-    process.env.AETHER_MOCK_MODE = "true";
-    const { isMockMode } = await loadEnv();
-    expect(isMockMode).toBe(true);
-  });
-
-  it("isMockMode is false when flag is false even with placeholder Supabase URL", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://your-project-id.supabase.co";
-    const { isMockMode } = await loadEnv();
-    expect(isMockMode).toBe(false);
-  });
-
-  it("isMockMode is false when AETHER_MOCK_MODE is unset", async () => {
-    delete process.env.AETHER_MOCK_MODE;
-    const { isMockMode } = await loadEnv();
-    expect(isMockMode).toBe(false);
-  });
-
-  it("validateEnv throws when not in mock mode and keys are missing", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
+  it("validateEnv throws when required app vars are missing", async () => {
     delete process.env.STRIPE_SECRET_KEY;
     const { validateEnv } = await loadEnv();
-    expect(() => validateEnv()).toThrow(/Production mode requires/);
+    expect(() => validateEnv()).toThrow(/Missing required environment variables/);
   });
 
   it("validateEnv passes with supabase handler without service role", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
     process.env.STRIPE_WEBHOOK_HANDLER = "supabase";
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     setAllAppVars();
@@ -66,7 +45,6 @@ describe("lib/env", () => {
   });
 
   it("validateEnv does not require STRIPE_WEBHOOK_SECRET when handler is supabase", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
     process.env.STRIPE_WEBHOOK_HANDLER = "supabase";
     setAllAppVars();
     delete process.env.STRIPE_WEBHOOK_SECRET;
@@ -76,7 +54,6 @@ describe("lib/env", () => {
   });
 
   it("validateEnv requires service role and webhook secret when STRIPE_WEBHOOK_HANDLER=vercel", async () => {
-    process.env.AETHER_MOCK_MODE = "false";
     process.env.STRIPE_WEBHOOK_HANDLER = "vercel";
     setAllAppVars();
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -84,24 +61,15 @@ describe("lib/env", () => {
     expect(() => validateEnv()).toThrow(/SUPABASE_SERVICE_ROLE_KEY/);
   });
 
-  it("validateProductionSafety rejects mock mode on Vercel Production", async () => {
+  it("validateProductionSafety allows the default supabase handler on Vercel Production", async () => {
     process.env.VERCEL_ENV = "production";
-    process.env.AETHER_MOCK_MODE = "true";
-    const { validateProductionSafety } = await loadEnv();
-    expect(() => validateProductionSafety()).toThrow(/AETHER_MOCK_MODE=true is forbidden/);
-  });
-
-  it("validateProductionSafety allows mock mode for local next build", async () => {
-    delete process.env.VERCEL_ENV;
-    (process.env as Record<string, string>).NODE_ENV = "production";
-    process.env.AETHER_MOCK_MODE = "true";
+    process.env.STRIPE_WEBHOOK_HANDLER = "supabase";
     const { validateProductionSafety } = await loadEnv();
     expect(() => validateProductionSafety()).not.toThrow();
   });
 
   it("validateProductionSafety rejects vercel webhook handler on Vercel Production", async () => {
     process.env.VERCEL_ENV = "production";
-    process.env.AETHER_MOCK_MODE = "false";
     process.env.STRIPE_WEBHOOK_HANDLER = "vercel";
     const { validateProductionSafety } = await loadEnv();
     expect(() => validateProductionSafety()).toThrow(/STRIPE_WEBHOOK_HANDLER=vercel is forbidden/);

@@ -5,15 +5,15 @@
 
 ## Summary
 
-Aether is **secure by default** when `AETHER_MOCK_MODE` is not `true`. Mock mode intentionally relaxes auth and signature checks for local demos only.
+Aether is **secure by default** and **production-only** — every request path enforces real auth, RLS, and signature checks. There is no mock/demo mode that relaxes these.
 
 | Area | Status | Notes |
 |------|--------|-------|
 | RLS | Hardened | Policies mirrored in `lib/rls-policies.ts` + property tests |
 | API input validation | Hardened | Zod schemas on all `/api/*` POST routes |
 | Rate limiting | Added | In-memory limiter on AI, metrics, webhooks |
-| Webhook signatures | Enforced | Stripe `constructEvent` when not in mock mode |
-| Cron auth | Enforced | `Authorization: Bearer CRON_SECRET` when not in mock mode |
+| Webhook signatures | Enforced | Stripe `constructEvent` always verifies the signature |
+| Cron auth | Enforced | `Authorization: Bearer CRON_SECRET` always required |
 | Service role key | Scoped | Supabase Edge Function + standalone worker; `createAdminClient()` only for the legacy `vercel` handler — never in the Vercel app runtime |
 | Metrics API | Fixed | Requires auth + participation access (or cron bearer) |
 
@@ -36,7 +36,7 @@ Stripe webhooks
   → createAdminClient() bypasses RLS (system actor)
 
 Cron (/api/cron/metrics)
-  → CRON_SECRET bearer required (non-mock)
+  → CRON_SECRET bearer required
   → Calls metrics with same secret (internal)
 
 Worker (standalone Node process — not Vercel)
@@ -102,25 +102,23 @@ All routes use Zod validation, honeypot (`_hp`), JSON size limits, and friendly 
 
 1. **In-memory rate limiting** — Resets on cold start; not shared across instances. **Mitigation:** Use Upstash Redis / Vercel KV for production scale.
 
-2. **Mock mode** — Trusts cookies and skips API auth. **Mitigation:** `validateProductionSafety()` fails Vercel Production deploys if `AETHER_MOCK_MODE=true`.
+2. **Service role on webhooks** — Bypasses RLS by design. **Mitigation:** Stripe signature verification; monitor webhook logs.
 
-3. **Service role on webhooks** — Bypasses RLS by design. **Mitigation:** Stripe signature verification; monitor webhook logs.
+3. **AI routes** — Prompt injection via user-supplied text. **Mitigation:** Input length caps in Zod; consider output filtering.
 
-4. **AI routes** — Prompt injection via user-supplied text. **Mitigation:** Input length caps in Zod; consider output filtering.
+4. **SociaVault scraping** — External dependency; URLs are user-controlled. **Mitigation:** URL validation, rate limits, auth gate.
 
-5. **SociaVault scraping** — External dependency; URLs are user-controlled. **Mitigation:** URL validation, rate limits, auth gate.
+5. **No CSRF tokens on API** — Same-site cookies + JSON POST; consider CSRF for cookie-auth forms if adding non-API mutations.
 
-6. **No CSRF tokens on API** — Same-site cookies + JSON POST; consider CSRF for cookie-auth forms if adding non-API mutations.
-
-7. **Gemini API key in query string** — Third-party request logs may capture key. **Mitigation:** Move to header-based API when Gemini supports it.
+6. **Gemini API key in query string** — Third-party request logs may capture key. **Mitigation:** Move to header-based API when Gemini supports it.
 
 ---
 
 ## Verification checklist
 
 ```bash
-AETHER_MOCK_MODE=true npm test    # unit + RLS property tests
-AETHER_MOCK_MODE=true npm run build
+npm test          # unit + RLS property tests
+npm run build     # type-checked production build
 ```
 
-For production smoke test, set all vars from `.env.example` with `AETHER_MOCK_MODE=false` and confirm build fails if any are missing.
+For a production smoke test, set all vars from `.env.example` and confirm the build fails clearly if any required var is missing.

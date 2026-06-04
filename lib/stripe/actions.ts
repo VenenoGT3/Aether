@@ -7,7 +7,6 @@ import {
   createEscrowPaymentIntent,
   releaseEscrowPayment,
 } from "./connect";
-import { isMockMode } from "@/lib/env";
 import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 import { WITHDRAWAL_MIN, WITHDRAWAL_FEE_PCT } from "@/lib/withdrawal";
 import {
@@ -53,14 +52,9 @@ export async function startStripeOnboardingAction(
     role = input.data.role;
     origin = input.data.origin;
 
-    const isMock = isMockMode;
-
-    let userId = "mock-user-id";
-    if (!isMock) {
-      const user = await getServerUser();
-      if (!user) throw new UnauthorizedError();
-      userId = user.user_id;
-    }
+    const user = await getServerUser();
+    if (!user) throw new UnauthorizedError();
+    const userId = user.user_id;
 
     const { url, accountId } = await createStripeExpressAccount(
       userId,
@@ -68,16 +62,14 @@ export async function startStripeOnboardingAction(
       origin
     );
 
-    if (!isMock) {
-      const supabase = await createClient();
-      await supabase
-        .from("profiles")
-        .update({
-          stripe_connect_id: accountId,
-          stripe_onboarding_completed: false,
-        })
-        .eq(PROFILE_PK_COLUMN, userId);
-    }
+    const supabase = await createClient();
+    await supabase
+      .from("profiles")
+      .update({
+        stripe_connect_id: accountId,
+        stripe_onboarding_completed: false,
+      })
+      .eq(PROFILE_PK_COLUMN, userId);
 
     return { success: true, url, accountId };
   } catch (error) {
@@ -93,17 +85,9 @@ export async function fundEscrowAction(
   amount: number
 ) {
   try {
-    // Amount is mode-agnostic; validate it always. (Mock ids aren't UUIDs, so
-    // the UUID check runs only in real mode, after the mock early-return.)
     const amountCheck = safeParse(moneyAmountField, amount);
     if (!amountCheck.ok) return { success: false, error: amountCheck.error };
     amount = amountCheck.data;
-
-    const isMock = isMockMode;
-
-    if (isMock) {
-      return { success: true, isMock: true };
-    }
 
     const idCheck = safeParse(uuidField, participationId);
     if (!idCheck.ok) return { success: false, error: idCheck.error };
@@ -146,7 +130,6 @@ export async function fundEscrowAction(
       clientSecret,
       paymentIntentId,
       transactionId: transaction.id,
-      isMock: false,
     };
   } catch (error) {
     if (error instanceof AuthorizationError) {
@@ -166,12 +149,6 @@ export async function fundEscrowAction(
  */
 export async function fundCampaignPoolAction(campaignId: string) {
   try {
-    if (isMockMode) {
-      // Mock: no real charge; the client simulates activation. (Mock ids are not
-      // UUIDs, so the UUID check below runs in real mode only.)
-      return { success: true, isMock: true as const };
-    }
-
     const id = safeParse(uuidField, campaignId);
     if (!id.ok) return { success: false, error: id.error };
     campaignId = id.data;
@@ -220,7 +197,6 @@ export async function fundCampaignPoolAction(campaignId: string) {
       clientSecret,
       paymentIntentId,
       amount,
-      isMock: false as const,
     };
   } catch (error) {
     if (error instanceof AuthorizationError) {
@@ -235,12 +211,6 @@ export async function fundCampaignPoolAction(campaignId: string) {
  */
 export async function releaseEscrowAction(participationId: string) {
   try {
-    const isMock = isMockMode;
-
-    if (isMock) {
-      return { success: true, isMock: true };
-    }
-
     const id = safeParse(uuidField, participationId);
     if (!id.ok) return { success: false, error: id.error };
     participationId = id.data;
@@ -309,7 +279,7 @@ export async function releaseEscrowAction(participationId: string) {
       .update({ status: "completed" })
       .eq("id", participation.campaign_id);
 
-    return { success: true, transferId, isMock: false };
+    return { success: true, transferId };
   } catch (error) {
     if (error instanceof AuthorizationError) {
       return { success: false, error: error.message };
@@ -326,12 +296,6 @@ export async function withdrawFundsAction(amount: number) {
     const parsed = safeParse(moneyAmountField, amount);
     if (!parsed.ok) return { success: false, error: parsed.error };
     amount = parsed.data;
-
-    const isMock = isMockMode;
-
-    if (isMock) {
-      return { success: true, isMock: true };
-    }
 
     const user = await getServerUser();
     if (!user || user.role !== "influencer") {
@@ -354,7 +318,7 @@ export async function withdrawFundsAction(amount: number) {
 
     if (txError) throw txError;
 
-    return { success: true, isMock: false };
+    return { success: true };
   } catch (error) {
     return toActionError(error, { action: "withdrawFunds" });
   }
@@ -385,11 +349,6 @@ function isUnknownTransferOutcome(err: unknown): boolean {
 }
 
 export async function requestWithdrawalAction() {
-  // Mock mode is handled client-side (balances live in localStorage).
-  if (isMockMode) {
-    return { success: true, isMock: true } as const;
-  }
-
   const traceId = randomUUID();
   // Server action (no proxy/guard): build a request-scoped logger ourselves and
   // measure end-to-end latency from action entry. requestId == traceId so this
@@ -479,7 +438,6 @@ export async function requestWithdrawalAction() {
         endRequest(log, { statusCode: 202, startTime, msg: "withdrawal.pending" });
         return {
           success: true,
-          isMock: false,
           gross,
           net,
           fee,
@@ -488,7 +446,7 @@ export async function requestWithdrawalAction() {
       }
       apiLog("info", "withdrawal.paid", { traceId, payoutId, gross, fee, net });
       endRequest(log, { statusCode: 200, startTime, msg: "withdrawal.completed" });
-      return { success: true, isMock: false, gross, net, fee };
+      return { success: true, gross, net, fee };
     } catch (transferErr) {
       if (isUnknownTransferOutcome(transferErr)) {
         // Unknown: the transfer may have succeeded. Leave the payout claimed +
@@ -538,18 +496,6 @@ export async function requestWithdrawalAction() {
  */
 export async function getTransactionLedgerAction() {
   try {
-    const isMock = isMockMode;
-
-    if (isMock) {
-      return {
-        success: true,
-        transactions: [],
-        availableBalance: 5800,
-        pendingBalance: 4500,
-        isMock: true,
-      };
-    }
-
     const user = await getServerUser();
     if (!user) throw new UnauthorizedError();
 
@@ -622,7 +568,6 @@ export async function getTransactionLedgerAction() {
       transactions,
       availableBalance,
       pendingBalance,
-      isMock: false,
     };
   } catch (error) {
     // Capture full detail internally; return a safe message. (Keep this action's

@@ -18,7 +18,7 @@ Follow this checklist to manually run the E2E campaign flow in the development e
 - [ ] **Onboarding & Stripe Connect Linkage**
   - Navigate to `/business/onboarding`.
   - Verify that the Stripe Connect button triggers the express onboarding redirect.
-  - Complete the onboarding (redirects to callback with status `success` and saves mock stripe ID `acct_mockstripe123`).
+  - Complete the onboarding (redirects to the callback with status `success` and saves the connected Stripe account id).
 - [ ] **Create Campaign Wizard**
   - Navigate to `/business/campaigns/new`.
   - Fill out Step 1 (Title, Description, target Niches e.g., Tech/Design).
@@ -54,7 +54,7 @@ Follow this checklist to manually run the E2E campaign flow in the development e
   - Switch to **Influencer** mode.
   - Go to `/campaigns/[id]`.
   - Verify the status bar shows **Awaiting Draft**.
-  - Enter a mock post URL (e.g., `https://instagram.com/p/mockpost`) and caption.
+  - Enter a sample post URL (e.g., `https://instagram.com/p/samplepost`) and caption.
   - Click **Submit Draft**.
   - Status updates to **submitted**.
 - [ ] **Brand Review & Annotation Pins**
@@ -228,7 +228,7 @@ SELECT email FROM public.users;
 -- 2. Verify post self-approval trigger protection
 -- Attempt to self-approve a post as an influencer:
 BEGIN;
-SET LOCAL request.jwt.claims = '{"sub": "mock-influencer-uuid"}';
+SET LOCAL request.jwt.claims = '{"sub": "<influencer-uuid>"}';
 UPDATE public.posts 
 SET approved_at = now() 
 WHERE participation_id = 'some-participation-id';
@@ -238,7 +238,7 @@ ROLLBACK;
 
 -- 3. Verify transaction ownership rules
 -- Attempt to read all transaction histories:
-SET LOCAL request.jwt.claims = '{"sub": "mock-influencer-uuid"}';
+SET LOCAL request.jwt.claims = '{"sub": "<influencer-uuid>"}';
 SELECT count(*) FROM public.transactions;
 -- Expected outcome: Returns only transactions belonging to the influencer's applications/withdrawals.
 ```

@@ -9,9 +9,6 @@
 
 import { defaultFraudConfig, type FraudConfig } from "./fraud";
 
-export const isMockMode =
-  (process.env.AETHER_MOCK_MODE ?? "").trim().toLowerCase() === "true";
-
 /** Redis connection string for BullMQ (e.g. redis://localhost:6379). */
 export function getRedisUrl(): string {
   return process.env.REDIS_URL?.trim() || "redis://localhost:6379";
@@ -20,7 +17,6 @@ export function getRedisUrl(): string {
 export function getSupabaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   if (url) return url;
-  if (isMockMode) return "https://placeholder-url.supabase.co";
   throw new Error("[worker] NEXT_PUBLIC_SUPABASE_URL is required.");
 }
 
@@ -28,61 +24,34 @@ export function getSupabaseUrl(): string {
 export function getServiceRoleKey(): string {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (key) return key;
-  if (isMockMode) return "placeholder-service-role-key";
   throw new Error(
     "[worker] SUPABASE_SERVICE_ROLE_KEY is required to run the view-sync worker."
   );
 }
 
-/** Ayrshare key for live view tracking. Absent => simulated views (mock provider). */
+/**
+ * Ayrshare key for live view tracking. REQUIRED in production — the worker is
+ * the system of record for billable views, and it never accrues earnings or
+ * pays creators on unverified views.
+ */
 export function getAyrshareApiKey(): string | undefined {
   return process.env.AYRSHARE_API_KEY?.trim() || undefined;
 }
 
-/**
- * Use the real Ayrshare provider only when we have a key AND we're not in mock
- * mode. This is the single source of truth for provider selection — flip it on
- * simply by setting AYRSHARE_API_KEY (with AETHER_MOCK_MODE unset/false).
- */
-export function isAyrshareEnabled(): boolean {
-  return !isMockMode && !!getAyrshareApiKey();
-}
-
-/** Inverse of isAyrshareEnabled(): simulated views when mock mode or no key. */
-export function shouldSimulateViews(): boolean {
-  return !isAyrshareEnabled();
+/** True when live view tracking (Ayrshare) is configured. */
+export function isAyrshareConfigured(): boolean {
+  return !!getAyrshareApiKey();
 }
 
 /**
- * Escape hatch (testing only): allow real-mode earnings/payouts even when views
- * are simulated — e.g. exercising real Stripe *test* transfers on staging
- * without Ayrshare. NEVER enable this in production. Defaults to false.
+ * Payout/earnings safety guard (defense-in-depth). Real money must NEVER move
+ * without a live view source. validateWorkerEnv() already hard-fails at startup
+ * when AYRSHARE_API_KEY is missing; this additionally halts the earnings-accrual
+ * and payout paths if the key is ever removed at runtime, so nothing can accrue
+ * or pay on unverified views.
  */
-export function allowSimulatedPayoutsInRealMode(): boolean {
-  return (
-    (process.env.ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE ?? "").trim().toLowerCase() ===
-    "true"
-  );
-}
-
-/**
- * The dangerous state: NOT mock mode, but views are simulated (no AYRSHARE_API_KEY).
- * Accruing/paying here would move real money for fake views.
- *
- * Note: mock mode is safe (simulated views are expected and Stripe transfers are
- * mocked), so this is deliberately false in mock mode.
- */
-export function isRealModeSimulatingViews(): boolean {
-  return !isMockMode && shouldSimulateViews();
-}
-
-/**
- * True when real earnings accrual / payouts must be BLOCKED: the dangerous state
- * above, and the testing override is not set. This is the single guard the
- * worker consults before any real money movement.
- */
-export function simulatedEarningsBlocked(): boolean {
-  return isRealModeSimulatingViews() && !allowSimulatedPayoutsInRealMode();
+export function payoutSafetyBlocked(): boolean {
+  return !isAyrshareConfigured();
 }
 
 export interface EnvValidation {
@@ -94,20 +63,13 @@ export interface EnvValidation {
 
 /**
  * Validate the worker's environment at startup (fail fast with clear messages
- * instead of a deep stack trace mid-job). Mock mode needs nothing real; real
- * mode requires Supabase URL + service-role key, and surfaces warnings for
- * missing Redis / Ayrshare / Stripe so misconfiguration is obvious in the logs.
+ * instead of a deep stack trace mid-job). The worker requires Supabase URL +
+ * service-role key and a live view source (Ayrshare), and surfaces warnings for
+ * missing Redis / Stripe so misconfiguration is obvious in the logs.
  */
 export function validateWorkerEnv(): EnvValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
-
-  if (isMockMode) {
-    warnings.push(
-      "AETHER_MOCK_MODE=true — placeholder Supabase + simulated views; no real money moves. Do NOT use in production."
-    );
-    return { errors, warnings };
-  }
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) {
     errors.push("NEXT_PUBLIC_SUPABASE_URL is required (your Supabase project URL).");
@@ -115,21 +77,19 @@ export function validateWorkerEnv(): EnvValidation {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     errors.push("SUPABASE_SERVICE_ROLE_KEY is required (service-role key; bypasses RLS).");
   }
+  if (!getAyrshareApiKey()) {
+    errors.push(
+      "AYRSHARE_API_KEY is required for live view tracking. The worker refuses to accrue earnings or pay creators on unverified views — set a valid Ayrshare key."
+    );
+  }
   if (!process.env.REDIS_URL?.trim()) {
     warnings.push(
       "REDIS_URL not set — defaulting to redis://localhost:6379. Set a managed Redis URL in production."
     );
   }
-  if (!getAyrshareApiKey()) {
-    warnings.push(
-      allowSimulatedPayoutsInRealMode()
-        ? "AYRSHARE_API_KEY not set + ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true — real money may move on SIMULATED views (testing only)."
-        : "AYRSHARE_API_KEY not set — views are simulated; earnings accrual + payouts are BLOCKED by the safety guard."
-    );
-  }
   if (!process.env.STRIPE_SECRET_KEY?.trim()) {
     warnings.push(
-      "STRIPE_SECRET_KEY not set — live creator payouts will fail (mock/test transfers still work)."
+      "STRIPE_SECRET_KEY not set — creator payouts and withdrawal reconciliation will fail until it is configured."
     );
   }
 
@@ -223,7 +183,7 @@ export function getHeartbeatIntervalMinutes(): number {
 
 /**
  * Views-provider errors within a single heartbeat window at or above this count
- * fire a [ALERT] (signals the provider — Ayrshare/simulated — is degraded).
+ * fire a [ALERT] (signals the Ayrshare provider is degraded).
  */
 export function getProviderErrorAlertThreshold(): number {
   const raw = Number(process.env.WORKER_PROVIDER_ERROR_ALERT_THRESHOLD);

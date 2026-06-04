@@ -4,28 +4,32 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { getMockUser, getMockRole } from "@/lib/supabase/client";
+import { getClientProfile } from "@/lib/supabase/client";
 import { Profile } from "@/types";
 import { LayoutDashboard, Compass, Layers, Film } from "lucide-react";
 
 export function MobileTabBar() {
   const pathname = usePathname();
   const [user, setUser] = useState<Profile | null>(null);
-  const [role, setRole] = useState<"business" | "influencer">("business");
+  const role: "business" | "influencer" = user?.role === "business" ? "business" : "influencer";
 
   useEffect(() => {
-    // Initial load
-    setUser(getMockUser());
-    setRole(getMockRole());
-
-    const handleRoleChange = () => {
-      const updatedUser = getMockUser();
-      setUser(updatedUser);
-      setRole(updatedUser.role);
+    let active = true;
+    const refresh = () => {
+      getClientProfile()
+        .then((p) => {
+          if (active) setUser(p);
+        })
+        .catch(() => {
+          if (active) setUser(null);
+        });
     };
-
-    window.addEventListener("role-change", handleRoleChange);
-    return () => window.removeEventListener("role-change", handleRoleChange);
+    refresh();
+    window.addEventListener("role-change", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("role-change", refresh);
+    };
   }, []);
 
   const isAuthPage = pathname?.startsWith("/auth");

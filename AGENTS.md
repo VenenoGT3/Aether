@@ -43,4 +43,4 @@ We use Tailwind v4's CSS-first theme configuration.
 
 ## 5. Supabase Auth and Client Setup
 *   **SSR Context**: When writing Server Components, use `@supabase/ssr` with Next.js headers / cookies context.
-*   **Stubs**: Stubs inside `lib/supabase/` act as active mock mechanisms during development. When updating database calls, always verify schema interfaces inside `types/`.
+*   **Real services only**: `lib/supabase/` talks to a real Supabase project — there is no mock/demo fallback. When updating database calls, always verify schema interfaces inside `types/`.

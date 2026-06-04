@@ -13,9 +13,9 @@ Aether splits secrets by **runtime** so the Supabase service role never ships in
 | **Browser** | `NEXT_PUBLIC_*` only | Any secret key |
 | **Vercel (Next.js)** | Stripe server key, cron secret, optional AI/email keys | Service role (default) |
 | **Supabase Edge Functions** | Service role (auto), Stripe webhook secrets | — |
-| **Worker** (standalone Node process) | Service role, Stripe server key, Redis URL, optional Ayrshare key | Public/browser exposure — it is a backend job, not internet-facing |
+| **Worker** (standalone Node process) | Service role, Stripe server key, Redis URL, Ayrshare key | Public/browser exposure — it is a backend job, not internet-facing |
 
-Mock mode (`AETHER_MOCK_MODE=true`) skips validation and uses placeholders.
+Production-only: there is no mock/demo fallback. Missing required config fails clearly at build/startup.
 
 ---
 
@@ -27,7 +27,6 @@ Set in **Project → Settings → Environment Variables**. Mark sensitive values
 
 | Variable | Sensitive | Scope |
 |----------|-----------|--------|
-| `AETHER_MOCK_MODE` | No | `false` in Production |
 | `STRIPE_WEBHOOK_HANDLER` | No | `supabase` (default) |
 | `NEXT_PUBLIC_SUPABASE_URL` | No | Production, Preview |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Production, Preview |
@@ -97,16 +96,16 @@ The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) r
 |--------|--------------------------|
 | `SUPABASE_SERVICE_ROLE_KEY` | Writes `view_snapshots` / `earnings` and runs payout RPCs, bypassing RLS (a background job has no user JWT) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `STRIPE_SECRET_KEY` | Creator transfers for real (non-mock) payouts |
+| `STRIPE_SECRET_KEY` | Creator transfers for payouts |
 | `REDIS_URL` | BullMQ queues + scheduler |
-| `AYRSHARE_API_KEY` (optional) | Real view tracking; absent ⇒ simulated views |
+| `AYRSHARE_API_KEY` | **Required** — live view tracking; the worker hard-fails at startup without it |
 
 **Rules:**
 
 1. Store `SUPABASE_SERVICE_ROLE_KEY` **only where the worker runs** (its host's secret store). Never put it in the Next.js / Vercel app runtime, never prefix it `NEXT_PUBLIC_*`, and never let it reach the browser bundle.
 2. The worker must **not** be deployed into the Vercel app runtime. Run it on a host that can hold the service role securely (a small VM, container, Railway / Render / Fly, etc.).
 3. `worker/env.ts` deliberately avoids importing the app's `server-only` modules (`lib/env.server.ts`, `lib/supabase/admin.ts`) so the runtime boundary stays explicit.
-4. Even in mock mode the worker still talks to a **real** Supabase project (mock only stubs views + Stripe transfers), so it still needs the service role and URL there.
+4. The worker talks to a **real** Supabase project, so it always needs the service role and URL there.
 
 ---
 
@@ -119,10 +118,9 @@ The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) r
 
 Rules:
 
-1. `AETHER_MOCK_MODE` must be exactly `true` to enable mock mode (not inferred from missing keys).
-2. `AETHER_MOCK_MODE=true` and `STRIPE_WEBHOOK_HANDLER=vercel` are **rejected** when `VERCEL_ENV=production` (Vercel Production deploys only; local `next build` with mock mode still works).
-3. When mock is off, all vars from `getRequiredEnvVarNames()` must be set.
-4. `STRIPE_WEBHOOK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are required on Vercel only if `STRIPE_WEBHOOK_HANDLER=vercel` (local legacy).
+1. All vars from `getRequiredEnvVarNames()` must be set — there is no mock/demo fallback.
+2. `STRIPE_WEBHOOK_HANDLER=vercel` is **rejected** when `VERCEL_ENV=production` (Vercel Production deploys only).
+3. `STRIPE_WEBHOOK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are required on Vercel only if `STRIPE_WEBHOOK_HANDLER=vercel` (local legacy).
 
 ---
 

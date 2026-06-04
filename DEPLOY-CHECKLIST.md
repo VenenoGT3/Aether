@@ -18,7 +18,6 @@ Run through this before every production deploy. Companion to
 
 - [ ] `.env.example` reviewed; all new vars documented
 - [ ] Production env set in **Vercel** (Production + Preview) — see `PRODUCTION-README.md` §1
-  - [ ] `AETHER_MOCK_MODE=false` (Production) — build refuses `true`
   - [ ] `STRIPE_WEBHOOK_HANDLER=supabase`
   - [ ] `NEXT_PUBLIC_APP_URL` = canonical production origin
 - [ ] Worker host env set (`REDIS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `AYRSHARE_API_KEY`)
@@ -43,7 +42,7 @@ Run through this before every production deploy. Companion to
 
 ## 5. Performance / load
 
-- [ ] Load tests run against staging (mock or seeded): `npm run loadtest:health|discovery|clips`
+- [ ] Load tests run against seeded staging: `npm run loadtest:health|discovery|clips`
 - [ ] Discovery 10x spike absorbed (cache + backpressure); p95 within target; **zero 5xx**
 - [ ] Clip-submit sheds gracefully (429/503) under burst — no server errors
 

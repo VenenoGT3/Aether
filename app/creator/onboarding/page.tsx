@@ -640,7 +640,7 @@ export default function InfluencerOnboarding() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">{t("Showcase past work")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("Add links or mock uploads of integrations brands will see.")}</p>
+                  <p className="text-xs text-muted-foreground">{t("Add links or sample uploads of integrations brands will see.")}</p>
                 </div>
               </div>
 

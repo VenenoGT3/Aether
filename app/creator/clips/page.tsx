@@ -17,8 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
-import { isMockMode, supabase, getClientProfile } from "@/lib/supabase/client";
-import { getCampaignsAction } from "@/lib/supabase/campaigns";
+import { supabase, getClientProfile } from "@/lib/supabase/client";
 import {
   useCreatorClips,
   useCreatorEarnings,
@@ -65,15 +64,6 @@ export default function CreatorClipsPage() {
     campaigns.find((c) => c.id === selectedCampaign)?.cpm_rate ?? null;
 
   const loadCampaigns = useCallback(async () => {
-    if (isMockMode) {
-      const res = await getCampaignsAction();
-      const perf = (res.campaigns || []).filter(
-        (c: { campaign_type?: string }) => c.campaign_type === "performance"
-      );
-      setCampaigns(perf as PerfCampaign[]);
-      if (perf.length > 0) setSelectedCampaign((perf[0] as PerfCampaign).id);
-      return;
-    }
     const { data } = await supabase
       .from("campaigns")
       .select("id, title, cpm_rate")
@@ -125,8 +115,7 @@ export default function CreatorClipsPage() {
       return;
     }
     setSubmitting(true);
-    const campaignTitle = campaigns.find((c) => c.id === selectedCampaign)?.title;
-    const res = await submitClip(selectedCampaign, postUrl.trim(), campaignTitle);
+    const res = await submitClip(selectedCampaign, postUrl.trim());
     setSubmitting(false);
     if (res.ok) {
       toast.success(t("Clip submitted!"), {

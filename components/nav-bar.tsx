@@ -6,13 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LanguageToggle } from "./language-toggle";
 import { useTranslation } from "@/lib/translations";
 import { NotificationCenter } from "./notification-center";
-import { motion } from "framer-motion";
-import { 
-  getMockUser, 
-  setMockUserRole, 
-  getMockRole, 
-  signOutClient 
-} from "@/lib/supabase/client";
+import { getClientProfile, signOutClient } from "@/lib/supabase/client";
 import { Profile } from "@/types";
 import {
   DropdownMenu,
@@ -25,42 +19,34 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Sparkles, BarChart3, Users, Briefcase, DollarSign, LogOut, Shield, Compass } from "lucide-react";
+import { Sparkles, BarChart3, LogOut } from "lucide-react";
 
 export function NavBar() {
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<Profile | null>(null);
-  const [role, setRole] = useState<"business" | "influencer">("business");
+  const role: "business" | "influencer" = user?.role === "business" ? "business" : "influencer";
 
   useEffect(() => {
-    // Initial fetch
-    setUser(getMockUser());
-    setRole(getMockRole());
-
-    // Listen to custom role-change event
-    const handleRoleChange = () => {
-      const updatedUser = getMockUser();
-      setUser(updatedUser);
-      setRole(updatedUser.role);
+    let active = true;
+    const refresh = () => {
+      getClientProfile()
+        .then((p) => {
+          if (active) setUser(p);
+        })
+        .catch(() => {
+          if (active) setUser(null);
+        });
     };
-
-    window.addEventListener("role-change", handleRoleChange);
-    return () => window.removeEventListener("role-change", handleRoleChange);
+    refresh();
+    // Re-fetch when auth state changes (e.g. sign out).
+    window.addEventListener("role-change", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("role-change", refresh);
+    };
   }, []);
-
-  const handleRoleToggle = (newRole: "business" | "influencer") => {
-    if (newRole === role) return;
-    setMockUserRole(newRole);
-    setRole(newRole);
-    toast.success(`Switched role to ${newRole === "business" ? "Business / Brand" : "Influencer"}`, {
-      description: `Viewing ${newRole === "business" ? "brand campaign manager" : "influencer work center"}.`,
-    });
-    
-    // Redirect to the appropriate dashboard
-    router.push(`/${newRole === "influencer" ? "creator" : "business"}/dashboard`);
-  };
 
   const isAuthPage = pathname?.startsWith("/auth");
 
@@ -154,44 +140,6 @@ export function NavBar() {
         <div className="flex items-center gap-2 md:gap-3">
           {user ? (
             <>
-              {/* Role Switcher Pill Selector (Apple iOS style) */}
-              <div className="bg-secondary/60 p-[3px] rounded-full flex items-center border border-border/20 text-xs font-semibold select-none relative">
-                <button
-                  onClick={() => handleRoleToggle("business")}
-                  className={`px-3 py-1.5 rounded-full transition-all cursor-pointer relative z-10 ${
-                    role === "business"
-                      ? "text-foreground font-semibold"
-                      : "text-muted-foreground/80 hover:text-foreground"
-                  }`}
-                >
-                  {t("Brand")}
-                  {role === "business" && (
-                    <motion.div
-                      layoutId="activeRoleTab"
-                      className="absolute inset-0 bg-background rounded-full shadow-sm z-0 border border-border/10"
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                    />
-                  )}
-                </button>
-                <button
-                  onClick={() => handleRoleToggle("influencer")}
-                  className={`px-3 py-1.5 rounded-full transition-all cursor-pointer relative z-10 ${
-                    role === "influencer"
-                      ? "text-foreground font-semibold"
-                      : "text-muted-foreground/80 hover:text-foreground"
-                  }`}
-                >
-                  {t("Creator")}
-                  {role === "influencer" && (
-                    <motion.div
-                      layoutId="activeRoleTab"
-                      className="absolute inset-0 bg-background rounded-full shadow-sm z-0 border border-border/10"
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                    />
-                  )}
-                </button>
-              </div>
-
               {/* Language Selector */}
               <LanguageToggle />
 
@@ -221,13 +169,9 @@ export function NavBar() {
                     </div>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator className="my-1 border-border/20" />
-                  <DropdownMenuItem className="rounded-lg py-2 cursor-pointer gap-2" onClick={() => router.push(`/${role}/dashboard`)}>
+                  <DropdownMenuItem className="rounded-lg py-2 cursor-pointer gap-2" onClick={() => router.push(`/${role === "influencer" ? "creator" : "business"}/dashboard`)}>
                     <BarChart3 size={14} />
                     <span>{t("My Dashboard")}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="rounded-lg py-2 cursor-pointer gap-2" onClick={() => handleRoleToggle(role === "business" ? "influencer" : "business")}>
-                    <Shield size={14} />
-                    <span>{t("Switch Workspace")}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="my-1 border-border/20" />
                   <DropdownMenuItem

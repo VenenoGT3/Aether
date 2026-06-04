@@ -3,45 +3,38 @@ import { verifyCronAuth, verifyStripeWebhookSignature } from "@/lib/campaign-lif
 
 describe("webhook and cron hardening", () => {
   describe("verifyStripeWebhookSignature", () => {
-    it("allows mock mode without signature", () => {
-      expect(verifyStripeWebhookSignature(false, false, true)).toEqual({
-        valid: true,
-      });
-    });
-
-    it("requires signature in production", () => {
-      const result = verifyStripeWebhookSignature(false, false, false);
+    it("requires both a configured secret and a signature", () => {
+      const result = verifyStripeWebhookSignature(false, false);
       expect(result.valid).toBe(false);
       expect(result.error).toContain("signature");
     });
 
-    it("accepts valid production setup", () => {
-      expect(verifyStripeWebhookSignature(true, true, false)).toEqual({
+    it("rejects when the secret is configured but the signature is missing", () => {
+      const result = verifyStripeWebhookSignature(true, false);
+      expect(result.valid).toBe(false);
+    });
+
+    it("accepts a valid production setup (secret + signature present)", () => {
+      expect(verifyStripeWebhookSignature(true, true)).toEqual({
         valid: true,
       });
     });
   });
 
   describe("verifyCronAuth", () => {
-    it("allows mock mode without secret", () => {
-      expect(verifyCronAuth(null, undefined, true)).toEqual({
-        authorized: true,
-      });
-    });
-
-    it("rejects production without CRON_SECRET configured", () => {
-      const result = verifyCronAuth("Bearer wrong", undefined, false);
+    it("rejects when CRON_SECRET is not configured", () => {
+      const result = verifyCronAuth("Bearer wrong", undefined);
       expect(result.authorized).toBe(false);
       expect(result.error).toContain("CRON_SECRET");
     });
 
-    it("rejects wrong bearer token", () => {
-      const result = verifyCronAuth("Bearer wrong", "secret123", false);
+    it("rejects a wrong bearer token", () => {
+      const result = verifyCronAuth("Bearer wrong", "secret123");
       expect(result.authorized).toBe(false);
     });
 
-    it("accepts correct bearer token", () => {
-      expect(verifyCronAuth("Bearer secret123", "secret123", false)).toEqual({
+    it("accepts the correct bearer token", () => {
+      expect(verifyCronAuth("Bearer secret123", "secret123")).toEqual({
         authorized: true,
       });
     });

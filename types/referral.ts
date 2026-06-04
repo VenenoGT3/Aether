@@ -43,7 +43,6 @@ export interface ReferralOverview {
   total_earned: number;
   pending_count: number;
   referrals: ReferredUser[];
-  isMock?: boolean;
 }
 
 export interface ChallengeMilestoneStatus {
@@ -64,5 +63,4 @@ export interface WeeklyChallenge {
   clips_to_next: number;
   total_claimable: number;
   milestones: ChallengeMilestoneStatus[];
-  isMock?: boolean;
 }

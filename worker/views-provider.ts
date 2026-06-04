@@ -1,8 +1,7 @@
 import {
   getAyrshareApiKey,
   getAyrshareMinIntervalMs,
-  isAyrshareEnabled,
-  isMockMode,
+  isAyrshareConfigured,
 } from "./env";
 import { log, errMessage } from "./logger";
 import { recordProviderError } from "./metrics";
@@ -12,49 +11,23 @@ import type { ClipRow, ViewData } from "./types";
 /**
  * View-provider abstraction.
  *
- * CURRENT STATE: the SimulatedViewsProvider is the active default. It produces
- * believable growing view counts so the full views -> snapshot -> earnings
- * pipeline runs without any external API (mock mode, or no AYRSHARE_API_KEY).
+ * Aether is a performance platform: every billable view must come from a real,
+ * verifiable source. The single provider is Ayrshare (live analytics), which
+ * requires AYRSHARE_API_KEY. The worker hard-fails at startup without it
+ * (see validateWorkerEnv) and the payout safety guard refuses to move money if
+ * the key is ever removed at runtime — so earnings never accrue on unverified
+ * views.
  *
- * The AyrshareViewsProvider is REAL but UNVERIFIED — it is wired to Ayrshare's
- * analytics endpoint and only activates when isAyrshareEnabled() is true
- * (AYRSHARE_API_KEY set + AETHER_MOCK_MODE off). Switching to real tracking is
- * intended to be a single env change; no worker code changes required.
- *
- * Account linking note: real Ayrshare scopes analytics to a creator via a
+ * Account linking note: Ayrshare scopes analytics to a creator via a
  * "Profile-Key" (stored on profiles.ayrshare_profile_key) and a per-post id
- * (stored on clips.external_post_id / clips.ayrshare_ref). Those are captured by
- * the account-linking flow (placeholder today); the AyrshareViewsProvider reads
- * clip.external_post_id and will forward the creator's profile key once linking
- * is implemented.
+ * (stored on clips.external_post_id / clips.ayrshare_ref). The provider reads
+ * clip.external_post_id and forwards the creator's profile key once the
+ * account-linking flow captures it.
  */
 
 export interface ViewsProvider {
-  readonly name: "ayrshare" | "simulated";
+  readonly name: "ayrshare";
   fetchViews(clip: ClipRow): Promise<ViewData>;
-}
-
-/** Simulate organic growth from the clip's current view count. */
-export function simulateViewGrowth(currentViews: number): ViewData {
-  const base = currentViews > 0 ? currentViews : 2_000 + Math.floor(Math.random() * 8_000);
-  const growthPct = 0.05 + Math.random() * 0.15; // +5%..+20%
-  const flat = 300 + Math.floor(Math.random() * 1_500);
-  const views = Math.round(base * (1 + growthPct) + flat);
-
-  return {
-    views,
-    likes: Math.round(views * 0.08),
-    comments: Math.round(views * 0.01),
-    shares: Math.round(views * 0.005),
-    source: "simulated",
-  };
-}
-
-class SimulatedViewsProvider implements ViewsProvider {
-  readonly name = "simulated" as const;
-  async fetchViews(clip: ClipRow): Promise<ViewData> {
-    return simulateViewGrowth(clip.current_views);
-  }
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -76,8 +49,12 @@ class AyrshareViewsProvider implements ViewsProvider {
 
   async fetchViews(clip: ClipRow): Promise<ViewData> {
     const apiKey = getAyrshareApiKey();
-    // Should not happen (provider selection guards this), but stay safe.
-    if (!apiKey) return simulateViewGrowth(clip.current_views);
+    // Provider selection guards this; stay defensive — never fabricate views.
+    if (!apiKey) {
+      throw new Error(
+        "[worker] AYRSHARE_API_KEY is required for live view tracking."
+      );
+    }
 
     const lastKnown: ViewData = {
       views: clip.current_views,
@@ -152,26 +129,24 @@ function parseAyrshare(json: unknown, platform: string): ViewData {
 let cachedProvider: ViewsProvider | null = null;
 
 /**
- * Returns the active views provider, logging the selection once so it's obvious
- * in the worker logs whether earnings are based on real or simulated views.
+ * Returns the active views provider (Ayrshare), logging the selection once. Throws
+ * a clear error if AYRSHARE_API_KEY is missing — the worker must never run the
+ * earnings pipeline without a verifiable view source.
  */
 export function getViewsProvider(): ViewsProvider {
   if (cachedProvider) return cachedProvider;
 
-  if (isAyrshareEnabled()) {
-    cachedProvider = new AyrshareViewsProvider();
-    log.info("views.provider", {
-      provider: "ayrshare",
-      note: "REAL — earnings based on live views",
-    });
-  } else {
-    cachedProvider = new SimulatedViewsProvider();
-    log.info("views.provider", {
-      provider: "simulated",
-      reason: isMockMode ? "AETHER_MOCK_MODE=true" : "no AYRSHARE_API_KEY",
-      note: "earnings based on simulated growth, NOT real views",
-    });
+  if (!isAyrshareConfigured()) {
+    throw new Error(
+      "[worker] AYRSHARE_API_KEY is required for live view tracking — refusing to run the earnings pipeline on unverified views."
+    );
   }
+
+  cachedProvider = new AyrshareViewsProvider();
+  log.info("views.provider", {
+    provider: "ayrshare",
+    note: "REAL — earnings based on live views",
+  });
   return cachedProvider;
 }
 

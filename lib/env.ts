@@ -1,19 +1,15 @@
 /**
  * Centralized environment configuration for Aether.
  *
- * Mock mode must be explicit (`AETHER_MOCK_MODE=true`). When off, missing
- * required vars fail at build and server startup.
+ * Production-only: every integration (Supabase, Stripe, Redis, Ayrshare) must be
+ * configured. Missing required vars fail clearly at build/startup — there is no
+ * mock/demo fallback.
  *
  * Secret placement:
  * - Vercel: app secrets only (no Supabase service role by default)
  * - Supabase Edge Functions: service role + Stripe webhook secrets
  * See docs/SECRETS.md and README § Secret handling.
  */
-
-const MOCK_FLAG = process.env.AETHER_MOCK_MODE?.trim().toLowerCase();
-
-/** True only when `AETHER_MOCK_MODE=true` (case-insensitive). */
-export const isMockMode = MOCK_FLAG === "true";
 
 /** True when `NODE_ENV === "production"`. */
 export const isProduction = process.env.NODE_ENV === "production";
@@ -33,7 +29,7 @@ export function getStripeWebhookHandler(): StripeWebhookHandler {
   return raw === "vercel" ? "vercel" : "supabase";
 }
 
-/** Required on Vercel / Next.js when mock mode is off (always). */
+/** Required on Vercel / Next.js in production (always). */
 export const REQUIRED_APP_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -73,17 +69,9 @@ export function isVercelProductionDeploy(): boolean {
 
 /**
  * Blocks unsafe configuration on Vercel Production only.
- * Local `next build` with AETHER_MOCK_MODE=true remains valid for CI/demo builds.
  */
 export function validateProductionSafety(): void {
   if (!isVercelProductionDeploy()) return;
-
-  if (isMockMode) {
-    throw new Error(
-      "[Aether] AETHER_MOCK_MODE=true is forbidden on Vercel Production. " +
-        "Set AETHER_MOCK_MODE=false in Project → Environment Variables."
-    );
-  }
 
   if (getStripeWebhookHandler() === "vercel") {
     throw new Error(
@@ -95,20 +83,18 @@ export function validateProductionSafety(): void {
 }
 
 /**
- * Throws if required variables are missing. No-op in mock mode.
+ * Throws if required variables are missing.
  * STRIPE_WEBHOOK_SECRET and service role are required only for STRIPE_WEBHOOK_HANDLER=vercel.
  */
 export function validateEnv(): void {
   validateProductionSafety();
-  if (isMockMode) return;
 
   const required = getRequiredEnvVarNames();
   const missing = required.filter((key) => !process.env[key]?.trim());
 
   if (missing.length > 0) {
     throw new Error(
-      `[Aether] Production mode requires all environment variables.\n` +
-        `Set AETHER_MOCK_MODE=true for a local demo, or provide:\n` +
+      `[Aether] Missing required environment variables:\n` +
         missing.map((k) => `  - ${k}`).join("\n") +
         (getStripeWebhookHandler() === "supabase"
           ? `\n\nNote: STRIPE_WEBHOOK_SECRET and SUPABASE_SERVICE_ROLE_KEY belong in ` +
@@ -120,28 +106,30 @@ export function validateEnv(): void {
 }
 
 export function getSupabaseUrl(): string {
-  if (isMockMode) {
-    return supabaseUrl || "https://placeholder-url.supabase.co";
+  if (!supabaseUrl) {
+    throw new Error(
+      "[Aether] NEXT_PUBLIC_SUPABASE_URL is not set. Configure Supabase before starting the app."
+    );
   }
   return supabaseUrl;
 }
 
 export function getSupabaseAnonKey(): string {
-  if (isMockMode) {
-    return supabaseAnonKey || "placeholder-anon-key";
+  if (!supabaseAnonKey) {
+    throw new Error(
+      "[Aether] NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. Configure Supabase before starting the app."
+    );
   }
   return supabaseAnonKey;
 }
 
 /** Public Edge Function URL for Stripe dashboard (when using default handler). */
 export function getSupabaseStripeWebhookUrl(): string | null {
-  const url = getSupabaseUrl();
-  if (!url || url.includes("placeholder")) return null;
-  const host = url.replace(/\/$/, "");
+  const host = getSupabaseUrl().replace(/\/$/, "");
   return `${host}/functions/v1/stripe-webhook`;
 }
 
 /** Whether the Next.js runtime may use the Supabase service role key. */
 export function canUseServiceRoleInNextRuntime(): boolean {
-  return isMockMode || getStripeWebhookHandler() === "vercel";
+  return getStripeWebhookHandler() === "vercel";
 }

@@ -32,7 +32,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
-import { getClientProfile, isMockMode, supabase } from "@/lib/supabase/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { apiPost, apiGet } from "@/lib/api/client";
 import { useJoinedCampaigns } from "@/lib/supabase/clips";
 import { Profile } from "@/types";
@@ -207,44 +207,7 @@ export default function DiscoverPage() {
 
       let rawCamps: Campaign[] = [];
 
-      if (isMockMode) {
-        // 1. Fetch campaigns from LocalStorage
-        let storedCamps = localStorage.getItem("aether-mock-campaigns");
-        if (!storedCamps) {
-          localStorage.setItem("aether-mock-campaigns", JSON.stringify(initialMockCampaigns));
-          rawCamps = initialMockCampaigns;
-        } else {
-          rawCamps = JSON.parse(storedCamps);
-        }
-
-        // 2. Fetch participations to flag already applied
-        const storedParts = localStorage.getItem("aether-mock-participations");
-        const partsList = storedParts ? JSON.parse(storedParts) : [];
-        const influencerId = profile?.user_id || "mock-influencer-uuid";
-        
-        // Find campaigns already applied
-        const appliedIds = new Set<string>();
-        partsList.forEach((part: any) => {
-          if (part.influencer_id === influencerId) {
-            appliedIds.add(part.campaign_id);
-          }
-        });
-
-        // Also check detailed campaign status from individual storage keys
-        rawCamps.forEach((camp) => {
-          const detailedStateStr = localStorage.getItem(`aether-campaign-state-${camp.id}`);
-          if (detailedStateStr) {
-            try {
-              const detailed = JSON.parse(detailedStateStr);
-              if (detailed.status === "applied" || detailed.status === "escrowed" || detailed.status === "submitted" || detailed.status === "released") {
-                appliedIds.add(camp.id);
-              }
-            } catch (e) {}
-          }
-        });
-
-        setAppliedCampaignIds(appliedIds);
-      } else {
+      {
         const searchData = await apiGet<{
           campaigns: Array<Record<string, unknown>>;
         }>("/api/campaigns/search?page=1&limit=50");
@@ -261,7 +224,7 @@ export default function DiscoverPage() {
           // Performance campaigns pay per view; fixed campaigns use escrow.
           payout_speed:
             c.campaign_type === "performance" ? "Pay per view (CPM)" : "Instant Escrow",
-          days_left: 30, // Mocked days left
+          days_left: 30,
           image_url: c.target_niches.includes("Tech") 
             ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80" 
             : c.target_niches.includes("Fashion")
@@ -355,42 +318,11 @@ export default function DiscoverPage() {
   const handleExpressInterest = async (campaign: Campaign) => {
     toast.loading(t("Sending quick application..."), { id: "express-interest" });
     try {
-      const influencerId = user?.user_id || "mock-influencer-uuid";
       const proposed = campaign.budget_total;
 
-      if (isMockMode) {
-        // Create participation
-        const storedParts = localStorage.getItem("aether-mock-participations");
-        const partsList = storedParts ? JSON.parse(storedParts) : [];
-        
-        const newPart = {
-          id: "part_mock_" + Math.random().toString(36).substring(7),
-          campaign_id: campaign.id,
-          influencer_id: influencerId,
-          status: "applied",
-          proposed_payout: proposed,
-          applied_at: new Date().toISOString()
-        };
-
-        localStorage.setItem("aether-mock-participations", JSON.stringify([...partsList, newPart]));
-        
-        // Add detail status key for the chat details page
-        const detailedState = {
-          id: campaign.id,
-          title: campaign.title,
-          budget: proposed,
-          status: "applied",
-          partnerName: "Sarah Jenkins (Brand Client)"
-        };
-        localStorage.setItem(`aether-campaign-state-${campaign.id}`, JSON.stringify(detailedState));
-
-        // Trigger custom storage sync event
-        window.dispatchEvent(new Event("storage"));
-      } else {
-        await apiPost(`/api/campaigns/${campaign.id}/apply`, {
-          proposed_payout: proposed,
-        });
-      }
+      await apiPost(`/api/campaigns/${campaign.id}/apply`, {
+        proposed_payout: proposed,
+      });
 
       setAppliedCampaignIds(prev => new Set([...prev, campaign.id]));
       toast.success(t("Interest expressed!"), {
@@ -487,63 +419,10 @@ export default function DiscoverPage() {
 
     toast.loading(t("Submitting application..."), { id: "apply" });
     try {
-      const influencerId = user?.user_id || "mock-influencer-uuid";
-
-      if (isMockMode) {
-        // Create participation
-        const storedParts = localStorage.getItem("aether-mock-participations");
-        const partsList = storedParts ? JSON.parse(storedParts) : [];
-        
-        const newPart = {
-          id: "part_mock_" + Math.random().toString(36).substring(7),
-          campaign_id: selectedCampaign.id,
-          influencer_id: influencerId,
-          status: "applied",
-          proposed_payout: proposedPayout,
-          pitch: pitchText,
-          applied_at: new Date().toISOString()
-        };
-
-        localStorage.setItem("aether-mock-participations", JSON.stringify([...partsList, newPart]));
-        
-        // Add detail status key for the chat details page
-        const detailedState = {
-          id: selectedCampaign.id,
-          title: selectedCampaign.title,
-          budget: proposedPayout,
-          status: "applied",
-          partnerName: "Sarah Jenkins (Brand Client)"
-        };
-        localStorage.setItem(`aether-campaign-state-${selectedCampaign.id}`, JSON.stringify(detailedState));
-
-        // Save a mock system chat message with pitch if provided
-        if (pitchText.trim()) {
-          const chatKey = `aether-campaign-chat-messages-${selectedCampaign.id}`;
-          const creatorName = user?.full_name || "Marcus Vance";
-          const mockMsgs = [
-            {
-              sender: "System",
-              role: "system",
-              text: `Application submitted with proposed budget: $${proposedPayout.toLocaleString()} USD.`,
-              time: "Just now"
-            },
-            {
-              sender: `${creatorName} (Creator)`,
-              role: "influencer",
-              text: pitchText,
-              time: "Just now"
-            }
-          ];
-          // We can let the detail page initialize from its own timeline, but this sets a nice base.
-        }
-
-        window.dispatchEvent(new Event("storage"));
-      } else {
-        await apiPost(`/api/campaigns/${selectedCampaign.id}/apply`, {
-          proposed_payout: proposedPayout,
-          pitch: pitchText.trim() || undefined,
-        });
-      }
+      await apiPost(`/api/campaigns/${selectedCampaign.id}/apply`, {
+        proposed_payout: proposedPayout,
+        pitch: pitchText.trim() || undefined,
+      });
 
       setAppliedCampaignIds(prev => new Set([...prev, selectedCampaign.id]));
       setIsApplyModalOpen(false);

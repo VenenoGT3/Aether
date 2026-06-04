@@ -3,7 +3,6 @@ import { CampaignFundingBodySchema } from "@/lib/api/schemas";
 import { parseUuidParam } from "@/lib/api/validate";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { cancelFundedDraft } from "@/lib/api/services/campaign-funding";
-import { isMockMode } from "@/lib/env";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
@@ -28,10 +27,6 @@ export async function POST(
     auth: "business",
   });
   if (!guarded.ok) return guarded.response;
-
-  if (isMockMode) {
-    return jsonSuccess({ cancelled: true, refunded: true, mock: true });
-  }
 
   const result = await cancelFundedDraft(campaignId, guarded.ctx.auth!.userId);
   if (!result.ok) {

@@ -2,7 +2,6 @@ import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { ClipSubmitBodySchema } from "@/lib/api/schemas";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { submitClip } from "@/lib/api/services/clip-submit";
-import { isMockMode } from "@/lib/env";
 import { endRequest } from "@/lib/logger";
 import { getLimiter, busyResponse } from "@/lib/backpressure";
 
@@ -30,19 +29,6 @@ async function handleClipSubmit(request: Request): Promise<Response> {
   });
   if (!guarded.ok) return guarded.response;
   const { log, startTime } = guarded.ctx;
-
-  if (isMockMode) {
-    endRequest(log, { statusCode: 200, startTime });
-    return jsonSuccess({
-      clip: {
-        id: `clip_mock_${Date.now()}`,
-        campaign_id: guarded.ctx.data.campaign_id,
-        participation_id: `part_mock_${Date.now()}`,
-        status: "pending",
-      },
-      mock: true,
-    });
-  }
 
   const result = await submitClip(guarded.ctx.auth!.userId, guarded.ctx.data);
   if (!result.ok) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bell, 
@@ -16,7 +16,6 @@ import {
   HelpCircle,
   AlertTriangle
 } from "lucide-react";
-import { getMockUser } from "@/lib/supabase/client";
 import { 
   getNotifications, 
   markNotificationRead, 
@@ -24,7 +23,8 @@ import {
   deleteNotification, 
   NotificationItem 
 } from "@/lib/supabase/notifications";
-import { isMockMode, supabase } from "@/lib/supabase/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
+import { Profile } from "@/types";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -42,56 +42,60 @@ export function NotificationCenter() {
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [swRegistered, setSwRegistered] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
-  const user = getMockUser();
 
-  // Load notifications
-  const loadNotifications = async () => {
+  const [user, setUser] = useState<Profile | null>(null);
+
+  // Resolve the signed-in user (and refresh on auth changes).
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      getClientProfile()
+        .then((p) => {
+          if (active) setUser(p);
+        })
+        .catch(() => {
+          if (active) setUser(null);
+        });
+    };
+    refresh();
+    window.addEventListener("role-change", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("role-change", refresh);
+    };
+  }, []);
+
+  const loadNotifications = useCallback(async () => {
     if (!user) return;
     const { data } = await getNotifications(user.user_id);
     setNotifications(data);
-  };
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     loadNotifications();
 
-    // Listen to mock notifications update event
-    const handleMockSync = () => {
-      loadNotifications();
-    };
-    window.addEventListener("aether-notifications-update", handleMockSync);
-    window.addEventListener("role-change", handleMockSync);
-    window.addEventListener("storage", handleMockSync);
-
-    // Live mode realtime subscription
-    let channel: any = null;
-    if (!isMockMode && user) {
-      channel = supabase
-        .channel(`realtime-notifications-${user.user_id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.user_id}`
-          },
-          () => {
-            loadNotifications();
-          }
-        )
-        .subscribe();
-    }
+    // Realtime subscription for this user's notifications.
+    const channel = supabase
+      .channel(`realtime-notifications-${user.user_id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.user_id}`,
+        },
+        () => {
+          loadNotifications();
+        }
+      )
+      .subscribe();
 
     return () => {
-      window.removeEventListener("aether-notifications-update", handleMockSync);
-      window.removeEventListener("role-change", handleMockSync);
-      window.removeEventListener("storage", handleMockSync);
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      supabase.removeChannel(channel);
     };
-  }, [user?.user_id]);
+  }, [user, loadNotifications]);
 
   // Click outside listener
   useEffect(() => {

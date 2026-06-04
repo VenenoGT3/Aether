@@ -1,6 +1,6 @@
 /**
  * Runs once when the Next.js server starts (dev and production).
- *   1. Fails fast if production env vars are missing while mock mode is off.
+ *   1. Fails fast if required production env vars are missing.
  *   2. Initializes Sentry for the active runtime (Node or Edge).
  *
  * `onRequestError` forwards every server-side error (route handlers, server

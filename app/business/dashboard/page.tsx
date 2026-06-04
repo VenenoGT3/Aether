@@ -41,7 +41,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { BrandPerformanceSummary } from "@/components/brand-performance-summary";
 import { getCampaignsAction, subscribeToCampaignChanges } from "@/lib/supabase/campaigns";
-import { getClientProfile, Profile, supabase, isMockMode } from "@/lib/supabase/client";
+import { getClientProfile, Profile, supabase } from "@/lib/supabase/client";
 import { useTransactions, getCampaignMetricsAction } from "@/lib/supabase/metrics";
 import { fundEscrowAction, releaseEscrowAction, startStripeOnboardingAction } from "@/lib/stripe/actions";
 import { useTranslation } from "@/lib/translations";
@@ -94,44 +94,7 @@ export default function BusinessDashboard() {
     toast.loading(t("Syncing live social metrics..."), { id: "refresh-metrics" });
 
     try {
-      if (isMockMode) {
-        // Simulate API syncing delay
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        
-        // Slightly bump metrics in local storage
-        const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
-        Object.keys(allMetrics).forEach((campaignId) => {
-          const m = allMetrics[campaignId];
-          m.impressions += Math.round(Math.random() * 800 + 200);
-          m.clicks += Math.round(Math.random() * 40 + 10);
-          m.conversions += Math.round(Math.random() * 3 + 1);
-          m.attributed_value = m.conversions * 85;
-        });
-        localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
-
-        // Bump mock posts table
-        const storedPosts = localStorage.getItem("aether-mock-posts");
-        if (storedPosts) {
-          const postsList = JSON.parse(storedPosts);
-          postsList.forEach((p: any) => {
-            if (p.metrics) {
-              p.metrics.impressions += Math.round(Math.random() * 500 + 100);
-              p.metrics.likes += Math.round(Math.random() * 40 + 5);
-              p.metrics.comments += Math.round(Math.random() * 5 + 1);
-              if (p.metrics.impressions > 0) {
-                p.metrics.engagement_rate = parseFloat((((p.metrics.likes + p.metrics.comments + (p.metrics.shares || 0)) / p.metrics.impressions) * 100).toFixed(2));
-              }
-            }
-          });
-          localStorage.setItem("aether-mock-posts", JSON.stringify(postsList));
-        }
-
-        window.dispatchEvent(new Event("aether-metrics-update"));
-        window.dispatchEvent(new Event("aether-posts-update"));
-        window.dispatchEvent(new Event("storage"));
-        
-        toast.success(t("Metrics refreshed! Live campaign ROI recalculated."), { id: "refresh-metrics" });
-      } else {
+      {
         // Live Mode: fetch all posts linked to campaigns created by this business
         const campaignIds = campaigns.map(c => c.id);
         if (campaignIds.length === 0) {
@@ -326,22 +289,6 @@ export default function BusinessDashboard() {
           localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updated));
         }
 
-        // Store transaction locally if mock mode
-        if (res.isMock) {
-          const stored = localStorage.getItem("aether-mock-transactions");
-          const txList = stored ? JSON.parse(stored) : [];
-          const newTx = {
-            id: "tx_mock_" + Math.random().toString(36).substring(7),
-            amount: participant.payout,
-            type: "escrow",
-            status: "succeeded",
-            created_at: new Date().toISOString(),
-            campaignTitle: richCampaign?.title || "Campaign Contract",
-            partner: participant.fullName
-          };
-          localStorage.setItem("aether-mock-transactions", JSON.stringify([newTx, ...txList]));
-        }
-
         window.dispatchEvent(new Event("storage"));
         toast.success("Application Approved & Escrow Funded!", {
           id: "escrow-funding",
@@ -423,22 +370,6 @@ export default function BusinessDashboard() {
           localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updated));
         }
 
-        // Store transaction locally if mock mode
-        if (res.isMock) {
-          const stored = localStorage.getItem("aether-mock-transactions");
-          const txList = stored ? JSON.parse(stored) : [];
-          const newTx = {
-            id: "tx_mock_" + Math.random().toString(36).substring(7),
-            amount: participant.payout,
-            type: "release",
-            status: "succeeded",
-            created_at: new Date().toISOString(),
-            campaignTitle: richCampaign?.title || "Campaign Contract",
-            partner: participant.fullName
-          };
-          localStorage.setItem("aether-mock-transactions", JSON.stringify([newTx, ...txList]));
-        }
-
         // Trigger confetti celebration!
         confetti({
           particleCount: 150,
@@ -471,22 +402,17 @@ export default function BusinessDashboard() {
   const recruitedCreatorsCount = campaigns
     .filter(c => c.status === "in_progress" || c.status === "completed" || c.status === "released")
     .reduce((acc, c) => acc + (c.influencer ? 1 : 0), 0);
-  // The +9 is a demo seed so the mock dashboard looks populated; real mode shows the true count.
-  const creatorsRecruited =
-    nonDraftCampaigns.length > 0 ? recruitedCreatorsCount + (isMockMode ? 9 : 0) : 0;
+  const creatorsRecruited = nonDraftCampaigns.length > 0 ? recruitedCreatorsCount : 0;
 
   // Smart ROI calculations
   const totalSpendVal = Object.values(campaignMetrics).reduce((sum, m) => sum + (m.budget_spent || 0), 0);
   const totalRevenueVal = Object.values(campaignMetrics).reduce((sum, m) => sum + (m.attributed_value || 0), 0);
-  const averageRoi = totalSpendVal > 0 ? (totalRevenueVal / totalSpendVal).toFixed(1) : (isMockMode ? "3.2" : "0");
+  const averageRoi = totalSpendVal > 0 ? (totalRevenueVal / totalSpendVal).toFixed(1) : "0";
 
   // Recharts Chart Data
   const getSpendHistoryData = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    // Demo seed only in mock mode; real mode starts at zero (real spend adds on).
-    const monthlySpend: Record<string, number> = isMockMode
-      ? { Jan: 4000, Feb: 5500, Mar: 8200, Apr: 7000, May: 12500, Jun: 15000 }
-      : { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const monthlySpend: Record<string, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
 
     transactions.forEach(tx => {
       if (tx.status !== "succeeded") return;
@@ -761,11 +687,6 @@ export default function BusinessDashboard() {
                     <h3 className="text-3xl font-bold tracking-tight text-foreground">
                       ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                     </h3>
-                    {isMockMode && (
-                      <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
-                        +18.4% <ArrowUpRight size={12} /> {t("this month")}
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -791,11 +712,6 @@ export default function BusinessDashboard() {
                   </div>
                   <div className="mt-6">
                     <h3 className="text-3xl font-bold tracking-tight text-foreground">{creatorsRecruited}</h3>
-                    {isMockMode && (
-                      <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
-                        4.8% ER {t("average")}
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -1093,9 +1009,9 @@ export default function BusinessDashboard() {
                               </p>
 
                               <div className="flex gap-4 pt-1 text-[10px] text-muted-foreground/80 font-semibold">
-                                <span>Impressions: <strong className="text-foreground">{latestSub.metrics?.views?.toLocaleString() || (isMockMode ? "15K" : "0")}</strong></span>
-                                <span>Engagement: <strong className="text-foreground">{isMockMode ? (latestSub.metrics?.roi ? "4.8%" : "3.5%") : "—"}</strong></span>
-                                <span>Est. ROI: <strong className="text-[#34C759]">{latestSub.metrics?.roi || (isMockMode ? "2.1" : "0")}x</strong></span>
+                                <span>Impressions: <strong className="text-foreground">{latestSub.metrics?.views?.toLocaleString() || "0"}</strong></span>
+                                <span>Engagement: <strong className="text-foreground">—</strong></span>
+                                <span>Est. ROI: <strong className="text-[#34C759]">{latestSub.metrics?.roi || "0"}x</strong></span>
                               </div>
                             </div>
                           </div>
@@ -1237,7 +1153,7 @@ export default function BusinessDashboard() {
                 <div className="flex justify-between items-center mb-6 border-b border-border/10 pb-4">
                   <div>
                     <h3 className="text-base font-bold text-foreground">Escrow Ledger Logs</h3>
-                    <p className="text-[11px] text-muted-foreground">Detailed records of Stripe funding holds, creator payouts, and mock refund credits.</p>
+                    <p className="text-[11px] text-muted-foreground">Detailed records of Stripe funding holds, creator payouts, and refund credits.</p>
                   </div>
                 </div>
 

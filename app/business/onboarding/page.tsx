@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { updateClientProfile } from "@/lib/supabase/client";
+import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
 import { 
@@ -15,29 +16,17 @@ import {
   FileText, 
   ArrowRight, 
   ArrowLeft, 
-  CheckCircle2, 
   CreditCard,
   ExternalLink,
   Loader2,
   Sparkles
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 export default function BusinessOnboarding() {
   const router = useRouter();
   const { t } = useTranslation();
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [stripeOpen, setStripeOpen] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
-  const [stripeConnected, setStripeConnected] = useState(false);
 
   // Form states
   const [companyName, setCompanyName] = useState("");
@@ -69,56 +58,42 @@ export default function BusinessOnboarding() {
     }
   };
 
-  const startStripeOnboarding = () => {
-    setStripeOpen(true);
-  };
-
-  const simulateStripeSuccess = () => {
+  // Persist the brand profile, then hand off to real Stripe Connect onboarding.
+  // The connected account id + onboarded flag are set on return by
+  // /stripe/callback, so onboarding only completes after a real Stripe account.
+  const handleConnectStripe = async () => {
     setStripeLoading(true);
-    setTimeout(() => {
-      setStripeConnected(true);
-      setStripeLoading(false);
-      setStripeOpen(false);
-      toast.success(t("Stripe Connect Account linked successfully!"), {
-        description: t("Your business is ready to fund campaigns."),
-      });
-    }, 2000);
-  };
-
-  const handleCompleteOnboarding = async () => {
-    if (!stripeConnected) {
-      toast.error(t("Please connect your Stripe account before completing onboarding."));
-      return;
-    }
-
-    setLoading(true);
+    toast.loading(t("Saving your profile..."), { id: "biz-onboard" });
     try {
-      const { data, error } = await updateClientProfile({
+      const { error } = await updateClientProfile({
         company_name: companyName,
         website,
         industry,
         company_size: companySize,
         bio,
-        stripe_connect_id: "acct_mockstripe_" + Math.random().toString(36).substring(7),
-        stripe_onboarding_completed: true,
-        onboarded: true,
       });
 
       if (error) {
-        toast.error(error.message || t("Failed to save profile."));
-        setLoading(false);
+        toast.error(error.message || t("Failed to save profile."), { id: "biz-onboard" });
+        setStripeLoading(false);
         return;
       }
 
-      toast.success(t("Welcome to Aether!"), {
-        description: t("Your business dashboard is now fully active."),
-      });
+      toast.loading(t("Redirecting to Stripe Connect onboarding..."), { id: "biz-onboard" });
+      const res = await startStripeOnboardingAction("business", window.location.origin);
 
-      router.push("/business/dashboard");
-      router.refresh();
+      if (res.success && res.url) {
+        window.location.href = res.url;
+      } else {
+        toast.error(res.error || t("Failed to start Stripe onboarding."), { id: "biz-onboard" });
+        setStripeLoading(false);
+      }
     } catch (err) {
-      toast.error(t("An unexpected error occurred."));
-      setLoading(false);
+      toast.error(
+        err instanceof Error ? err.message : t("An unexpected error occurred."),
+        { id: "biz-onboard" }
+      );
+      setStripeLoading(false);
     }
   };
 
@@ -330,135 +305,49 @@ export default function BusinessOnboarding() {
               </div>
 
               <div className="py-8 px-6 flex flex-col items-center justify-center border border-dashed border-border/60 rounded-2xl bg-secondary/20 text-center mb-6">
-                {stripeConnected ? (
-                  <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", damping: 15 }}
-                    className="flex flex-col items-center"
+                <div className="flex flex-col items-center">
+                  <span className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#635BFF] to-[#8E2DE2] shadow-sm flex items-center justify-center mb-4 text-white font-extrabold text-base select-none">
+                    S
+                  </span>
+                  <h3 className="text-sm font-bold text-foreground">{t("Connect Stripe Wallet")}</h3>
+                  <p className="text-[11px] text-muted-foreground mt-2 max-w-sm leading-relaxed">
+                    {t("Aether partners with Stripe to secure transactions. Funding is locked in escrow during campaigns and disbursed only after your content review.")}
+                  </p>
+                  <Button
+                    onClick={handleConnectStripe}
+                    disabled={stripeLoading}
+                    className="mt-6 rounded-2xl bg-[#635BFF] hover:bg-[#534bc7] text-white font-semibold text-xs px-6 py-5 cursor-pointer gap-2 border-0 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60 disabled:hover:scale-100"
                   >
-                    <div className="w-14 h-14 rounded-full bg-[#34C759]/10 border border-[#34C759]/25 text-[#34C759] flex items-center justify-center mb-4">
-                      <CheckCircle2 size={28} />
-                    </div>
-                    <h3 className="text-sm font-bold text-foreground">{t("Stripe Account Verified")}</h3>
-                    <p className="text-[11px] text-muted-foreground mt-1.5 max-w-[285px] leading-relaxed">
-                      {t("Simulated merchant credentials linked successfully. Your business is ready to create and fund escrow-backed campaigns.")}
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      className="mt-5 rounded-xl border-border bg-card hover:bg-secondary/40 text-xs px-4 py-2 gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground h-auto"
-                      onClick={() => setStripeConnected(false)}
-                    >
-                      {t("Disconnect Account")}
-                    </Button>
-                  </motion.div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <span className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#635BFF] to-[#8E2DE2] shadow-sm flex items-center justify-center mb-4 text-white font-extrabold text-base select-none">
-                      S
-                    </span>
-                    <h3 className="text-sm font-bold text-foreground">{t("Connect Stripe Wallet")}</h3>
-                    <p className="text-[11px] text-muted-foreground mt-2 max-w-sm leading-relaxed">
-                      {t("Aether partners with Stripe to secure transactions. Funding is locked in escrow during campaigns and disbursed only after your content review.")}
-                    </p>
-                    <Button
-                      onClick={startStripeOnboarding}
-                      className="mt-6 rounded-2xl bg-[#635BFF] hover:bg-[#534bc7] text-white font-semibold text-xs px-6 py-5 cursor-pointer gap-2 border-0 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-transform"
-                    >
-                      {t("Connect Stripe Account")} <ExternalLink size={13} />
-                    </Button>
-                  </div>
-                )}
+                    {stripeLoading ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" /> {t("Redirecting...")}
+                      </>
+                    ) : (
+                      <>
+                        {t("Connect Stripe Account")} <ExternalLink size={13} />
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground/70 mt-4 max-w-xs leading-relaxed">
+                    {t("You'll be redirected to Stripe to finish onboarding, then returned here automatically.")}
+                  </p>
+                </div>
               </div>
 
               <div className="mt-8 flex items-center justify-between pt-6 border-t border-border/10">
                 <Button
                   variant="outline"
                   onClick={handlePrevStep}
+                  disabled={stripeLoading}
                   className="rounded-2xl border-border px-5 py-5 text-xs font-semibold cursor-pointer gap-1.5 hover:bg-secondary/35 text-foreground h-auto"
                 >
                   <ArrowLeft size={14} /> {t("Back")}
-                </Button>
-
-                <Button
-                  onClick={handleCompleteOnboarding}
-                  className={`rounded-2xl px-6 py-5 font-semibold text-xs cursor-pointer shadow-md gap-1.5 text-white border-0 h-auto ${
-                    stripeConnected ? "bg-[#34C759] hover:scale-[1.02] active:scale-[0.98]" : "bg-muted cursor-not-allowed opacity-50"
-                  }`}
-                  disabled={loading || !stripeConnected}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" /> {t("Finalizing...")}
-                    </>
-                  ) : (
-                    <>
-                      {t("Complete Setup")} <CheckCircle2 size={14} />
-                    </>
-                  )}
                 </Button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {/* Stripe Connect Modal Dialog */}
-      <Dialog open={stripeOpen} onOpenChange={setStripeOpen}>
-        <DialogContent className="sm:max-w-md rounded-3xl border border-border/40 p-6 shadow-2xl bg-popover/90 backdrop-blur-xl">
-          <DialogHeader className="text-center sm:text-left">
-            <div className="flex items-center gap-1.5 text-[#635BFF] mb-2 font-bold select-none text-sm">
-              <span className="w-5 h-5 rounded bg-[#635BFF] flex items-center justify-center text-white text-[10px]">S</span>
-              stripe <span className="text-muted-foreground/60 font-semibold">connect</span>
-            </div>
-            <DialogTitle className="text-lg font-bold tracking-tight text-foreground">{t("Simulate Stripe Onboarding")}</DialogTitle>
-            <DialogDescription className="text-xs mt-1 leading-relaxed text-muted-foreground">
-              {t("In development mode, we bypass Stripe Connect authentication and register a sandbox merchant account.")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-5 px-4 bg-secondary/30 border border-border/10 rounded-2xl my-4 text-xs space-y-3 leading-relaxed">
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 size={14} className="text-[#635BFF] shrink-0 mt-0.5" />
-              <span>{t("Validate business registration credentials and EIN number.")}</span>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 size={14} className="text-[#635BFF] shrink-0 mt-0.5" />
-              <span>{t("Authorize escrow operations and payment collection on campaign launches.")}</span>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 size={14} className="text-[#635BFF] shrink-0 mt-0.5" />
-              <span>{t("Configure default funding sources (Visa / Mastercard mock routing).")}</span>
-            </div>
-          </div>
-
-          <DialogFooter className="-mx-6 -mb-6 p-4 border-t border-border/10 bg-secondary/20 flex gap-2 sm:gap-0 justify-end rounded-b-3xl">
-            <Button
-              variant="outline"
-              onClick={() => setStripeOpen(false)}
-              className="rounded-xl border-border hover:bg-secondary/40 cursor-pointer text-xs h-auto py-2.5 px-4"
-              disabled={stripeLoading}
-            >
-              {t("Cancel")}
-            </Button>
-            <Button
-              onClick={simulateStripeSuccess}
-              className="rounded-xl bg-[#635BFF] hover:bg-[#524bc5] text-white cursor-pointer text-xs font-semibold gap-1.5 border-0 h-auto py-2.5 px-4"
-              disabled={stripeLoading}
-            >
-              {stripeLoading ? (
-                <>
-                  <Loader2 size={13} className="animate-spin" /> {t("Verifying...")}
-                </>
-              ) : (
-                <>
-                  {t("Link Sandbox")} <ArrowRight size={13} />
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { guardApiGet, methodNotAllowed } from "@/lib/api/guard";
 import { CampaignSearchQuerySchema } from "@/lib/api/schemas";
 import { jsonSuccess, jsonError } from "@/lib/api/response";
 import { createClient } from "@/lib/supabase/server";
-import { isMockMode } from "@/lib/env";
 import { cached } from "@/lib/cache/swr-cache";
 import { endRequest } from "@/lib/logger";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
@@ -46,17 +45,6 @@ async function handleSearch(request: Request): Promise<Response> {
 
   const { q, niche, category, page, limit } = guarded.ctx.data;
   const offset = (page - 1) * limit;
-
-  if (isMockMode) {
-    endRequest(log, { statusCode: 200, startTime });
-    return jsonSuccess({
-      campaigns: [],
-      page,
-      limit,
-      total: 0,
-      mock: true,
-    });
-  }
 
   const supabase = await createClient();
 

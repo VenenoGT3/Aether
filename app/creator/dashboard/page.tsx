@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getClientProfile, supabase, isMockMode } from "@/lib/supabase/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import WalletUI from "@/components/wallet-ui";
 import { CreatorPerformanceSummary } from "@/components/creator-performance-summary";
@@ -51,25 +51,6 @@ import { useTransactions, usePosts } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
 import { RefreshCw } from "lucide-react";
 import { apiPost } from "@/lib/api/client";
-
-const mockInvites = [
-  {
-    id: "inv_1",
-    brand: "Apple Premium Reseller",
-    campaign: "iPad Pro Creator Flow",
-    offer: 1800,
-    status: "pending",
-    daysLeft: 3
-  },
-  {
-    id: "inv_2",
-    brand: "Aether Labs",
-    campaign: "Aether Lifestyle Launch",
-    offer: 4500,
-    status: "escrowed",
-    daysLeft: 12
-  }
-];
 
 export default function InfluencerDashboard() {
   const { t } = useTranslation();
@@ -89,44 +70,8 @@ export default function InfluencerDashboard() {
     toast.loading(t("Syncing live creator metrics..."), { id: "refresh-metrics" });
 
     try {
-      if (isMockMode) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        
-        // Bump mock posts in local storage
-        const storedPosts = localStorage.getItem("aether-mock-posts");
-        if (storedPosts) {
-          const postsList = JSON.parse(storedPosts);
-          postsList.forEach((p: any) => {
-            if (p.metrics) {
-              p.metrics.impressions += Math.round(Math.random() * 600 + 150);
-              p.metrics.likes += Math.round(Math.random() * 45 + 5);
-              p.metrics.comments += Math.round(Math.random() * 6 + 1);
-              if (p.metrics.impressions > 0) {
-                p.metrics.engagement_rate = parseFloat((((p.metrics.likes + p.metrics.comments + (p.metrics.shares || 0)) / p.metrics.impressions) * 100).toFixed(2));
-              }
-            }
-          });
-          localStorage.setItem("aether-mock-posts", JSON.stringify(postsList));
-        }
-
-        // Slightly bump campaign metrics in local storage
-        const allMetrics = JSON.parse(localStorage.getItem("aether-campaign-metrics") || "{}");
-        Object.keys(allMetrics).forEach((campaignId) => {
-          const m = allMetrics[campaignId];
-          m.impressions += Math.round(Math.random() * 900 + 100);
-          m.clicks += Math.round(Math.random() * 50 + 5);
-          m.conversions += Math.round(Math.random() * 4 + 1);
-          m.attributed_value = m.conversions * 85;
-        });
-        localStorage.setItem("aether-campaign-metrics", JSON.stringify(allMetrics));
-
-        window.dispatchEvent(new Event("aether-metrics-update"));
-        window.dispatchEvent(new Event("aether-posts-update"));
-        window.dispatchEvent(new Event("storage"));
-
-        toast.success(t("Engagement metrics and estimated wallet balances updated!"), { id: "refresh-metrics" });
-      } else {
-        // Live Mode: query influencer posts and sync
+      {
+        // Query the creator's posts and sync live metrics.
         const { data: postsData, error } = await supabase
           .from("posts")
           .select("post_url, platform, participation_id, participations!inner(influencer_id)")
@@ -167,92 +112,6 @@ export default function InfluencerDashboard() {
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  // --- SOCIAL VERIFICATION AND MOCK MAILBOX STATES ---
-  const [platformVerifying, setPlatformVerifying] = useState<string | null>(null);
-  const [verificationStep, setVerificationStep] = useState<"popup" | "loading" | "complete">("popup");
-  const [showMailbox, setShowMailbox] = useState(false);
-  const [mailboxEmails, setMailboxEmails] = useState<any[]>([]);
-  const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
-  
-  // Verification metrics mock
-  const [verifiedPlatforms, setVerifiedPlatforms] = useState<Record<string, string>>(
-    isMockMode ? { tiktok: "@marcusv.tiktok" } : {}
-  );
-
-  const loadVerificationData = () => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("aether-verified-platforms");
-      if (stored) {
-        setVerifiedPlatforms(JSON.parse(stored));
-      } else if (isMockMode) {
-        localStorage.setItem("aether-verified-platforms", JSON.stringify({ tiktok: "@marcusv.tiktok" }));
-      }
-    }
-  };
-
-  const loadMailboxEmails = () => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("aether-mock-sent-emails");
-      setMailboxEmails(stored ? JSON.parse(stored) : []);
-    }
-  };
-
-  useEffect(() => {
-    loadVerificationData();
-    loadMailboxEmails();
-
-    const handleEmailSync = () => {
-      loadMailboxEmails();
-    };
-    window.addEventListener("aether-emails-sync", handleEmailSync);
-    return () => window.removeEventListener("aether-emails-sync", handleEmailSync);
-  }, []);
-
-  const handleVerifyPlatform = (platform: string) => {
-    setPlatformVerifying(platform);
-    setVerificationStep("popup");
-  };
-
-  const executePlatformVerification = async () => {
-    setVerificationStep("loading");
-    
-    // Simulate OAuth API retrieval delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    const handle = platformVerifying === "instagram" ? "@marcusv" : platformVerifying === "youtube" ? "marcusvance" : "@marcusv.tiktok";
-    const updated = {
-      ...verifiedPlatforms,
-      [platformVerifying!.toLowerCase()]: handle
-    };
-    
-    setVerifiedPlatforms(updated);
-    localStorage.setItem("aether-verified-platforms", JSON.stringify(updated));
-    
-    // Dynamically increase user profile metrics in localStorage
-    if (user) {
-      const curFollowers = user.followers || 48500;
-      const addedFollowers = platformVerifying === "instagram" ? 15000 : platformVerifying === "youtube" ? 64000 : 25000;
-      
-      const updatedUser = {
-        ...user,
-        followers: curFollowers + addedFollowers,
-        engagement_rate: Math.min(8.5, (user.engagement_rate || 4.8) + 0.35)
-      };
-      
-      localStorage.setItem(`aether-profile-${user.user_id}`, JSON.stringify(updatedUser));
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    setVerificationStep("complete");
-    toast.success(`${platformVerifying} connected successfully!`, {
-      description: `Synced follower analytics and engagement rates.`
-    });
-    
-    setTimeout(() => {
-      setPlatformVerifying(null);
-    }, 1500);
   };
 
   const loadUser = async () => {
@@ -349,10 +208,7 @@ export default function InfluencerDashboard() {
   // Dynamic earnings aggregator
   const getEarningsChartData = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-    // Demo seed only in mock mode; real mode starts at zero (real releases add on).
-    const monthlyEarnings: Record<string, number> = isMockMode
-      ? { Jan: 1200, Feb: 2400, Mar: 1800, Apr: 3900, May: 4200, Jun: 5800 }
-      : { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
+    const monthlyEarnings: Record<string, number> = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0 };
 
     transactions.forEach((tx) => {
       if (tx.status !== "succeeded") return;
@@ -375,8 +231,8 @@ export default function InfluencerDashboard() {
   };
 
   const earningsData = getEarningsChartData();
-  const totalEarnings = transactions.filter(t => t.type === "release" && t.status === "succeeded").reduce((sum, t) => sum + t.amount, 0) || (isMockMode ? 19300 : 0);
-  const engagementRate = aggregateMetrics.engagement_rate || user?.engagement_rate || (isMockMode ? 4.82 : 0);
+  const totalEarnings = transactions.filter(t => t.type === "release" && t.status === "succeeded").reduce((sum, t) => sum + t.amount, 0);
+  const engagementRate = aggregateMetrics.engagement_rate || user?.engagement_rate || 0;
 
   const isStripeConnected = !!user?.stripe_connect_id && !!user?.stripe_onboarding_completed;
 
@@ -391,7 +247,7 @@ export default function InfluencerDashboard() {
             {t("Aether Creator Hub")}
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            {user?.full_name ? `${user.full_name.split(" ")[0]}'s ${t("Creator Hub")}` : isMockMode ? `Marcus's ${t("Work Center")}` : t("Creator Hub")}
+            {user?.full_name ? `${user.full_name.split(" ")[0]}'s ${t("Creator Hub")}` : t("Creator Hub")}
           </h1>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -540,13 +396,8 @@ export default function InfluencerDashboard() {
                 </div>
                 <div className="mt-6">
                   <h3 className="text-3xl font-bold tracking-tight">
-                    {user?.followers ? user.followers.toLocaleString() : isMockMode ? "48.5K" : "—"}
+                    {user?.followers ? user.followers.toLocaleString() : "—"}
                   </h3>
-                  {isMockMode && (
-                    <span className="text-xs text-[#34C759] font-semibold flex items-center gap-1 mt-1.5">
-                      +4.2% <ArrowUpRight size={12} /> {t("this month").includes("month") ? "this month" : "questo mese"}
-                    </span>
-                  )}
                 </div>
               </motion.div>
 
@@ -598,12 +449,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-primary/10 text-primary"><Bell size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{user?.niche || (isMockMode ? "Tech" : "—")}</h3>
-                  {isMockMode && (
-                    <span className="text-xs text-muted-foreground font-medium block mt-1.5">
-                      #MinimalistSetups tags
-                    </span>
-                  )}
+                  <h3 className="text-3xl font-bold tracking-tight">{user?.niche || "—"}</h3>
                 </div>
               </motion.div>
             </motion.div>
@@ -619,7 +465,7 @@ export default function InfluencerDashboard() {
                   legacy invites card beside it is hidden) */}
               <motion.div 
                 variants={cardVariants}
-                className={`${isMockMode ? "lg:col-span-2" : "lg:col-span-3"} p-8 apple-card flex flex-col justify-between min-h-[380px]`}
+                className="lg:col-span-3 p-8 apple-card flex flex-col justify-between min-h-[380px]"
               >
                 <div>
                   <h2 className="text-xl font-bold tracking-tight mb-1">{t("Earnings Progress")}</h2>
@@ -670,180 +516,8 @@ export default function InfluencerDashboard() {
                 </div>
               </motion.div>
 
-              {/* Campaign Invites (legacy fixed-fee) — mock-only; the
-                  performance model uses open joining, so there are no invites. */}
-              {isMockMode && (
-              <motion.div 
-                variants={cardVariants}
-                className="p-8 apple-card flex flex-col justify-between"
-              >
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight mb-1">{t("Campaign Invites")}</h2>
-                  <p className="text-xs text-muted-foreground mb-8">{t("Review sponsorship terms and lock deposits.")}</p>
-                  
-                  <div className="space-y-4">
-                    {mockInvites.map((invite) => (
-                      <motion.div 
-                        key={invite.id}
-                        whileHover={{ scale: 1.015, x: 2 }}
-                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                      >
-                        <Link href={`/campaigns/${invite.id === "inv_2" ? "camp_2" : "camp_1"}`} className="block group">
-                          <div className="p-4 rounded-2xl bg-secondary/30 border border-border/10 group-hover:bg-secondary/60 transition-all">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h4 className="text-sm font-semibold truncate max-w-[150px]">{invite.brand}</h4>
-                                <span className="text-[11px] text-muted-foreground">{invite.campaign}</span>
-                              </div>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                                invite.status === "pending" 
-                                  ? "bg-[#007AFF]/10 text-[#007AFF]" 
-                                  : "bg-[#FF9500]/10 text-[#FF9500]"
-                              }`}>
-                                {t(invite.status)}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-muted-foreground flex justify-between items-center mt-3.5 pt-2.5 border-t border-border/5">
-                              <span className="flex items-center gap-1"><Calendar size={12} /> {invite.daysLeft} {t("days left").includes("days") ? "days left" : "giorni rimasti"}</span>
-                              <span className="font-bold text-foreground">${invite.offer}</span>
-                            </div>
-                          </div>
-                        </Link>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-
-                <Link href="/campaigns" className="block mt-8">
-                  <Button variant="ghost" className="w-full text-xs hover:bg-secondary font-semibold rounded-2xl py-6 cursor-pointer">
-                    {t("Manage all invitations")}
-                  </Button>
-                </Link>
-              </motion.div>
-              )}
             </motion.div>
 
-            {/* Social verification (mock OAuth) + mock developer mailbox are
-                demo-only tools — hidden outside mock mode to cut clutter. */}
-            {isMockMode && (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6"
-            >
-              {/* Social Verification Card */}
-              <motion.div
-                variants={cardVariants}
-                whileHover={{ y: -2 }}
-                className="p-8 apple-card flex flex-col justify-between"
-              >
-                <div>
-                  <h3 className="text-lg font-bold tracking-tight mb-1">Social Accounts Verification</h3>
-                  <p className="text-xs text-muted-foreground mb-6">Link your platforms via secure mock-OAuth to verify reach stats and unlock premium campaigns.</p>
-                  
-                  <div className="space-y-4">
-                    {/* Instagram */}
-                    <div className="flex justify-between items-center p-3 bg-secondary/35 rounded-2xl border border-border/10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#E1306C]/10 text-[#E1306C] flex items-center justify-center font-bold text-sm">IG</div>
-                        <div>
-                          <p className="text-xs font-bold leading-none">Instagram</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">{verifiedPlatforms.instagram || "Not Connected"}</p>
-                        </div>
-                      </div>
-                      {verifiedPlatforms.instagram ? (
-                        <span className="text-[9px] font-bold text-[#34C759] uppercase bg-[#34C759]/10 px-2 py-0.5 rounded-full border border-[#34C759]/10">Verified</span>
-                      ) : (
-                        <button
-                          onClick={() => handleVerifyPlatform("Instagram")}
-                          className="px-3.5 py-1.5 bg-primary text-primary-foreground hover:opacity-90 rounded-full text-[10px] font-bold cursor-pointer"
-                        >
-                          Verify Account
-                        </button>
-                      )}
-                    </div>
-
-                    {/* TikTok */}
-                    <div className="flex justify-between items-center p-3 bg-secondary/35 rounded-2xl border border-border/10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-sm">TT</div>
-                        <div>
-                          <p className="text-xs font-bold leading-none">TikTok</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">{verifiedPlatforms.tiktok || "Not Connected"}</p>
-                        </div>
-                      </div>
-                      {verifiedPlatforms.tiktok ? (
-                        <span className="text-[9px] font-bold text-[#34C759] uppercase bg-[#34C759]/10 px-2 py-0.5 rounded-full border border-[#34C759]/10">Verified</span>
-                      ) : (
-                        <button
-                          onClick={() => handleVerifyPlatform("TikTok")}
-                          className="px-3.5 py-1.5 bg-primary text-primary-foreground hover:opacity-90 rounded-full text-[10px] font-bold cursor-pointer"
-                        >
-                          Verify Account
-                        </button>
-                      )}
-                    </div>
-
-                    {/* YouTube */}
-                    <div className="flex justify-between items-center p-3 bg-secondary/35 rounded-2xl border border-border/10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#FF0000]/10 text-[#FF0000] flex items-center justify-center font-bold text-sm">YT</div>
-                        <div>
-                          <p className="text-xs font-bold leading-none">YouTube</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">{verifiedPlatforms.youtube || "Not Connected"}</p>
-                        </div>
-                      </div>
-                      {verifiedPlatforms.youtube ? (
-                        <span className="text-[9px] font-bold text-[#34C759] uppercase bg-[#34C759]/10 px-2 py-0.5 rounded-full border border-[#34C759]/10">Verified</span>
-                      ) : (
-                        <button
-                          onClick={() => handleVerifyPlatform("YouTube")}
-                          className="px-3.5 py-1.5 bg-primary text-primary-foreground hover:opacity-90 rounded-full text-[10px] font-bold cursor-pointer"
-                        >
-                          Verify Account
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Developer Inbox Tool Card */}
-              <motion.div
-                variants={cardVariants}
-                whileHover={{ y: -2 }}
-                className="p-8 apple-card flex flex-col justify-between"
-              >
-                <div>
-                  <h3 className="text-lg font-bold tracking-tight mb-1 flex items-center gap-2">
-                    <Mail size={18} className="text-[#5856D6]" /> Mock Developer Mailbox
-                  </h3>
-                  <p className="text-xs text-muted-foreground mb-6">Inspect outgoing Resend campaign and payment transaction emails triggered locally.</p>
-                  
-                  <div className="bg-secondary/40 border border-border/10 rounded-2xl p-4 flex flex-col justify-between h-44">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-muted-foreground font-semibold">Emails Generated:</span>
-                        <span className="font-extrabold text-foreground">{mailboxEmails.length} messages</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-muted-foreground font-semibold">Resend API Mode:</span>
-                        <span className="text-[9px] font-bold text-foreground bg-secondary px-2 py-0.5 rounded-full">Developer Sandbox</span>
-                      </div>
-                    </div>
-
-                    <Button
-                      onClick={() => setShowMailbox(true)}
-                      className="w-full rounded-xl text-xs py-2 bg-[#5856D6] hover:bg-[#4846c4] text-white font-bold cursor-pointer"
-                    >
-                      Open Email Console ({mailboxEmails.length})
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-            )}
           </motion.div>
         ) : activeTab === "trends" ? (
           <motion.div
@@ -862,7 +536,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-[#007AFF]/10 text-[#007AFF]"><Users size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{(user?.followers || (isMockMode ? 48500 : 0)).toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">{(user?.followers || 0).toLocaleString()}</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Aggregated profile traffic</span>
                 </div>
               </div>
@@ -873,7 +547,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-[#34C759]/10 text-[#34C759]"><Eye size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{(aggregateMetrics.impressions || (isMockMode ? 56000 : 0)).toLocaleString()}</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">{(aggregateMetrics.impressions || 0).toLocaleString()}</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Across all campaign posts</span>
                 </div>
               </div>
@@ -895,7 +569,7 @@ export default function InfluencerDashboard() {
                   <span className="p-2.5 rounded-2xl bg-primary/10 text-primary"><DollarSign size={16} /></span>
                 </div>
                 <div className="mt-6">
-                  <h3 className="text-3xl font-bold tracking-tight">{isMockMode ? "$12,700" : "—"}</h3>
+                  <h3 className="text-3xl font-bold tracking-tight">—</h3>
                   <span className="text-[10px] text-muted-foreground mt-1.5 block font-medium">Attributed sales generated</span>
                 </div>
               </div>
@@ -903,7 +577,7 @@ export default function InfluencerDashboard() {
 
             {/* Performance Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className={`${isMockMode ? "lg:col-span-2" : "lg:col-span-3"} p-8 apple-card min-h-[380px] flex flex-col justify-between`}>
+              <div className="lg:col-span-3 p-8 apple-card min-h-[380px] flex flex-col justify-between">
                 <div>
                   <h3 className="text-lg font-bold tracking-tight mb-1">Reach & Engagement Trends</h3>
                   <p className="text-xs text-muted-foreground mb-8">Performance metrics tracked over completed campaigns.</p>
@@ -916,14 +590,9 @@ export default function InfluencerDashboard() {
                         posts.length > 0 
                           ? posts.map(p => ({
                               name: p.campaignTitle?.substring(0, 15) || "Collab",
-                              Impressions: p.metrics.impressions || 15000,
-                              Reach: p.metrics.reach || 12000
+                              Impressions: p.metrics.impressions || 0,
+                              Reach: p.metrics.reach || 0
                             }))
-                          : isMockMode
-                          ? [
-                              { name: "Workspace Review", Impressions: 18000, Reach: 15000 },
-                              { name: "Lifestyle Launch", Impressions: 38000, Reach: 32000 }
-                            ]
                           : []
                       } 
                       margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
@@ -947,35 +616,6 @@ export default function InfluencerDashboard() {
                 </div>
               </div>
 
-              {/* AI Creator Insights — hardcoded demo recommendations; mock-only
-                  so real mode doesn't show fabricated guidance. */}
-              {isMockMode && (
-              <div className="p-8 apple-card flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#FF9500] tracking-wider bg-[#FF9500]/10 px-2 py-0.5 rounded-full">AI Creator Insights</span>
-                  <h3 className="text-lg font-bold mt-3 mb-1 tracking-tight">Growth Recommendations</h3>
-                  <p className="text-xs text-muted-foreground mb-6">Suggestions based on your Aether performance metrics.</p>
-                  
-                  <div className="space-y-4">
-                    <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/10">
-                      <p className="text-xs font-bold text-foreground">Aesthetic Setups convert higher</p>
-                      <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-                        Workspace reviews with clean setups generate 2.5x more click conversions compared to stories. Focus on horizontal videos.
-                      </p>
-                    </div>
-                    <div className="p-3.5 rounded-2xl bg-secondary/30 border border-border/10">
-                      <p className="text-xs font-bold text-foreground">Optimize your Reel description</p>
-                      <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-                        Adding dynamic product specs in descriptions increased CTR from 3.1% to 5.2%. Use specific UTM templates.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[10px] text-muted-foreground pt-4 border-t border-border/5 text-center font-medium">
-                  Last updated: Just now
-                </div>
-              </div>
-              )}
             </div>
           </motion.div>
         ) : (
@@ -993,186 +633,6 @@ export default function InfluencerDashboard() {
       </div>
       )}
 
-      {/* Platform OAuth Mock Popup Modal */}
-      <AnimatePresence>
-        {platformVerifying && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={appleSpring}
-              className="bg-card border border-border/40 w-full max-w-md rounded-3xl p-8 shadow-2xl relative overflow-hidden flex flex-col"
-            >
-              {/* Glossy background circle */}
-              <div className="absolute top-[-30px] right-[-30px] w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none" />
-
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">OAuth Secure Login</span>
-                  <h3 className="text-xl font-bold tracking-tight mt-1">Connect {platformVerifying}</h3>
-                </div>
-                <button
-                  onClick={() => setPlatformVerifying(null)}
-                  className="w-7 h-7 rounded-full bg-secondary hover:bg-secondary/75 flex items-center justify-center cursor-pointer transition-colors"
-                >
-                  <X size={14} className="text-muted-foreground" />
-                </button>
-              </div>
-
-              {verificationStep === "popup" && (
-                <div className="space-y-6">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Aether requests authorization to retrieve your audience demographics, follower metrics, and read engagements. This information compiles your Media Kit.
-                  </p>
-                  
-                  <div className="p-4 bg-secondary/35 rounded-2xl border border-border/5 space-y-3">
-                    <h5 className="text-xs font-bold">Permissions requested:</h5>
-                    <div className="space-y-2 text-[10px] text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-[#34C759] rounded-full" /> Read follower metrics & handles
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-[#34C759] rounded-full" /> Fetch engagement insights on posts
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-[#34C759] rounded-full" /> Read demographics data
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={executePlatformVerification}
-                      className="flex-1 rounded-2xl py-3 text-xs font-bold bg-[#34C759] hover:bg-[#30b551] text-white cursor-pointer"
-                    >
-                      Authorize & Link
-                    </Button>
-                    <Button
-                      onClick={() => setPlatformVerifying(null)}
-                      variant="secondary"
-                      className="flex-1 rounded-2xl py-3 text-xs font-bold cursor-pointer"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {verificationStep === "loading" && (
-                <div className="py-12 flex flex-col items-center justify-center space-y-4">
-                  <div className="w-10 h-10 border-4 border-[#34C759] border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs font-semibold animate-pulse text-foreground">Syncing metrics with {platformVerifying} API...</p>
-                  <p className="text-[10px] text-muted-foreground">Retrieving profile and calculating audience authenticity scores...</p>
-                </div>
-              )}
-
-              {verificationStep === "complete" && (
-                <div className="py-8 flex flex-col items-center justify-center space-y-4 text-center">
-                  <div className="w-12 h-12 rounded-full bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/25 flex items-center justify-center">
-                    <CheckCircle2 size={24} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-foreground">Connection Successful!</h4>
-                    <p className="text-xs text-muted-foreground mt-1">Platform successfully linked. Metric gains applied to dashboard.</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Mock Developer Mailbox Modal */}
-      <AnimatePresence>
-        {showMailbox && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              transition={appleSpring}
-              className="bg-card border border-border/40 w-full max-w-4xl h-[600px] rounded-3xl p-6 shadow-2xl flex flex-col overflow-hidden text-foreground"
-            >
-              {/* Header */}
-              <div className="flex justify-between items-center pb-4 border-b border-border/10">
-                <div>
-                  <h3 className="text-lg font-bold tracking-tight flex items-center gap-1.5">
-                    <Mail size={18} className="text-[#5856D6]" /> Mock Resend Inbox
-                  </h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Sandbox logs capturing all outbound transactional emails sent in mock mode.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowMailbox(false);
-                    setSelectedEmail(null);
-                  }}
-                  className="w-7 h-7 rounded-full bg-secondary hover:bg-secondary/75 flex items-center justify-center cursor-pointer transition-colors"
-                >
-                  <X size={14} className="text-muted-foreground" />
-                </button>
-              </div>
-
-              {/* Grid split pane */}
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-border/10 overflow-hidden mt-4">
-                
-                {/* Left side: Emails list (2 cols) */}
-                <div className="md:col-span-2 overflow-y-auto pr-2 space-y-2 max-h-[460px]">
-                  {mailboxEmails.length === 0 ? (
-                    <div className="py-20 text-center text-muted-foreground">
-                      <Mail size={24} className="mx-auto mb-2 text-muted-foreground/30" />
-                      <p className="text-xs font-semibold">Inbox is empty</p>
-                      <p className="text-[9px] mt-1">Send campaigns or fund contracts to trigger notification emails.</p>
-                    </div>
-                  ) : (
-                    mailboxEmails.map((email) => (
-                      <div
-                        key={email.id}
-                        onClick={() => setSelectedEmail(email)}
-                        className={`p-3.5 rounded-2xl border text-left cursor-pointer transition-all ${
-                          selectedEmail?.id === email.id
-                            ? "bg-primary/10 border-primary/20"
-                            : "bg-secondary/35 border-border/5 hover:bg-secondary/60"
-                        }`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <span className="text-[8px] font-bold text-primary uppercase bg-primary/15 border border-primary/10 px-2 py-0.5 rounded-full capitalize">{email.type.replace("_", " ")}</span>
-                          <span className="text-[8px] text-muted-foreground">{new Date(email.sentAt).toLocaleTimeString()}</span>
-                        </div>
-                        <h4 className="text-xs font-bold mt-2 truncate text-foreground">{email.subject}</h4>
-                        <p className="text-[10px] text-muted-foreground mt-1 truncate">To: {email.to}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Right side: HTML render view (3 cols) */}
-                <div className="md:col-span-3 overflow-y-auto pl-0 md:pl-4 pt-4 md:pt-0 max-h-[460px]">
-                  {selectedEmail ? (
-                    <div className="border border-border/10 rounded-2xl bg-white p-6 shadow-sm overflow-hidden min-h-[300px]">
-                      <div className="border-b border-gray-100 pb-3 mb-4 text-xs text-gray-500 font-sans space-y-1">
-                        <div><strong className="text-gray-700">Subject:</strong> {selectedEmail.subject}</div>
-                        <div><strong className="text-gray-700">To:</strong> {selectedEmail.to}</div>
-                        <div><strong className="text-gray-700">Sent:</strong> {new Date(selectedEmail.sentAt).toLocaleString()}</div>
-                      </div>
-                      <div 
-                        className="html-preview" 
-                        dangerouslySetInnerHTML={{ __html: selectedEmail.html }} 
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-8 bg-secondary/10 rounded-2xl border border-dashed border-border/10">
-                      <ChevronRight size={24} className="mb-2 text-muted-foreground/30" />
-                      <p className="text-xs font-semibold">Select an email</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Select a message from the list on the left to inspect its rendered layout.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

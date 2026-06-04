@@ -6,7 +6,7 @@ import {
   getMinPayoutThreshold,
   getViewHoldbackHours,
   getWithdrawalReconcileStuckMinutes,
-  simulatedEarningsBlocked,
+  payoutSafetyBlocked,
 } from "./env";
 import { log, errMessage } from "./logger";
 import { recordPayoutFailures } from "./metrics";
@@ -158,13 +158,14 @@ export async function runPayoutBatch(
     totalPaid: 0,
   };
 
-  // SAFETY GUARD (defense-in-depth): refuse to run real payouts while in real
-  // mode with simulated views — even on pre-existing earnings (e.g. a removed
-  // Ayrshare key). Accrual is already blocked upstream; this halts the batch too.
-  if (simulatedEarningsBlocked()) {
-    log.alert("payout.blocked.simulated_views", {
-      reason: "real mode but views are simulated — refusing to run real payouts",
-      hint: "set AYRSHARE_API_KEY, or ALLOW_SIMULATED_PAYOUTS_IN_REAL_MODE=true to override (testing only)",
+  // SAFETY GUARD (defense-in-depth): refuse to run real payouts without a live
+  // view source. Startup already hard-fails on a missing AYRSHARE_API_KEY; this
+  // also halts the batch if the key is removed at runtime (e.g. pre-existing
+  // earnings must never be paid out on unverified views).
+  if (payoutSafetyBlocked()) {
+    log.alert("payout.blocked.no_view_source", {
+      reason: "AYRSHARE_API_KEY missing — refusing to run real payouts on unverified views",
+      hint: "set a valid AYRSHARE_API_KEY to restore live view tracking",
     });
     return summary; // all zeros — nothing promoted, claimed, or transferred
   }
@@ -260,7 +261,7 @@ export async function runPayoutBatch(
 
     // 5. Transfer (idempotent on payout id), then settle or fail.
     try {
-      const { transferId, mock } = await transferToCreator(amount, account, payoutId, {
+      const { transferId } = await transferToCreator(amount, account, payoutId, {
         payoutId,
         creatorId,
       });
@@ -278,7 +279,6 @@ export async function runPayoutBatch(
         payoutId,
         amount: amount.toFixed(2),
         transferId,
-        mock,
       });
     } catch (err) {
       await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });

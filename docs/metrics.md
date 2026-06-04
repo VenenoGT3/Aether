@@ -1,6 +1,6 @@
 > ⚠️ **Outdated — describes the original fixed-fee metrics/scraping approach (SociaVault).**
-> View tracking is now handled by the worker's provider abstraction
-> (`worker/views-provider.ts`: Ayrshare / simulated) feeding the earnings pipeline.
+> View tracking is now handled by the worker's Ayrshare view provider
+> (`worker/views-provider.ts`, required) feeding the earnings pipeline.
 > See [HANDOFF.md](../HANDOFF.md) for the model and [SETUP.md](../SETUP.md) for running the worker.
 
 # Aether Social Metrics Monitoring System
@@ -49,7 +49,7 @@ Add the key to your `.env.local` or environment settings:
 ```bash
 SOCIAVAULT_API_KEY=sv_your_actual_key_here
 ```
-*Note: If no API key is specified (or set to `placeholder-sociavault-key` in development), Aether runs in a simulated mode that generates realistic mock metrics for debugging.*
+*Note: `SOCIAVAULT_API_KEY` is required for metric fetching. The `/api/metrics/fetch` route returns `503` when it is not configured — there is no simulated fallback.*
 
 ---
 

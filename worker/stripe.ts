@@ -1,5 +1,4 @@
 import Stripe from "stripe";
-import { isMockMode } from "./env";
 import { getCircuitBreaker } from "./circuit-breaker";
 
 // All live worker Stripe calls go through one breaker: 5 consecutive failures →
@@ -31,7 +30,6 @@ function getStripe(): Stripe {
 
 export interface TransferResult {
   transferId: string;
-  mock: boolean;
 }
 
 export async function transferToCreator(
@@ -40,16 +38,10 @@ export async function transferToCreator(
   idempotencyKey: string,
   metadata: Record<string, string> = {}
 ): Promise<TransferResult> {
-  // Mock mode (or a mock connected account) returns a simulated transfer.
-  if (
-    isMockMode ||
-    !destinationAccountId ||
-    destinationAccountId.startsWith("acct_mock_")
-  ) {
-    return {
-      transferId: "tr_mock_" + Math.random().toString(36).substring(2, 11),
-      mock: true,
-    };
+  if (!destinationAccountId) {
+    throw new Error(
+      "[worker] transferToCreator requires a connected Stripe account id."
+    );
   }
 
   const transfer = await stripeBreaker.exec(() =>
@@ -64,7 +56,7 @@ export async function transferToCreator(
     )
   );
 
-  return { transferId: transfer.id, mock: false };
+  return { transferId: transfer.id };
 }
 
 /**
@@ -75,9 +67,6 @@ export async function transferToCreator(
 export async function retrievePaymentIntentStatus(
   paymentIntentId: string
 ): Promise<{ status: string } | null> {
-  if (isMockMode || paymentIntentId.startsWith("pi_mock_")) {
-    return { status: "succeeded" };
-  }
   try {
     const pi = await stripeBreaker.exec(() =>
       getStripe().paymentIntents.retrieve(paymentIntentId)

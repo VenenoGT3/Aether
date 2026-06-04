@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { getServerUser, createClient } from "@/lib/supabase/server";
-import { isMockMode } from "@/lib/env";
 import { safeParse } from "@/lib/validate";
 import { toActionError, reportError, UnauthorizedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -11,7 +10,6 @@ import {
   getWeekStart,
   nextMilestone,
   clipsToNextMilestone,
-  challengeRewardFor,
 } from "@/lib/referral";
 import type { WeeklyChallenge, ChallengeMilestoneStatus } from "@/types/referral";
 
@@ -27,8 +25,7 @@ const milestoneField = z
 function buildChallenge(
   clips: number,
   claimedThresholds: number[],
-  periodStart: string,
-  isMock: boolean
+  periodStart: string
 ): WeeklyChallenge {
   const claimed = new Set(claimedThresholds);
   const milestones: ChallengeMilestoneStatus[] = WEEKLY_CHALLENGE_MILESTONES.map((m) => {
@@ -44,7 +41,6 @@ function buildChallenge(
     clips_to_next: clipsToNextMilestone(clips),
     total_claimable: milestones.filter((m) => m.claimable).reduce((s, m) => s + m.reward, 0),
     milestones,
-    isMock,
   };
 }
 
@@ -57,11 +53,6 @@ export async function getWeeklyChallengeAction(): Promise<{
   try {
     const weekStart = getWeekStart();
     const periodStart = weekStart.toISOString().slice(0, 10);
-
-    if (isMockMode) {
-      // Demo: 5 clips this week, the first milestone already claimed.
-      return { success: true, challenge: buildChallenge(5, [3], periodStart, true) };
-    }
 
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
@@ -85,7 +76,7 @@ export async function getWeeklyChallengeAction(): Promise<{
 
     const claimed = ((claims ?? []) as Array<{ milestone: number }>).map((c) => Number(c.milestone));
 
-    return { success: true, challenge: buildChallenge(Number(count ?? 0), claimed, periodStart, false) };
+    return { success: true, challenge: buildChallenge(Number(count ?? 0), claimed, periodStart) };
   } catch (error) {
     reportError(error, { action: "getWeeklyChallenge" });
     return { success: false, error: "Could not load this week's challenge." };
@@ -99,14 +90,10 @@ export async function getWeeklyChallengeAction(): Promise<{
  */
 export async function claimWeeklyChallengeRewardAction(
   milestoneClips: number
-): Promise<{ success: boolean; error?: string; isMock?: boolean; reward?: number }> {
+): Promise<{ success: boolean; error?: string; reward?: number }> {
   try {
     const parsed = safeParse(milestoneField, milestoneClips);
     if (!parsed.ok) return { success: false, error: parsed.error };
-
-    if (isMockMode) {
-      return { success: true, isMock: true, reward: challengeRewardFor(parsed.data) };
-    }
 
     const me = await getServerUser();
     if (!me) throw new UnauthorizedError();
@@ -131,7 +118,7 @@ export async function claimWeeklyChallengeRewardAction(
       { event: "challenge.reward.claimed", userId: me.user_id, milestone: parsed.data },
       "challenge reward claimed"
     );
-    return { success: true, isMock: false, reward: res.amount };
+    return { success: true, reward: res.amount };
   } catch (error) {
     return toActionError(error, { action: "claimWeeklyChallengeReward" });
   }

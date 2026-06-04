@@ -38,7 +38,7 @@ export interface Profile {
   stripe_onboarding_completed?: boolean;
   
   // Influencer fields
-  social_handle?: string; // Backwards compatibility for mock
+  social_handle?: string; // Backwards compatibility
   bio?: string;
   niche?: string;
   followers?: number;
