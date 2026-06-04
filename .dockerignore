@@ -23,9 +23,10 @@ hooks
 # Supabase migrations / edge functions (applied separately)
 supabase
 
-# Load tests, one-off scripts, Vercel link state (worker doesn't need them)
+# Load tests, one-off scripts, deploy/systemd assets, Vercel link state
 tests
 scripts
+deploy
 .vercel
 
 # Docs, tooling, editor, CI

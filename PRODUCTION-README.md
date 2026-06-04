@@ -194,15 +194,30 @@ docker build -t aether-worker .
 docker run -d --name aether-worker --restart unless-stopped \
   --env-file .env -p 127.0.0.1:8080:8080 aether-worker
 ```
-(For a system service, wrap that `docker run` in a systemd unit — a fuller
-systemd/monitoring setup is a follow-up to this initial section.)
+
+### Run as a systemd service (recommended for a VPS)
+A ready-made unit and deploy script live in [`deploy/`](./deploy):
+
+```bash
+# one-time install (repo cloned to /opt/aether)
+sudo cp /opt/aether/deploy/aether-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now aether-worker
+systemctl status aether-worker
+journalctl -u aether-worker -f
+```
+
+The unit (`deploy/aether-worker.service`) runs `docker compose up` (worker + Redis)
+in the foreground under systemd, with `Restart=always` and a 90s stop timeout so
+in-flight BullMQ jobs drain on redeploy (`tini` forwards SIGTERM).
 
 ### Update / redeploy
+Use the deploy script — it fast-forwards the repo, rebuilds, restarts (via systemd
+if installed, else compose), and waits on the health endpoint:
 ```bash
-cd Aether && git pull origin main
-docker compose up -d --build worker     # or: docker build … && docker restart aether-worker
+cd /opt/aether && ./deploy/deploy-worker.sh main
 ```
-`tini` forwards SIGTERM so in-flight BullMQ jobs drain before exit.
+Or manually: `git pull origin main && docker compose up -d --build worker`.
 
 ### Operations
 - **Health:** `GET :8080/health` (liveness — ready + fresh heartbeat), `:8080/ready`
