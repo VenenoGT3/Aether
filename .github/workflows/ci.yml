@@ -1,26 +1,39 @@
 name: CI
 
-# Runs the full quality gate on every pull request into the protected branches,
-# and again on pushes to those branches (post-merge verification).
+# ─────────────────────────────────────────────────────────────────────────────
+# Aether quality gate.
+#
+# Runs on every pull request into a protected branch, and again on push to those
+# branches (post-merge verification). The four jobs run in parallel and each
+# surfaces as its OWN status check, so branch protection can require them by name:
+#
+#       typecheck · lint · test · preflight
+#
+# Keep these job names stable — they are referenced verbatim by the branch
+# protection rules (see scripts/setup-branch-protection.sh and GITHUB-SETUP.md).
+# ─────────────────────────────────────────────────────────────────────────────
 on:
   pull_request:
     branches: [main, staging, development]
   push:
     branches: [main, staging, development]
 
-# Only the latest run per ref needs to finish; cancel superseded runs.
+# Only the latest run per branch/PR needs to finish; cancel superseded runs for
+# faster feedback and fewer wasted minutes.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: CI only needs to read the repository.
+# Least privilege: CI only needs to read the repository contents.
 permissions:
   contents: read
 
 jobs:
+  # Static type safety — `tsc --noEmit`, zero type errors.
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,9 +43,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
 
+  # ESLint — zero errors (warnings allowed).
   lint:
     name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,9 +57,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
 
+  # Vitest unit/integration suite (money, fraud, RLS, escrow, payouts, …).
   test:
     name: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,14 +71,16 @@ jobs:
       - run: npm ci
       - run: npm run test
 
+  # Configuration preflight (scripts/preflight.ts): asserts that the REQUIRED env
+  # vars are PRESENT and that production-only safety rules hold. It NEVER validates
+  # secret *values*, and its hard-fail checks are gated on VERCEL_ENV=production
+  # (never set in CI). Real repository secrets are used when configured; otherwise
+  # safe placeholders satisfy the "is it set?" contract so the script still runs
+  # end-to-end.
   preflight:
     name: preflight
     runs-on: ubuntu-latest
-    # Preflight only asserts that required env vars are PRESENT (it never
-    # validates secret values, and its production-safety checks are gated on
-    # VERCEL_ENV=production, which is never set here). Real repository secrets
-    # are used when configured; otherwise safe CI placeholders satisfy the
-    # contract so the check still exercises the script end-to-end.
+    timeout-minutes: 10
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}

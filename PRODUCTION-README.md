@@ -15,6 +15,76 @@ The worker is **not** deployed to Vercel (it's a long-lived process). See the
 
 ---
 
+## GitHub & deployment workflow
+
+### Branch strategy
+
+| Branch | Role | Deploys to |
+| --- | --- | --- |
+| `main` | **Production** — always releasable | Vercel Production (web app) + worker host |
+| `staging` | **QA / pre-production** — release candidates | Vercel Preview (staging) |
+| `development` | **Active development** — integration branch | Vercel Preview |
+
+Promotion flows one direction: `feature/* → development → staging → main`.
+Never commit directly to `main` — production changes land via a reviewed PR.
+
+### Pull-request workflow
+
+1. Branch off `development`:
+   `git checkout development && git pull && git checkout -b feature/<short-name>`
+2. Open a PR into `development` (or `staging` for a release candidate, `main` to ship).
+3. CI runs automatically — **all four checks must be green** (see below).
+4. Get **1+ approval**, resolve review conversations, then **Squash & merge**.
+5. Promote with `development → staging`, then `staging → main` PRs.
+
+### CI pipeline — [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)
+
+Runs on every PR into `main` / `staging` / `development`, and again on push to those
+branches. Four parallel, independent jobs — **each is its own required status check**:
+
+| Check | Command | Gate |
+| --- | --- | --- |
+| `typecheck` | `npm run typecheck` | `tsc --noEmit` — zero type errors |
+| `lint` | `npm run lint` | ESLint — zero errors |
+| `test` | `npm run test` | Vitest unit/integration suite |
+| `preflight` | `npm run preflight` | Required-env + production-safety config check |
+
+Node 20 with cached `npm ci`, least-privilege (`contents: read`), and superseded runs
+auto-cancelled. `preflight` uses real repo secrets when present and falls back to safe
+CI placeholders otherwise (it asserts env *presence*, never secret values).
+
+### Deployment topology
+
+Aether ships as **two independent deployables** — see §1–§2 for the full runbook:
+
+- **Web app (Next.js 16) → Vercel.** Import the repo with the Next.js preset (no
+  `vercel.json` needed); set the §1 *Web app* env vars for Production + Preview.
+  `main` → Vercel **Production**; `staging` / `development` → **Preview** deployments.
+  Stripe webhooks are served by the Supabase `stripe-webhook` Edge Function
+  (`STRIPE_WEBHOOK_HANDLER=supabase`).
+- **Worker (Node + BullMQ) → container host, _not_ Vercel.** It's a long-lived process
+  (no HTTP surface beyond a `:8080` health probe), so Vercel's serverless model can't
+  run it. Deploy from the repo [`Dockerfile`](./Dockerfile) (or
+  [`Procfile`](./Procfile): `worker: npm run worker:prod`) to Railway / Render / Fly /
+  any container host, with the §1 *Worker* env vars. Horizontally scalable
+  (leader-locked sweeps + BullMQ job dedup).
+
+### Branch protection (requires repo admin)
+
+Protection rules are **not yet applied** — the connected service account lacks admin on
+the repo (and protection on a private repo needs GitHub Pro/Team/Enterprise). A repo
+admin applies them once via [`scripts/setup-branch-protection.sh`](./scripts/setup-branch-protection.sh)
+(or **Settings → Branches**). Target rules:
+
+- **`main`**: PR required · 1+ approval · status checks `typecheck` / `lint` / `test` /
+  `preflight` (strict / up-to-date) · no force-push · no deletion · admins included ·
+  conversation resolution required.
+- **`staging`**: PR required · 1+ approval · same status checks · no force-push.
+
+Status and the exact admin steps live in [`GITHUB-SETUP.md`](./GITHUB-SETUP.md).
+
+---
+
 ## 1. Environment variables
 
 ### Web app — required in production
