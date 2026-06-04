@@ -23,6 +23,11 @@ hooks
 # Supabase migrations / edge functions (applied separately)
 supabase
 
+# Load tests, one-off scripts, Vercel link state (worker doesn't need them)
+tests
+scripts
+.vercel
+
 # Docs, tooling, editor, CI
 docs
 *.md
@@ -37,5 +42,8 @@ coverage
 # Misc
 .DS_Store
 npm-debug.log*
+*.log
+*.tsbuildinfo
 Dockerfile
 .dockerignore
+docker-compose.yml

@@ -153,6 +153,70 @@ Pre-promotion gate: `npm run typecheck`, `npm run lint`, `npm run test` all gree
 
 ---
 
+## Worker deployment (Hetzner VPS)
+
+The background worker is a long-lived process (it can't run on Vercel — see
+"Deployment topology" above). It ships as a Docker image from the repo
+[`Dockerfile`](./Dockerfile): multi-stage, non-root, `tini` PID 1 for clean
+SIGTERM-driven graceful shutdown, and a health endpoint on `:8080`.
+
+### Prerequisites
+- A Hetzner Cloud VPS (CX22 is plenty for a single worker), Ubuntu LTS.
+- Docker Engine + the Compose plugin installed.
+- Redis — co-located via `docker-compose.yml`, or (preferred for prod) a managed
+  Redis with `REDIS_URL` pointed at it.
+
+### Required environment (see §1 "Worker" for the full list)
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role (bypasses RLS) — server-side only |
+| `AYRSHARE_API_KEY` | ✅ | Live view tracking; the worker hard-fails without it and never pays on unverified views |
+| `REDIS_URL` | ▲ | BullMQ connection; defaults to `redis://localhost:6379` |
+| `STRIPE_SECRET_KEY` | ▲ | Required for creator payouts / withdrawal reconciliation |
+| `WORKER_HEALTH_PORT` | optional | Health port (default `8080`; `0` disables) |
+
+### Deploy (Docker Compose — single VPS, co-located Redis)
+```bash
+ssh root@<your-hetzner-ip>
+git clone https://github.com/VenenoGT3/Aether.git && cd Aether
+git checkout main
+cp .env.example .env        # then edit .env and fill the worker secrets above
+docker compose up -d --build worker   # starts redis (dependency) + worker
+docker compose logs -f worker         # watch startup; should report schedulers up
+curl -s localhost:8080/health         # {"status":"ok", ...}
+```
+
+### Deploy (managed Redis, no co-located Redis)
+Set `REDIS_URL` in `.env` to the managed instance and run only the worker:
+```bash
+docker build -t aether-worker .
+docker run -d --name aether-worker --restart unless-stopped \
+  --env-file .env -p 127.0.0.1:8080:8080 aether-worker
+```
+(For a system service, wrap that `docker run` in a systemd unit — a fuller
+systemd/monitoring setup is a follow-up to this initial section.)
+
+### Update / redeploy
+```bash
+cd Aether && git pull origin main
+docker compose up -d --build worker     # or: docker build … && docker restart aether-worker
+```
+`tini` forwards SIGTERM so in-flight BullMQ jobs drain before exit.
+
+### Operations
+- **Health:** `GET :8080/health` (liveness — ready + fresh heartbeat), `:8080/ready`
+  (readiness). Returns `503` if the heartbeat goes stale (hung loop / dead Redis).
+- **Logs:** `docker compose logs -f worker`; alert on lines tagged `[ALERT]`
+  (money-integrity, fraud spikes, withdrawal/payout failures).
+- **Scaling:** horizontally safe — fleet-wide audits use a Redis leader lock and
+  view-sync uses BullMQ `jobId` dedup. Run multiple replicas sharing one Redis.
+- **Security:** firewall to SSH only (`ufw allow OpenSSH`); do **not** expose
+  `8080` (health) or `6379` (Redis) publicly — bind them to localhost as shown.
+  Keep `.env` at `chmod 600`; the image already runs as a non-root user.
+
+---
+
 ## 3. Supabase production state
 
 Detailed audit and policy notes live in [`SUPABASE-AUDIT.md`](./SUPABASE-AUDIT.md)
