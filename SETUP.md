@@ -181,7 +181,7 @@ The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livene
 | `PAYOUT_BATCH_INTERVAL` | worker | Payout cadence in minutes (default 360) |
 | `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES` | worker | Cadence of the pool-funding reconciliation safety net (default 15) |
 | `POOL_FUNDING_STUCK_ALERT_MINUTES` | worker | A draft+funded campaign stuck longer than this fires a `[ALERT]` (default 120) |
-| `GEMINI_API_KEY` / `RESEND_API_KEY` / `SOCIAVAULT_API_KEY` | app | Optional (AI brief, email, legacy scraping) |
+| `XAI_API_KEY` / `RESEND_API_KEY` / `SOCIAVAULT_API_KEY` | app | Optional (Grok 4.3 AI brief/pitch/forecast, email, legacy scraping) |
 
 Full secret-placement matrix: [docs/SECRETS.md](docs/SECRETS.md).
 

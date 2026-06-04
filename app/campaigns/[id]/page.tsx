@@ -1610,7 +1610,7 @@ export default function CampaignDetailPage() {
               <RefreshCw size={32} className="text-primary animate-spin mb-4" />
               <h4 className="text-sm font-semibold text-foreground">{t("Generating Performance Forecast...")}</h4>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs font-medium">
-                {t("Gemini is analyzing metric pacing, click efficiency, conversion rates, and creator demographics to project campaign limits.")}
+                {t("Grok is analyzing metric pacing, click efficiency, conversion rates, and creator demographics to project campaign limits.")}
               </p>
             </div>
           ) : aiPrediction ? (

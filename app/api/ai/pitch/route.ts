@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError } from "@/lib/api/response";
 import { AiPitchBodySchema } from "@/lib/api/schemas";
-import { getGeminiApiKey } from "@/lib/env.server";
+import { generateXaiText } from "@/lib/ai/xai";
 
 export const GET = () => methodNotAllowed(["POST"]);
 
@@ -18,61 +18,29 @@ export async function POST(request: Request) {
 
     const { campaign, creator, tone = "professional" } = guarded.ctx.data;
 
-    const apiKey = getGeminiApiKey();
-
-    // Check if API key exists and is not a placeholder
-    const isApiKeyValid = apiKey && !apiKey.startsWith("AIzaSyPlaceholder") && apiKey !== "AIzaSy...";
-
-    if (isApiKeyValid) {
-      try {
-        const prompt = `Write a highly personalized, compelling sponsorship pitch from a content creator named ${
-          creator.name
-        } (bio: "${creator.bio || "None"}", niches: ${
-          Array.isArray(creator.niches) ? creator.niches.join(", ") : creator.niche || "None"
-        }, followers: ${creator.followers || 0}, engagement rate: ${
-          creator.engagement || 0
-        }%) applying to the campaign "${campaign.title}".
+    try {
+      const prompt = `Write a highly personalized, compelling sponsorship pitch from a content creator named ${
+        creator.name
+      } (bio: "${creator.bio || "None"}", niches: ${
+        Array.isArray(creator.niches) ? creator.niches.join(", ") : creator.niche || "None"
+      }, followers: ${creator.followers || 0}, engagement rate: ${
+        creator.engagement || 0
+      }%) applying to the campaign "${campaign.title}".
 The campaign brief is: "${campaign.description || "None"}".
 The tone of the pitch should be ${tone} (e.g. professional, energetic, or creative).
 Keep the pitch extremely concise, around 100-120 words. Begin directly with a compelling hook, highlight why the creator's audience and content style fits this campaign, and end with a clear call to action. Do not include any placeholder text like [Name] or [Date] or brackets. Write it as a ready-to-send message.`;
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                maxOutputTokens: 250,
-                temperature: 0.7,
-              },
-            }),
-          }
-        );
+      const pitch = await generateXaiText({
+        prompt,
+        temperature: 0.7,
+        maxOutputTokens: 250,
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          const pitch = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (pitch) {
-            return NextResponse.json({ pitch: pitch.trim(), generatedBy: "gemini" });
-          }
-        }
-        
-        console.warn("Gemini API call failed or returned empty, falling back to template.");
-      } catch (geminiError) {
-        console.error("Error calling Gemini API:", geminiError);
+      if (pitch) {
+        return NextResponse.json({ pitch: pitch.trim(), generatedBy: "grok" });
       }
+    } catch (grokError) {
+      console.error("Error calling Grok API:", grokError);
     }
 
     // High quality local template fallback

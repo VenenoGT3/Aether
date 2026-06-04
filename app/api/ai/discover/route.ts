@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError } from "@/lib/api/response";
 import { AiDiscoverBodySchema } from "@/lib/api/schemas";
-import { getGeminiApiKey } from "@/lib/env.server";
+import { generateXaiJson } from "@/lib/ai/xai";
 
 interface MatchResponse {
   campaignId: string;
@@ -24,12 +24,8 @@ export async function POST(request: Request) {
 
     const { creator, campaigns } = guarded.ctx.data;
 
-    const apiKey = getGeminiApiKey();
-    const isMock = !apiKey;
-
-    if (!isMock) {
-      try {
-        const prompt = `You are the AI Matchmaker for Aether, a premium Apple-designed influencer marketing platform.
+    try {
+      const prompt = `You are the AI Matchmaker for Aether, a premium Apple-designed influencer marketing platform.
 We need to evaluate a content creator's profile against a list of campaigns, ranking them by fit, and generating a customized, highly premium "smart matching suggestion" for each card.
 
 Creator Profile:
@@ -52,62 +48,29 @@ interface MatchResponse {
   matchingReason: string;
 }[]`;
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.4,
-              },
-            }),
-          }
-        );
+      const matches = await generateXaiJson<MatchResponse[]>({
+        prompt,
+        temperature: 0.4,
+      });
 
-        if (response.ok) {
-          const resData = await response.json();
-          const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          
-          let text = rawText.trim();
-          if (text.startsWith("```json")) {
-            text = text.substring(7);
-          }
-          if (text.endsWith("```")) {
-            text = text.substring(0, text.length - 3);
-          }
-          text = text.trim();
+      if (Array.isArray(matches)) {
+        // Merge matching data back into campaigns and sort by matchScore desc
+        const matchedCampaigns = campaigns.map(c => {
+          const match = matches.find(m => m.campaignId === c.id);
+          return {
+            ...c,
+            matchScore: match ? match.matchScore : 75,
+            matchingReason: match ? match.matchingReason : "Matches your content focus niche."
+          };
+        }).sort((a, b) => b.matchScore - a.matchScore);
 
-          const matches: MatchResponse[] = JSON.parse(text);
-          if (Array.isArray(matches)) {
-            // Merge matching data back into campaigns and sort by matchScore desc
-            const matchedCampaigns = campaigns.map(c => {
-              const match = matches.find(m => m.campaignId === c.id);
-              return {
-                ...c,
-                matchScore: match ? match.matchScore : 75,
-                matchingReason: match ? match.matchingReason : "Matches your content focus niche."
-              };
-            }).sort((a, b) => b.matchScore - a.matchScore);
-
-            return NextResponse.json({ success: true, campaigns: matchedCampaigns, generatedBy: "gemini" });
-          }
-        }
-        console.warn("Gemini discover call returned invalid response, falling back to local matches.");
-      } catch (geminiError) {
-        console.error("Error in Gemini discover matchmaking:", geminiError);
+        return NextResponse.json({ success: true, campaigns: matchedCampaigns, generatedBy: "grok" });
       }
+      if (matches) {
+        console.warn("Grok discover call returned invalid response, falling back to local matches.");
+      }
+    } catch (grokError) {
+      console.error("Error in Grok discover matchmaking:", grokError);
     }
 
     // High quality local fallback logic

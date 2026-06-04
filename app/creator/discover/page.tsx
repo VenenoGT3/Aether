@@ -275,7 +275,7 @@ export default function DiscoverPage() {
     setIsApplyModalOpen(true);
   };
 
-  // CALL GEMINI AI PITCH WRITER
+  // CALL GROK AI PITCH WRITER
   const handleAIGeneratePitch = async () => {
     if (!selectedCampaign) return;
     setIsAILoading(true);
@@ -308,7 +308,7 @@ export default function DiscoverPage() {
       setPitchText(data.pitch || "");
       toast.success(t("AI pitch ready!"), { 
         id: "ai-pitch",
-        description: data.generatedBy === "gemini" ? t("Written with Gemini 1.5 Flash.") : t("Loaded matching template.")
+        description: data.generatedBy === "grok" ? t("Written with Grok 4.3.") : t("Loaded matching template.")
       });
     } catch {
       toast.error(t("AI Assistant is offline. Please write manually."), { id: "ai-pitch" });

@@ -74,7 +74,7 @@ See **[SECRETS.md](./SECRETS.md)** for the full Vercel + Supabase matrix.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function (default) + worker process | Never in the Vercel app runtime |
 | `STRIPE_WEBHOOK_SECRET` | Supabase Edge (default) | Webhook verification; Vercel only if legacy handler |
 | `CRON_SECRET` | Vercel server | Cron + internal metrics |
-| `GEMINI_API_KEY`, `SOCIAVAULT_API_KEY` | `lib/env.server.ts` | API routes |
+| `XAI_API_KEY`, `SOCIAVAULT_API_KEY` | `lib/env.server.ts` | API routes |
 
 **Do not** import `lib/env.server.ts` from Client Components.
 
@@ -110,7 +110,7 @@ All routes use Zod validation, honeypot (`_hp`), JSON size limits, and friendly 
 
 5. **No CSRF tokens on API** — Same-site cookies + JSON POST; consider CSRF for cookie-auth forms if adding non-API mutations.
 
-6. **Gemini API key in query string** — Third-party request logs may capture key. **Mitigation:** Move to header-based API when Gemini supports it.
+6. **AI provider dependency** — Grok-powered routes depend on xAI availability. **Mitigation:** Keep local fallbacks for optional AI endpoints and surface clear errors for brief generation.
 
 ---
 

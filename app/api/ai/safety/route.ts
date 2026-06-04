@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError } from "@/lib/api/response";
 import { AiSafetyBodySchema } from "@/lib/api/schemas";
-import { getGeminiApiKey } from "@/lib/env.server";
+import { generateXaiJson } from "@/lib/ai/xai";
 
 interface SafetyResponse {
   isDisclosed: boolean;
@@ -33,12 +33,8 @@ export async function POST(request: Request) {
 
     const { text, platform, guidelines } = guarded.ctx.data;
 
-    const apiKey = getGeminiApiKey();
-    const isMock = !apiKey;
-
-    if (!isMock) {
-      try {
-        const prompt = `You are the Content Safety, Compliance & Moderation Officer for Aether, a premium Apple-designed influencer marketing platform.
+    try {
+      const prompt = `You are the Content Safety, Compliance & Moderation Officer for Aether, a premium Apple-designed influencer marketing platform.
 You need to audit a creator's draft social media post caption or description for compliance (FTC disclosures, prohibited claims, FDA restrictions, and brand guidelines).
 
 Draft Content Text to Audit:
@@ -70,50 +66,16 @@ interface SafetyResponse {
   }>;
 }`;
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.2,
-              },
-            }),
-          }
-        );
+      const parsedReport = await generateXaiJson<SafetyResponse>({
+        prompt,
+        temperature: 0.2,
+      });
 
-        if (response.ok) {
-          const resData = await response.json();
-          const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          
-          let cleanText = rawText.trim();
-          if (cleanText.startsWith("```json")) {
-            cleanText = cleanText.substring(7);
-          }
-          if (cleanText.endsWith("```")) {
-            cleanText = cleanText.substring(0, cleanText.length - 3);
-          }
-          cleanText = cleanText.trim();
-
-          const parsedReport: SafetyResponse = JSON.parse(cleanText);
-          return NextResponse.json({ success: true, report: parsedReport, generatedBy: "gemini" });
-        }
-        console.warn("Gemini Safety Audit returned error status, falling back to local verification.");
-      } catch (geminiError) {
-        console.error("Gemini Safety API call failed:", geminiError);
+      if (parsedReport) {
+        return NextResponse.json({ success: true, report: parsedReport, generatedBy: "grok" });
       }
+    } catch (grokError) {
+      console.error("Grok Safety API call failed:", grokError);
     }
 
     // High quality local fallback heuristic checker

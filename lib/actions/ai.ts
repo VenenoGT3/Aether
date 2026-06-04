@@ -1,6 +1,6 @@
 "use server";
 
-import { getGeminiApiKey } from "@/lib/env.server";
+import { generateXaiJson } from "@/lib/ai/xai";
 
 interface BriefResponse {
   title: string;
@@ -31,23 +31,13 @@ interface BriefResponse {
 }
 
 /**
- * Server Action: Generates a creative brief from a campaign prompt using Gemini.
- * Requires GEMINI_API_KEY — fails clearly when it is not configured (no fallback).
+ * Server Action: Generates a creative brief from a campaign prompt using Grok.
+ * Requires XAI_API_KEY — fails clearly when it is not configured (no fallback).
  */
 export async function generateCampaignBriefAction(
   prompt: string
 ): Promise<{ success: boolean; brief?: BriefResponse; error?: string }> {
   try {
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      return {
-        success: false,
-        error: "AI brief generation requires GEMINI_API_KEY. Configure it to enable this feature.",
-      };
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
     const promptText = `
 You are the Creative Director and AI Campaign Brief Generator for Aether, a premium Apple-designed influencer marketing platform.
 The user wants to generate a professional, fully populated campaign brief based on the following idea:
@@ -94,31 +84,18 @@ Ensure that:
 9. Provide a strong key_messaging statement.
 `;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-      }),
+    const parsedBrief = await generateXaiJson<BriefResponse>({
+      prompt: promptText,
+      temperature: 0.4,
     });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API returned status ${response.status}`);
+    if (!parsedBrief) {
+      return {
+        success: false,
+        error: "AI brief generation requires XAI_API_KEY. Configure it to enable this feature.",
+      };
     }
 
-    const resJson = await response.json();
-    const rawText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    let text = rawText.trim();
-    if (text.startsWith("```json")) {
-      text = text.substring(7);
-    }
-    if (text.endsWith("```")) {
-      text = text.substring(0, text.length - 3);
-    }
-    text = text.trim();
-
-    const parsedBrief = JSON.parse(text) as BriefResponse;
     return { success: true, brief: parsedBrief };
   } catch (error) {
     console.error("Error in generateCampaignBriefAction:", error);

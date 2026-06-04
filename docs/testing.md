@@ -22,7 +22,7 @@ Follow this checklist to manually run the E2E campaign flow in the development e
 - [ ] **Create Campaign Wizard**
   - Navigate to `/business/campaigns/new`.
   - Fill out Step 1 (Title, Description, target Niches e.g., Tech/Design).
-  - (Optional) Click **Generate with AI Brief** and verify the Gemini API populates the brief.
+  - (Optional) Click **Generate with AI Brief** and verify Grok 4.3 populates the brief.
   - Complete Steps 2-5 (Audience, Deliverables, Budget, Timeline).
   - Review Step 6 and click **Publish Campaign**.
 - [ ] **Secure Escrow Payment**

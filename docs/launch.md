@@ -6,7 +6,7 @@
 
 This guide details the end-to-end operational blueprint to deploy and launch Aether in a live production environment. 
 
-Aether's architecture integrates **Next.js 16 (App Router)** hosted on **Vercel** with **Supabase** (Database, Auth, and Storage), **Stripe Connect** (Escrow and Payouts), **Google Gemini AI** (Brief & Pitch Generation), and **Resend** (Transactional Notifications).
+Aether's architecture integrates **Next.js 16 (App Router)** hosted on **Vercel** with **Supabase** (Database, Auth, and Storage), **Stripe Connect** (Escrow and Payouts), **xAI Grok 4.3** (Brief & Pitch Generation), and **Resend** (Transactional Notifications).
 
 ---
 
@@ -17,7 +17,7 @@ graph TD
     User([End User / Browser]) -->|HTTPS / WSS| Vercel[Vercel Serverless Hosting]
     Vercel -->|Database / Auth / Realtime| Supabase[(Supabase Backend)]
     Vercel -->|Billing & Connect Payouts| Stripe[Stripe API]
-    Vercel -->|AI Campaign Processing| Gemini[Gemini API]
+    Vercel -->|AI Campaign Processing| Grok[xAI Grok 4.3 API]
     Vercel -->|Transactional Emails| Resend[Resend API]
 ```
 
@@ -34,7 +34,7 @@ Configure these environment variables in your production hosting provider (e.g.,
 | **`STRIPE_SECRET_KEY`** | Server Only | Private API key for processing Escrow and Connect requests. | `sk_live_51Pq...` (Live) or `sk_test_...` (Test) |
 | **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`** | Client & Server | Public key used to initialize the Stripe Elements client-side. | `pk_live_51Pq...` (Live) or `pk_test_...` (Test) |
 | **`STRIPE_WEBHOOK_SECRET`** | Server Only | Secret token used to cryptographically verify incoming Stripe events. | `whsec_...` |
-| **`GEMINI_API_KEY`** | Server Only | Google AI Studio key for processing Briefs and Creator Pitch drafts. | `AIzaSy...` |
+| **`XAI_API_KEY`** | Server Only | xAI API key for Grok 4.3 brief and creator pitch generation. | `xai-...` |
 | **`RESEND_API_KEY`** | Server Only | Mail transmission key for sending automated match/payout alerts. | `re_...` |
 | **`NEXT_PUBLIC_APP_URL`** | Client & Server | Root canonical origin of the application. Used for redirect URIs. | `https://aether.inc` |
 

@@ -13,7 +13,7 @@ export const SERVER_SECRET_NAMES = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "CRON_SECRET",
-  "GEMINI_API_KEY",
+  "XAI_API_KEY",
   "SOCIAVAULT_API_KEY",
   "AYRSHARE_API_KEY",
   "RESEND_API_KEY",
@@ -67,8 +67,12 @@ export function getCronSecret(): string {
   return requireServerSecret("CRON_SECRET");
 }
 
-export function getGeminiApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY?.trim() || undefined;
+export function getXaiApiKey(): string | undefined {
+  return process.env.XAI_API_KEY?.trim() || undefined;
+}
+
+export function getXaiModel(): string {
+  return process.env.XAI_MODEL?.trim() || "grok-4.3";
 }
 
 export function getSociavaultApiKey(): string | undefined {

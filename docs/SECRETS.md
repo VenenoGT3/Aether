@@ -40,7 +40,7 @@ Set in **Project → Settings → Environment Variables**. Mark sensitive values
 
 | Variable | Sensitive |
 |----------|-----------|
-| `GEMINI_API_KEY` | Yes |
+| `XAI_API_KEY` | Yes |
 | `RESEND_API_KEY` | Yes |
 | `SOCIAVAULT_API_KEY` | Yes |
 
