@@ -3,18 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { ClipSubmitBody } from "@/lib/api/schemas";
 import { budgetUsage, isNearlyFull, isPoolExhausted } from "@/lib/campaign-budget";
 import { apiLog } from "@/lib/api/trace-log";
-
-function detectPlatform(
-  postUrl: string,
-  explicit?: "instagram" | "tiktok" | "youtube"
-): "instagram" | "tiktok" | "youtube" {
-  if (explicit) return explicit;
-  const lower = postUrl.toLowerCase();
-  if (lower.includes("tiktok.com")) return "tiktok";
-  if (lower.includes("youtube.com") || lower.includes("youtu.be"))
-    return "youtube";
-  return "instagram";
-}
+import {
+  defaultViewProviderForPlatform,
+  detectSocialPlatform,
+  extractPlatformPostId,
+} from "@/lib/social-post";
 
 export type SubmittedClip = {
   id: string;
@@ -83,7 +76,9 @@ export async function submitClip(
     .eq("id", body.campaign_id)
     .maybeSingle();
 
-  const platform = detectPlatform(body.post_url, body.platform);
+  const platform = detectSocialPlatform(body.post_url, body.platform);
+  const externalPostId = extractPlatformPostId(platform, body.post_url);
+  const viewProvider = defaultViewProviderForPlatform(platform);
 
   if (campaign) {
     const usage =
@@ -174,6 +169,8 @@ export async function submitClip(
       creator_id: userId,
       platform,
       post_url: body.post_url,
+      external_post_id: externalPostId,
+      view_provider: viewProvider,
       status: "pending",
     })
     .select("id, campaign_id, participation_id, status")

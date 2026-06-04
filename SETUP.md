@@ -1,6 +1,6 @@
 # Setup Guide
 
-How to run Aether (Supabase + Stripe + Redis + Ayrshare). For the bigger picture, read [HANDOFF.md](HANDOFF.md).
+How to run Aether (Supabase + Stripe + Redis + trusted view providers). For the bigger picture, read [HANDOFF.md](HANDOFF.md).
 
 ---
 
@@ -8,7 +8,7 @@ How to run Aether (Supabase + Stripe + Redis + Ayrshare). For the bigger picture
 
 - Node.js 20+
 - npm
-- A Supabase project, a Stripe account, a Redis instance, and an Ayrshare account
+- A Supabase project, a Stripe account, a Redis instance, and at least one trusted view provider: YouTube Data API, TikTok Login Kit/Display API, or Ayrshare
 
 ---
 
@@ -80,11 +80,13 @@ Aether uses **Stripe Connect** for creator payouts and **PaymentIntents** for fu
 
 ### 5. Redis + the worker
 
-The worker is a **standalone Node process** (not Next.js). It needs Supabase (service role) + Redis, and optionally Stripe (live payouts) and Ayrshare (real views).
+The worker is a **standalone Node process** (not Next.js). It needs Supabase (service role) + Redis, and optionally Stripe (live payouts). It also requires at least one trusted view source: YouTube official, TikTok official, or Ayrshare.
 
 ```bash
 # Provide worker env (see reference below): NEXT_PUBLIC_SUPABASE_URL,
-# SUPABASE_SERVICE_ROLE_KEY, REDIS_URL, STRIPE_SECRET_KEY, (optional) AYRSHARE_API_KEY
+# SUPABASE_SERVICE_ROLE_KEY, REDIS_URL, STRIPE_SECRET_KEY,
+# and at least one of YOUTUBE_DATA_API_KEY, TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET,
+# or AYRSHARE_API_KEY
 npm run worker           # full scheduler + workers (needs Redis)
 npm run worker:once      # one view-sync + earnings cycle (no Redis)
 npm run payouts:once     # one payout batch (no Redis)
@@ -94,7 +96,7 @@ npm run payouts:once     # one payout batch (no Redis)
 
 **Monitoring & alerts.** The worker emits structured logs (`<iso> [worker][level] event key=val …`). It logs a `heartbeat` every `WORKER_HEARTBEAT_MINUTES` with queue depths and per-window counters, and tags critical conditions with `[worker][ALERT]` so they're easy to forward to a pager/monitoring tool. Alert conditions: a job that **exhausts its retries** (`job.exhausted`), **any failed payout** in a batch (`payout.batch.failures`), an **exhausted campaign pool** (`campaign.pool_exhausted`), **repeated views-provider errors** in one window (`views.provider.repeated_errors`), and a **payout batch blocked** because the live view source is missing (`payout.blocked.no_view_source`). A minimal setup is a log drain that pages on the substring `[ALERT]`.
 
-**Real-money safety guard.** The worker requires `AYRSHARE_API_KEY` for a live view source and **hard-fails at startup without it**. As defense-in-depth, if the key is ever removed at runtime the worker **refuses to accrue earnings or run payouts** — view-sync still runs (snapshots update for visibility), but no `earnings` rows are created and payout batches no-op, with a loud `[ALERT]`. This guarantees real money is never paid out on unverified views.
+**Real-money safety guard.** The worker requires at least one trusted live view source and **hard-fails at startup without one**. Valid sources are `YOUTUBE_DATA_API_KEY`, `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET`, or `AYRSHARE_API_KEY`. As defense-in-depth, if all providers are removed at runtime the worker **refuses to accrue earnings or run payouts** — view-sync records only untrusted last-known snapshots, no `earnings` rows are created, and payout batches no-op with a loud `[ALERT]`. This guarantees real money is never paid out on unverified views.
 
 **Pool-funding reconciliation.** A repeatable worker job (every `POOL_FUNDING_RECONCILIATION_INTERVAL_MINUTES`) recovers performance campaigns stuck in `draft` after pool funding when the `payment_intent.succeeded` webhook is missed or delayed. It finds draft performance campaigns that have a `funding_payment_intent_id`, checks the PaymentIntent status in Stripe, and **activates** (`status: open` + `funded_at`) those that have succeeded — idempotently (guarded on `status='draft'`, so it can't race the webhook or touch live campaigns). Canceled/failed PaymentIntents are **left in draft** (cancellation + refund stays an explicit owner action via the cancel endpoint); a campaign stuck too long fires `campaign.funding_stuck` `[ALERT]`. This complements the manual `POST /api/campaigns/[id]/reconcile-funding` endpoint.
 
@@ -107,7 +109,10 @@ The worker is a **long-running background process with no HTTP port**, and must 
 - `REDIS_URL` — managed Redis (Upstash, Railway, Render, Redis Cloud…). TLS URLs (`rediss://`) are supported.
 - `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — **required** (service role bypasses RLS; keep it only on the worker host, never in the Vercel app).
 - `STRIPE_SECRET_KEY` — required for creator payouts.
-- `AYRSHARE_API_KEY` — **required** for live views; the worker hard-fails at startup without it.
+- `YOUTUBE_DATA_API_KEY` — official YouTube video statistics.
+- `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` — TikTok Login Kit credentials; each creator must also connect TikTok with `video.list` scope before TikTok direct polling can accrue.
+- `AYRSHARE_API_KEY` — optional fallback/aggregator.
+- At least one trusted view provider is required; the worker hard-fails without one.
 
 On startup the worker **validates its environment** and aborts with a clear `[worker][ALERT] env.invalid` line if a required var is missing; missing optional vars log `env.warning` and continue.
 
@@ -166,7 +171,11 @@ The Docker image ships a `HEALTHCHECK` hitting `/health`. For k8s, point `livene
 | `NEXT_PUBLIC_APP_URL` | app | Redirects / cron callbacks |
 | `CRON_SECRET` | app | Bearer for `/api/cron/metrics` |
 | `REDIS_URL` | worker | BullMQ (`npm run worker`); not needed for `worker:once`/`payouts:once` |
-| `AYRSHARE_API_KEY` | worker | **Required** — live Ayrshare view tracking (worker hard-fails without it) |
+| `YOUTUBE_DATA_API_KEY` | worker | Official YouTube Data API v3 statistics (`videos.list`) |
+| `YOUTUBE_MIN_INTERVAL_MS` | worker | Rate-limit gap between YouTube calls (default 100) |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | worker | TikTok Login Kit credentials for token refresh and Display API polling |
+| `TIKTOK_MIN_INTERVAL_MS` | worker | Rate-limit gap between TikTok calls (default 350) |
+| `AYRSHARE_API_KEY` | worker | Optional Ayrshare fallback/aggregator |
 | `AYRSHARE_MIN_INTERVAL_MS` | worker | Rate-limit gap between Ayrshare calls (default 350) |
 | `VIEW_SYNC_INTERVAL_MINUTES` | worker | View-sync cadence (default 10) |
 | `VIEW_SYNC_BATCH_SIZE` | worker | Max clips per sync (default 200) |

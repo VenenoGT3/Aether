@@ -1,6 +1,7 @@
 > ⚠️ **Outdated — describes the original fixed-fee metrics/scraping approach (SociaVault).**
-> View tracking is now handled by the worker's Ayrshare view provider
-> (`worker/views-provider.ts`, required) feeding the earnings pipeline.
+> View tracking is now handled by the worker's trusted provider router
+> (`worker/views-provider.ts`) using official YouTube/TikTok providers plus
+> optional Ayrshare fallback feeding the earnings pipeline.
 > See [HANDOFF.md](../HANDOFF.md) for the model and [SETUP.md](../SETUP.md) for running the worker.
 
 # Aether Social Metrics Monitoring System

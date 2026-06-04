@@ -1,6 +1,6 @@
 # Secret management — Vercel + Supabase + Worker
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-04
 
 Aether splits secrets by **runtime** so the Supabase service role never ships in the main Vercel app by default.
 
@@ -13,7 +13,7 @@ Aether splits secrets by **runtime** so the Supabase service role never ships in
 | **Browser** | `NEXT_PUBLIC_*` only | Any secret key |
 | **Vercel (Next.js)** | Stripe server key, cron secret, optional AI/email keys | Service role (default) |
 | **Supabase Edge Functions** | Service role (auto), Stripe webhook secrets | — |
-| **Worker** (standalone Node process) | Service role, Stripe server key, Redis URL, Ayrshare key | Public/browser exposure — it is a backend job, not internet-facing |
+| **Worker** (standalone Node process) | Service role, Stripe server key, Redis URL, trusted view-provider keys | Public/browser exposure — it is a backend job, not internet-facing |
 
 Production-only: there is no mock/demo fallback. Missing required config fails clearly at build/startup.
 
@@ -43,6 +43,10 @@ Set in **Project → Settings → Environment Variables**. Mark sensitive values
 | `XAI_API_KEY` | Yes |
 | `RESEND_API_KEY` | Yes |
 | `SOCIAVAULT_API_KEY` | Yes |
+| `YOUTUBE_DATA_API_KEY` | Yes |
+| `TIKTOK_CLIENT_KEY` | Yes |
+| `TIKTOK_CLIENT_SECRET` | Yes |
+| `AYRSHARE_API_KEY` | Yes |
 
 ### Do **not** set on Vercel (default)
 
@@ -98,7 +102,14 @@ The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) r
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `STRIPE_SECRET_KEY` | Creator transfers for payouts |
 | `REDIS_URL` | BullMQ queues + scheduler |
-| `AYRSHARE_API_KEY` | **Required** — live view tracking; the worker hard-fails at startup without it |
+| `YOUTUBE_DATA_API_KEY` | Official YouTube Data API v3 video statistics |
+| `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | TikTok Login Kit credentials for token refresh and Display API polling |
+| `AYRSHARE_API_KEY` | Optional fallback/aggregator for live view tracking |
+
+At least one trusted view provider must be configured or the worker hard-fails.
+TikTok also requires per-creator OAuth tokens in `creator_social_accounts`; those
+tokens must stay server/worker-side and must never be exposed through client RLS
+or `NEXT_PUBLIC_*` env vars.
 
 **Rules:**
 

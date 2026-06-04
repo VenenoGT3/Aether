@@ -5,15 +5,13 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/translations";
 
 /**
- * Account-linking placeholder for Ayrshare view tracking.
+ * Account-linking placeholder for trusted view tracking.
  *
- * WHERE REAL LINKING WILL HAPPEN: when real Ayrshare is enabled, this is where a
- * creator connects their social accounts. The flow will create/assign an
- * Ayrshare Business "Profile-Key", persist it to profiles.ayrshare_profile_key
- * (see migration 20260602050000), and the view-sync worker
- * (worker/views-provider.ts AyrshareViewsProvider) will use it to scope
- * analytics to this creator's posts. Today it's a disabled stub so the UI slot
- * and data model exist ahead of the integration.
+ * WHERE REAL LINKING WILL HAPPEN: creators connect TikTok/YouTube/Instagram
+ * accounts here. The official provider flow should persist server-side account
+ * rows in creator_social_accounts; optional Ayrshare linking can still store a
+ * profile key. Today it's a disabled stub so the UI slot exists ahead of the
+ * integration.
  */
 export function AyrshareLinkPlaceholder() {
   const { t } = useTranslation();

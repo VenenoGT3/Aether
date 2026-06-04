@@ -158,14 +158,13 @@ export async function runPayoutBatch(
     totalPaid: 0,
   };
 
-  // SAFETY GUARD (defense-in-depth): refuse to run real payouts without a live
-  // view source. Startup already hard-fails on a missing AYRSHARE_API_KEY; this
-  // also halts the batch if the key is removed at runtime (e.g. pre-existing
-  // earnings must never be paid out on unverified views).
+  // SAFETY GUARD (defense-in-depth): refuse to run real payouts without a
+  // trusted live view source. Startup already hard-fails when none are
+  // configured; this also halts the batch if providers are removed at runtime.
   if (payoutSafetyBlocked()) {
     log.alert("payout.blocked.no_view_source", {
-      reason: "AYRSHARE_API_KEY missing — refusing to run real payouts on unverified views",
-      hint: "set a valid AYRSHARE_API_KEY to restore live view tracking",
+      reason: "no trusted view provider configured — refusing to run real payouts on unverified views",
+      hint: "configure YOUTUBE_DATA_API_KEY, TikTok OAuth credentials, or AYRSHARE_API_KEY to restore live view tracking",
     });
     return summary; // all zeros — nothing promoted, claimed, or transferred
   }

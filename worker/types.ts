@@ -1,5 +1,10 @@
 /** Shared worker types. */
 
+export type ViewProviderName =
+  | "youtube_official"
+  | "tiktok_official"
+  | "ayrshare";
+
 /** A clip row as the worker needs it for syncing. */
 export interface ClipRow {
   id: string;
@@ -9,6 +14,8 @@ export interface ClipRow {
   platform: string;
   post_url: string;
   external_post_id: string | null;
+  creator_social_account_id?: string | null;
+  view_provider?: ViewProviderName | null;
   status: string;
   quality_status?: string | null;
   counted_views: number;
@@ -27,12 +34,14 @@ export interface ViewData {
   likes: number;
   comments: number;
   shares: number;
-  source: "ayrshare";
+  source: ViewProviderName;
+  /** False means the provider degraded to last-known data; never accrue from it. */
+  trusted: boolean;
 }
 
 /** Result of syncing one clip. */
 export type ViewSyncOutcome =
-  | { status: "synced"; clipId: string; views: number }
+  | { status: "synced"; clipId: string; views: number; source: ViewProviderName }
   | { status: "skipped"; clipId: string; reason: string }
   | { status: "disqualified"; clipId: string; reason: string };
 
@@ -65,4 +74,5 @@ export interface SyncClipJob {
 export interface CalcEarningJob {
   clipId: string;
   views: number;
+  source: ViewProviderName;
 }

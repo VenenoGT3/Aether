@@ -86,12 +86,45 @@ export const ProfileSchema = z.object({
   company_size: z.string().nullable().optional(),
   stripe_connect_id: z.string().nullable().optional(),
   stripe_onboarding_completed: z.boolean().default(false).optional(),
-  // Ayrshare account linking for view tracking (NULL = not linked)
+  // Legacy/optional Ayrshare account linking for view tracking (NULL = not linked)
   ayrshare_profile_key: z.string().nullable().optional(),
   created_at: z.union([z.date(), z.string()]),
   updated_at: z.union([z.date(), z.string()]),
 });
 export type DbProfile = z.infer<typeof ProfileSchema>;
+
+export const CreatorSocialAccountProviderSchema = z.enum([
+  "youtube_official",
+  "tiktok_official",
+  "ayrshare",
+  "phyllo",
+]);
+export type CreatorSocialAccountProvider = z.infer<
+  typeof CreatorSocialAccountProviderSchema
+>;
+
+export const CreatorSocialAccountSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  platform: z.enum(["youtube", "tiktok", "instagram"]),
+  provider: CreatorSocialAccountProviderSchema,
+  external_account_id: z.string(),
+  handle: z.string().nullable().optional(),
+  display_name: z.string().nullable().optional(),
+  profile_url: z.string().url().nullable().optional(),
+  // Server/worker only. Do not expose these fields to Client Components.
+  access_token: z.string().nullable().optional(),
+  refresh_token: z.string().nullable().optional(),
+  scopes: z.array(z.string()).default([]),
+  token_expires_at: z.union([z.date(), z.string()]).nullable().optional(),
+  refresh_expires_at: z.union([z.date(), z.string()]).nullable().optional(),
+  status: z.enum(["active", "expired", "revoked", "error"]).default("active"),
+  last_verified_at: z.union([z.date(), z.string()]).nullable().optional(),
+  token_metadata: z.record(z.string(), z.any()).default({}),
+  created_at: z.union([z.date(), z.string()]),
+  updated_at: z.union([z.date(), z.string()]),
+});
+export type DbCreatorSocialAccount = z.infer<typeof CreatorSocialAccountSchema>;
 
 // Campaigns Schema
 export const CampaignSchema = z.object({
@@ -261,6 +294,11 @@ export const ClipSchema = z.object({
   post_url: z.string().url("Must be a valid URL"),
   external_post_id: z.string().nullable().optional(),
   ayrshare_ref: z.record(z.string(), z.any()).default({}),
+  creator_social_account_id: z.string().uuid().nullable().optional(),
+  view_provider: z
+    .enum(["youtube_official", "tiktok_official", "ayrshare"])
+    .nullable()
+    .optional(),
   status: ClipStatusSchema.default("pending"),
   counted_views: z.number().int().nonnegative().default(0),
   current_views: z.number().int().nonnegative().default(0),
