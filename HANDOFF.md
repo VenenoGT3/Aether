@@ -16,7 +16,7 @@ It has been migrated to a **performance-based UGC + clipping platform**:
 - A worker **tracks views** and **accrues earnings** (`views × CPM`, capped by pool + per-creator cap).
 - Earnings settle after a **holdback window**, then become withdrawable through **Stripe Connect** by default (`WORKER_AUTO_PAYOUTS=true` can enable automatic batch payouts).
 
-Both models coexist: every campaign has a `campaign_type` of `'fixed'` or `'performance'`. The legacy fixed-fee flow is untouched and still works.
+Both models coexist: every campaign has a `campaign_type` of `'fixed'` or `'performance'`. The legacy fixed-fee flow is retained as a secondary, DB-backed surface while the product moves toward performance campaigns as the primary model.
 
 ---
 
@@ -33,7 +33,7 @@ Delivered in additive phases (each on `main`):
 | **5 — Payouts + reversal** | Payout-batch worker + SQL (`promote_due_earnings`, `create_payout_for_creator`, `mark_payout_paid/failed`); idempotent Stripe transfers; `reverse_earnings_on_clip_block` trigger. |
 | **6 — UI** | Performance campaign builder, creator Clips & Earnings page, brand moderation + burn-down, dashboard summaries, nav. |
 | **+ Pool funding** | Performance campaigns are `draft` until a Stripe PaymentIntent for the pool succeeds (webhook flips to `open`). Real Stripe Elements UI. |
-| **+ Cleanup** | Legacy wallet clarity (perf payouts hidden from fixed-fee wallet), comments, theme-aware brand dashboard, discover Join fix. |
+| **+ Cleanup** | Legacy wallet clarity (perf payouts hidden from fixed-fee wallet), comments, theme-aware brand dashboard, discover Join fix, live fixed-fee review queue, and demo/localStorage cleanup. |
 
 ---
 
@@ -64,9 +64,9 @@ reject/disqualify a clip → trigger reverses unpaid 'accrued' earnings, release
 
 ## 4. Current state
 
-- **Production-only: mock/demo mode fully removed.** Every path uses real Supabase, Stripe, Redis, and trusted view providers; missing required config fails clearly at build/startup. Builds and the full unit-test suite pass.
+- **Production-only: mock/demo mode fully removed.** Every path uses real Supabase, Stripe, Redis, and trusted view providers; missing required config fails clearly at build/startup. Legacy fixed-fee dashboard/workspace views now read from Supabase instead of seeded browser state.
 - **Live infra: built but unproven.** All code typechecks/builds and the SQL/worker logic is unit-tested, but **none of it has executed against a real Supabase + Redis + Stripe**. Migrations are unapplied; the worker is not deployed; no Redis is provisioned.
-- **Build/quality:** `npm run typecheck` ✓, `npm run build` ✓, `npm test` ✓ (119). `npm run lint` reports ~158 **pre-existing** errors (mostly `no-explicit-any`, `set-state-in-effect`, impure-render in legacy files); the migration added no net-new lint errors.
+- **Build/quality:** latest cleanup verification keeps `npm run typecheck`, `npm run lint`, `npm run test`, `npm run preflight`, and `npm audit` green. Docker build still depends on local daemon availability.
 
 ---
 
@@ -83,8 +83,8 @@ reject/disqualify a clip → trigger reverses unpaid 'accrued' earnings, release
 6. **Brand moderation queue shows creator email instead of name** (the `clips.creator_id → profiles` join was deferred).
 
 **Low / cosmetic**
-7. Some legacy fixed-fee campaign UI still runs on seeded demo data (e.g. the `/campaigns/[id]` workspace and the campaign-builder's suggested-creators list) and should be wired to live data or removed.
-8. **~158 pre-existing lint errors** across legacy files.
+7. Legacy fixed-fee UI is now DB-backed but still a secondary surface. If fixed-fee remains supported, finish/modernize the PaymentIntent confirmation UX; if not, retire the surface as performance campaigns become the only production path.
+8. Keep lint at zero errors; avoid reintroducing local mock/demo state into production screens.
 9. No worker **monitoring/alerting**; retries are silent.
 
 ---
@@ -95,8 +95,8 @@ reject/disqualify a clip → trigger reverses unpaid 'accrued' earnings, release
 2. **Implement creator account linking** for TikTok Login Kit and YouTube ownership verification; validate official provider coverage, then keep Ayrshare only as fallback if needed. Strengthen fraud controls (caps, dedupe, tuned holdback) before real money.
 3. **Pool funding robustness** — refund-on-cancel + a reconciliation job for funded-but-unactivated campaigns (don't depend solely on the webhook).
 4. **Deploy the worker** (host + Redis). Deployment assets are now in place — a multi-stage `Dockerfile` (non-root, `tini` PID 1, `HEALTHCHECK`), `.dockerignore`, `Procfile`, an `npm run worker:prod` script, **startup env validation** (fails fast with `[ALERT] env.invalid`), **graceful `SIGTERM` shutdown** (readiness→503, drains jobs, closes Redis + health server, 15s force-exit), an **HTTP health endpoint** (`/health` liveness, `/ready` readiness on `WORKER_HEALTH_PORT`, default 8080), and **multi-instance support** (Redis-centralized schedulers, per-clip view-sync dedup, and a Redis leader lease so per-tick audits run once across the fleet). Provision a managed Redis + a worker host and follow **[SETUP.md §6 "Deploying the worker (production)"](SETUP.md)** (Railway/Render/Fly recommended). Structured `[ALERT]` logs + heartbeat already exist — point a log drain at them.
-5. **Polish for real mode** — moderation creator-name join, replace hardcoded dashboard numbers with real/empty states.
-6. **Tech-debt pass** — clear the 158 lint errors; reduce mock/real dual-path drift.
+5. **Polish for real mode** — moderation creator-name join, finish or retire fixed-fee payment confirmation UX, and keep dashboard numbers tied to live data/empty states.
+6. **Tech-debt pass** — continue reducing the legacy fixed-fee surface and docs drift as performance campaigns become the primary product.
 
 ---
 

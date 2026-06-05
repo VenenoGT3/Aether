@@ -21,6 +21,16 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Sparkles, BarChart3, LogOut } from "lucide-react";
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
 export function NavBar() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -149,12 +159,18 @@ export function NavBar() {
               {/* Profile Avatar Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger className="relative w-8 h-8 rounded-full overflow-hidden p-0 border border-border/20 hover:scale-105 active:scale-95 transition-all cursor-pointer bg-transparent block focus:outline-none">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={user.avatar_url}
-                    alt={user.full_name}
-                    className="w-full h-full object-cover"
-                  />
+                  {user.avatar_url ? (
+                    <span
+                      role="img"
+                      aria-label={user.full_name}
+                      className="block w-full h-full bg-center bg-cover"
+                      style={{ backgroundImage: `url(${user.avatar_url})` }}
+                    />
+                  ) : (
+                    <span className="w-full h-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
+                      {initials(user.full_name)}
+                    </span>
+                  )}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 mt-1 rounded-2xl p-1.5 border border-border/40 bg-popover/90 backdrop-blur-md">
                   <DropdownMenuGroup>

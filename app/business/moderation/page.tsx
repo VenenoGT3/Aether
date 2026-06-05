@@ -91,10 +91,8 @@ export default function BrandModerationPage() {
     loadClips();
     const handler = () => loadClips();
     window.addEventListener("aether-clips-update", handler);
-    window.addEventListener("storage", handler);
     return () => {
       window.removeEventListener("aether-clips-update", handler);
-      window.removeEventListener("storage", handler);
     };
   }, [loadCampaigns, loadClips]);
 
@@ -119,6 +117,7 @@ export default function BrandModerationPage() {
           : t("Clip rejected")
       );
       loadClips();
+      window.dispatchEvent(new Event("aether-clips-update"));
     } else {
       toast.error(res.error || t("Action failed"));
     }
@@ -131,6 +130,7 @@ export default function BrandModerationPage() {
     if (res.ok) {
       toast.success(t("Clip disqualified — earnings stopped and reversed"));
       loadClips();
+      window.dispatchEvent(new Event("aether-clips-update"));
     } else {
       toast.error(res.error || t("Action failed"));
     }
@@ -143,6 +143,7 @@ export default function BrandModerationPage() {
     if (res.ok) {
       toast.success(t("Flag cleared — clip keeps earning"));
       loadClips();
+      window.dispatchEvent(new Event("aether-clips-update"));
     } else {
       toast.error(res.error || t("Action failed"));
     }

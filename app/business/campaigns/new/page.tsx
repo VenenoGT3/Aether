@@ -158,7 +158,7 @@ export default function NewCampaignWizard() {
   // a real (possibly empty) preview — never seeded mock data.
   useEffect(() => {
     if (niches.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear/seed preview from current niche selection
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear preview from current niche selection
       setMatchedCreators([]);
       return;
     }

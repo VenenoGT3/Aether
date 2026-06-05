@@ -69,6 +69,13 @@ interface RawSearchCampaign {
   cpm_rate?: number | null;
 }
 
+type CreatorProfileForAi = Profile & {
+  niches?: string[];
+  niche?: string;
+  follower_count?: number;
+  followers?: number;
+};
+
 export default function DiscoverPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<Profile | null>(null);
@@ -121,7 +128,7 @@ export default function DiscoverPage() {
           id: c.id,
           title: c.title,
           description: c.description || "",
-          businessName: "Brand Client", // Would join with profile in production
+          businessName: "Brand",
           budget_total: Number(c.budget_total),
           target_niches: c.target_niches || [],
           deliverables: c.deliverables || [],
@@ -157,20 +164,26 @@ export default function DiscoverPage() {
         }
       }
 
-      // Rank and match raw campaigns using AI Matchmaking API
-      try {
-        const creatorNiches: string[] = (profile as { niches?: string[] } | null)?.niches || (profile?.niche ? [profile.niche] : ["Tech", "Minimalism"]);
+      // Rank and match raw campaigns using only real profile fields.
+      if (profile) {
+        const profileForAi = profile as CreatorProfileForAi;
+        const creatorNiches =
+          profileForAi.niches?.length
+            ? profileForAi.niches
+            : profileForAi.niche
+              ? [profileForAi.niche]
+              : [];
         try {
           const matchData = await apiPost<{
             success: boolean;
             campaigns?: typeof rawCamps;
           }>("/api/ai/discover", {
             creator: {
-              name: profile?.full_name || "Marcus Vance",
-              bio: profile?.bio || "Tech creator and minimalist design specialist.",
+              name: profile.full_name || "Creator",
+              bio: profile.bio || "",
               niches: creatorNiches,
-              followers: profile?.followers || 48500,
-              engagement: Number(profile?.engagement_rate) || 4.8,
+              followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
+              engagement: Number(profile.engagement_rate) || 0,
             },
             campaigns: rawCamps,
           });
@@ -182,8 +195,7 @@ export default function DiscoverPage() {
         } catch {
           setCampaigns(rawCamps);
         }
-      } catch (matchErr) {
-        console.error("AI Matchmaking discover failed:", matchErr);
+      } else {
         setCampaigns(rawCamps);
       }
     } catch (err) {
@@ -198,14 +210,14 @@ export default function DiscoverPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
-    // Listen to changes in campaign status
+    // Listen to explicit campaign/profile changes.
     const handleSync = () => {
       loadData();
     };
-    window.addEventListener("storage", handleSync);
+    window.addEventListener("aether-campaigns-update", handleSync);
     window.addEventListener("role-change", handleSync);
     return () => {
-      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("aether-campaigns-update", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
@@ -232,6 +244,7 @@ export default function DiscoverPage() {
       });
 
       setAppliedCampaignIds(prev => new Set([...prev, campaign.id]));
+      window.dispatchEvent(new Event("aether-campaigns-update"));
       toast.success(t("Interest expressed!"), {
         id: "express-interest",
         description: t("Your stats and rate card have been sent to the brand.")
@@ -251,6 +264,7 @@ export default function DiscoverPage() {
     setJoiningId(null);
     if (res.ok) {
       setJoinModalCampaign(null);
+      window.dispatchEvent(new Event("aether-campaigns-update"));
       toast.success(
         res.alreadyJoined
           ? t("You've already joined this campaign.")
@@ -278,10 +292,21 @@ export default function DiscoverPage() {
   // CALL GROK AI PITCH WRITER
   const handleAIGeneratePitch = async () => {
     if (!selectedCampaign) return;
+    if (!user) {
+      toast.error(t("Create a creator profile before generating a pitch."));
+      return;
+    }
     setIsAILoading(true);
     
     toast.loading(t("Aether AI is writing your pitch..."), { id: "ai-pitch" });
     try {
+      const profileForAi = user as CreatorProfileForAi;
+      const creatorNiches =
+        profileForAi.niches?.length
+          ? profileForAi.niches
+          : profileForAi.niche
+            ? [profileForAi.niche]
+            : [];
       const data = await apiPost<{ pitch?: string; generatedBy?: string }>(
         "/api/ai/pitch",
         {
@@ -293,14 +318,11 @@ export default function DiscoverPage() {
             brandName: selectedCampaign.businessName,
           },
           creator: {
-            name: user?.full_name || "Marcus Vance",
-            bio: user?.bio || "Tech creator and minimalist design specialist.",
-            niches:
-              (user as { niches?: string[] } | null)?.niches ||
-              (user?.niche ? [user.niche] : ["Tech", "Productivity"]),
-            followers:
-              (user as { follower_count?: number } | null)?.follower_count || user?.followers || 48500,
-            engagement: user?.engagement_rate || 4.8,
+            name: user.full_name || "Creator",
+            bio: user.bio || "",
+            niches: creatorNiches,
+            followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
+            engagement: Number(user.engagement_rate) || 0,
           },
           tone: pitchTone,
         }
@@ -332,6 +354,7 @@ export default function DiscoverPage() {
 
       setAppliedCampaignIds(prev => new Set([...prev, selectedCampaign.id]));
       setIsApplyModalOpen(false);
+      window.dispatchEvent(new Event("aether-campaigns-update"));
       
       toast.success(t("Application submitted successfully!"), {
         id: "apply",

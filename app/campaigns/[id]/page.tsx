@@ -313,24 +313,42 @@ function enrichMessage(m: RawMessage, viewer: Profile, otherName: string, otherA
   };
 }
 
-const PRESET_IMAGES = [
-  {
-    name: "Minimal Tech",
-    url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Studio View",
-    url: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Cozy Workspace",
-    url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Programming Setup",
-    url: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=600&q=80"
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function AvatarBubble({
+  src,
+  name,
+  className = "w-10 h-10",
+}: {
+  src?: string;
+  name: string;
+  className?: string;
+}) {
+  if (src) {
+    return (
+      <span
+        role="img"
+        aria-label={name}
+        className={`${className} rounded-full bg-center bg-cover border border-border/20 shrink-0`}
+        style={{ backgroundImage: `url(${src})` }}
+      />
+    );
   }
-];
+
+  return (
+    <span className={`${className} rounded-full bg-primary/10 text-primary border border-border/20 flex items-center justify-center text-[10px] font-bold uppercase shrink-0`}>
+      {initials(name)}
+    </span>
+  );
+}
 
 export default function CampaignDetailPage() {
   const params = useParams();
@@ -390,11 +408,10 @@ export default function CampaignDetailPage() {
   // Submission form state (Influencer side)
   const [postUrl, setPostUrl] = useState("");
   const [postCaption, setPostCaption] = useState("");
-  const [selectedPresetImage, setSelectedPresetImage] = useState(PRESET_IMAGES[0].url);
-  const [estViews, setEstViews] = useState("15000");
-  const [estLikes, setEstLikes] = useState("950");
-  const [estComments, setEstComments] = useState("70");
-  const [estShares, setEstShares] = useState("30");
+  const [estViews, setEstViews] = useState("");
+  const [estLikes, setEstLikes] = useState("");
+  const [estComments, setEstComments] = useState("");
+  const [estShares, setEstShares] = useState("");
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [fetchedPreview, setFetchedPreview] = useState<{
     views: number;
@@ -425,7 +442,7 @@ export default function CampaignDetailPage() {
   
   const [actionLoading, setActionLoading] = useState(false);
   
-  const imageRef = useRef<HTMLImageElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const runSafetyAudit = async () => {
     const participant = campaign?.participants.find(p => p.id === activeParticipantId);
@@ -760,13 +777,6 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch campaign + participants on mount
     loadCampaign();
-    const handleSync = () => loadCampaign();
-    window.addEventListener("storage", handleSync);
-    window.addEventListener("role-change", handleSync);
-    return () => {
-      window.removeEventListener("storage", handleSync);
-      window.removeEventListener("role-change", handleSync);
-    };
   }, [loadCampaign]);
 
   // In-memory campaign-state update for ephemeral UI (pin annotations have no
@@ -1084,9 +1094,9 @@ export default function CampaignDetailPage() {
 
   // User clicks on the Image Mockup to drop a pin
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!currentSubmission || !imageRef.current) return;
+    if (!currentSubmission || !previewRef.current) return;
     
-    const rect = imageRef.current.getBoundingClientRect();
+    const rect = previewRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -1386,17 +1396,14 @@ export default function CampaignDetailPage() {
 
   // Render Live Analytics ROI panel
   const renderLiveMetrics = () => {
-    // Generate daily tracking data dynamically matching the current metrics
+    // Generate deterministic daily tracking data matching the current metrics.
     const days = 7;
     const historyData = [];
     for (let i = 1; i <= days; i++) {
       const ratio = i / days;
-      // Introduce slight randomness for realistic curves (demo chart only)
-      /* eslint-disable react-hooks/purity -- cosmetic jitter for the demo history chart */
-      const clicks = Math.round(metrics.clicks * ratio * (0.95 + (i * 0.01) * Math.random()));
-      const conversions = Math.round(metrics.conversions * ratio * (0.95 + (i * 0.01) * Math.random()));
-      const revenue = Math.round(metrics.attributed_value * ratio * (0.95 + (i * 0.01) * Math.random()));
-      /* eslint-enable react-hooks/purity */
+      const clicks = Math.round(metrics.clicks * ratio);
+      const conversions = Math.round(metrics.conversions * ratio);
+      const revenue = Math.round(metrics.attributed_value * ratio);
       
       historyData.push({
         day: `Day ${i}`,
@@ -1901,14 +1908,7 @@ export default function CampaignDetailPage() {
         <div className="lg:col-span-2 p-6 md:p-8 apple-card flex flex-col h-[560px]">
           {/* Header */}
           <div className="flex items-center gap-3.5 pb-4 border-b border-border/10 mb-4 select-none">
-            {partnerAvatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={partnerAvatar} alt={partnerName} className="w-10 h-10 rounded-full object-cover border border-border/20" />
-            ) : (
-              <span className="w-10 h-10 rounded-full bg-primary/10 text-primary border border-border/20 flex items-center justify-center text-sm font-bold uppercase shrink-0">
-                {(partnerName || "?").charAt(0)}
-              </span>
-            )}
+            <AvatarBubble src={partnerAvatar} name={partnerName} />
             <div>
               <h3 className="text-xs font-bold text-foreground leading-none">{partnerName}</h3>
               <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
@@ -2240,7 +2240,7 @@ export default function CampaignDetailPage() {
                       : "bg-card/40 border-border hover:bg-card/75 hover:border-border/60"
                   }`}
                 >
-                  <img src={p.avatarUrl} alt={p.fullName} className="w-9 h-9 rounded-full object-cover border border-border" />
+                  <AvatarBubble src={p.avatarUrl} name={p.fullName} className="w-9 h-9" />
                   <div>
                     <p className="text-xs font-bold text-foreground leading-none">{p.fullName}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{p.handle}</p>
@@ -2518,24 +2518,6 @@ export default function CampaignDetailPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground block mb-1.5 uppercase">{t("Select Aesthetic Preset Image")}</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {PRESET_IMAGES.map((img) => (
-                        <button
-                          key={img.name}
-                          type="button"
-                          onClick={() => setSelectedPresetImage(img.url)}
-                          className={`relative aspect-square rounded-lg overflow-hidden border cursor-pointer ${
-                            selectedPresetImage === img.url ? "border-primary ring-2 ring-primary/20 scale-95" : "border-border hover:border-border/60"
-                          }`}
-                        >
-                          <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="grid grid-cols-2 gap-3.5 pt-1">
                     <div>
                       <label className="text-[9px] font-bold text-muted-foreground block mb-1 uppercase">{t("Est. Views")}</label>
@@ -2684,17 +2666,17 @@ export default function CampaignDetailPage() {
                   
                   {/* Interactive Pinning Layer */}
                   <div 
+                    ref={previewRef}
                     onClick={handleImageClick}
                     className="w-full h-full relative cursor-crosshair group overflow-hidden bg-[#16161a]"
                   >
                     {/* Content preview */}
                     {currentSubmission && currentSubmission.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img 
-                        ref={imageRef}
-                        src={currentSubmission.imageUrl} 
-                        alt="Draft deliverable" 
-                        className="w-full h-full object-cover select-none"
+                      <span
+                        role="img"
+                        aria-label="Draft deliverable"
+                        className="block w-full h-full bg-center bg-cover select-none"
+                        style={{ backgroundImage: `url(${currentSubmission.imageUrl})` }}
                       />
                     ) : currentSubmission ? (
                       <a

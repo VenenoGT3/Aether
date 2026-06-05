@@ -50,11 +50,12 @@ interface Participant {
   avatarUrl: string;
   status: "applied" | "escrowed" | "submitted" | "released" | "declined";
   payout: number;
+  pitch?: string;
   submissions: Array<{
     version: number;
     submittedAt: string;
     postUrl: string;
-    imageUrl: string;
+    imageUrl?: string;
     caption?: string;
     metrics?: Record<string, number>;
     annotations?: unknown[];
@@ -63,20 +64,215 @@ interface Participant {
 
 /**
  * Campaign row as surfaced on the dashboard: DB fields plus an optional joined
- * influencer summary. `status` is widened to string because the legacy rich-data
- * flows reuse this shape with non-DB statuses (escrowed/released/submitted).
+ * influencer summary. `status` is widened to string because Supabase returns raw
+ * DB text and this page compares against both fixed-fee and performance states.
  */
 type DashboardCampaign = Omit<DbCampaign, "status"> & {
   status: string;
   influencer?: { name: string; handle: string } | null;
 };
 
-/** Locally-persisted rich campaign state (participants, timeline) for the review queue. */
-interface CampaignRichData {
+type JsonRecord = Record<string, unknown>;
+
+interface ReviewPostRow {
+  id: string;
+  post_url: string;
+  platform: string;
+  metrics: JsonRecord | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  engagement_rate: number | null;
+  submitted_at: string;
+}
+
+interface ReviewParticipationRow {
+  id: string;
+  campaign_id: string;
+  influencer_id: string;
+  status: string;
+  proposed_payout: number | null;
+  actual_payout: number | null;
+  performance_data: JsonRecord | null;
+  applied_at: string;
+  posts: ReviewPostRow[] | null;
+}
+
+interface ReviewProfileRow {
+  user_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  social_handles: JsonRecord | null;
+}
+
+/** Live fixed-fee review queue state loaded from Supabase. */
+interface CampaignReviewData {
   title: string;
   participants: Participant[];
-  timeline: Array<{ label: string; completed: boolean }>;
-  status?: string;
+}
+
+function getNumber(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function displayHandle(profile?: ReviewProfileRow): string {
+  const handles = profile?.social_handles ?? {};
+  const raw = getString(handles.instagram || handles.tiktok || handles.youtube);
+  return raw ? `@${raw.replace(/^@/, "")}` : "No social handle linked";
+}
+
+function mapReviewStatus(status: string, hasSubmissions: boolean): Participant["status"] {
+  if (status === "completed") return "released";
+  if (status === "declined" || status === "cancelled" || status === "banned") return "declined";
+  if (hasSubmissions) return "submitted";
+  if (status === "accepted" || status === "offered" || status === "active") return "escrowed";
+  return "applied";
+}
+
+function AvatarBubble({
+  src,
+  name,
+  className = "w-10 h-10",
+}: {
+  src?: string;
+  name: string;
+  className?: string;
+}) {
+  if (src) {
+    return (
+      <span
+        role="img"
+        aria-label={name}
+        className={`${className} rounded-full bg-center bg-cover border border-border/10 shrink-0`}
+        style={{ backgroundImage: `url(${src})` }}
+      />
+    );
+  }
+
+  return (
+    <span className={`${className} rounded-full bg-primary/10 text-primary border border-border/10 flex items-center justify-center text-[10px] font-bold uppercase shrink-0`}>
+      {initials(name)}
+    </span>
+  );
+}
+
+function DraftPreview({ submission }: { submission: Participant["submissions"][number] }) {
+  if (submission.imageUrl) {
+    return (
+      <span
+        role="img"
+        aria-label="Draft deliverable"
+        className="block w-full h-full bg-center bg-cover transition-transform group-hover:scale-105"
+        style={{ backgroundImage: `url(${submission.imageUrl})` }}
+      />
+    );
+  }
+
+  return (
+    <span className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-[10px] text-muted-foreground px-3 text-center">
+      <Play size={16} className="text-foreground/70" />
+      <span className="line-clamp-2 break-all">{submission.postUrl}</span>
+    </span>
+  );
+}
+
+async function loadFixedFeeReviewData(
+  campaigns: DashboardCampaign[]
+): Promise<Record<string, CampaignReviewData>> {
+  const fixedCampaigns = campaigns.filter((campaign) => (campaign.campaign_type ?? "fixed") === "fixed");
+  const campaignIds = fixedCampaigns.map((campaign) => campaign.id);
+  if (campaignIds.length === 0) return {};
+
+  const { data: parts, error: partsError } = await supabase
+    .from("participations")
+    .select(
+      "id, campaign_id, influencer_id, status, proposed_payout, actual_payout, performance_data, applied_at, posts ( id, post_url, platform, metrics, views, likes, comments, shares, engagement_rate, submitted_at )"
+    )
+    .in("campaign_id", campaignIds)
+    .order("applied_at", { ascending: true });
+
+  if (partsError) throw partsError;
+
+  const participations = (parts as ReviewParticipationRow[] | null) ?? [];
+  const creatorIds = [...new Set(participations.map((part) => part.influencer_id))];
+  const profilesById = new Map<string, ReviewProfileRow>();
+
+  if (creatorIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, avatar_url, social_handles")
+      .in("user_id", creatorIds);
+    if (profilesError) throw profilesError;
+    for (const profile of (profiles as ReviewProfileRow[] | null) ?? []) {
+      profilesById.set(profile.user_id, profile);
+    }
+  }
+
+  const campaignById = new Map(fixedCampaigns.map((campaign) => [campaign.id, campaign]));
+  const details: Record<string, CampaignReviewData> = {};
+
+  for (const campaign of fixedCampaigns) {
+    details[campaign.id] = { title: campaign.title, participants: [] };
+  }
+
+  for (const part of participations) {
+    const campaign = campaignById.get(part.campaign_id);
+    if (!campaign) continue;
+
+    const profile = profilesById.get(part.influencer_id);
+    const posts = (part.posts ?? [])
+      .slice()
+      .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime());
+    const pitch = getString(part.performance_data?.pitch);
+    const submissions: Participant["submissions"] = posts.map((post, index) => {
+      const metrics = post.metrics ?? {};
+      return {
+        version: index + 1,
+        submittedAt: post.submitted_at,
+        postUrl: post.post_url,
+        caption: getString(metrics.caption),
+        metrics: {
+          views: getNumber(post.views ?? metrics.views ?? metrics.impressions),
+          likes: getNumber(post.likes ?? metrics.likes),
+          comments: getNumber(post.comments ?? metrics.comments),
+          shares: getNumber(post.shares ?? metrics.shares),
+          roi: 0,
+        },
+        annotations: [],
+      };
+    });
+
+    details[part.campaign_id].participants.push({
+      id: part.id,
+      fullName: profile?.full_name?.trim() || "Creator",
+      handle: displayHandle(profile),
+      avatarUrl: profile?.avatar_url ?? "",
+      status: mapReviewStatus(part.status, submissions.length > 0),
+      payout: getNumber(part.actual_payout) || getNumber(part.proposed_payout),
+      pitch,
+      submissions,
+    });
+  }
+
+  return Object.fromEntries(
+    Object.entries(details).filter(([, detail]) => detail.participants.length > 0)
+  );
 }
 
 export default function BusinessDashboard() {
@@ -87,7 +283,7 @@ export default function BusinessDashboard() {
   const [campaigns, setCampaigns] = useState<DashboardCampaign[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [campaignMetrics, setCampaignMetrics] = useState<Record<string, CampaignMetrics>>({});
-  const [campaignDetails, setCampaignDetails] = useState<Record<string, CampaignRichData>>({});
+  const [campaignDetails, setCampaignDetails] = useState<Record<string, CampaignReviewData>>({});
   const { transactions, balances } = useTransactions();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "review" | "billing">("overview");
@@ -180,27 +376,18 @@ export default function BusinessDashboard() {
       
       setProfile(profRes);
       if (campRes.success && campRes.campaigns) {
-        setCampaigns(campRes.campaigns);
+        const campaignRows = campRes.campaigns as DashboardCampaign[];
+        setCampaigns(campaignRows);
         
-        // Fetch metrics and rich data details for each campaign
+        // Fetch metrics and fixed-fee review data from Supabase. No seeded
+        // browser state: if the DB is empty, the queue is empty.
         const metricsMap: Record<string, CampaignMetrics> = {};
-        const detailsMap: Record<string, CampaignRichData> = {};
+        const detailsMap = await loadFixedFeeReviewData(campaignRows);
         
-        for (const camp of campRes.campaigns) {
+        for (const camp of campaignRows) {
           const mRes = await getCampaignMetricsAction(camp.id);
           if (mRes.success) {
             metricsMap[camp.id] = mRes.metrics;
-          }
-
-          // Fetch local storage rich data (participants and deliverables)
-          const key = `aether-campaign-rich-data-${camp.id}`;
-          const storedState = localStorage.getItem(key);
-          if (storedState) {
-            try {
-              detailsMap[camp.id] = JSON.parse(storedState);
-            } catch (e) {
-              console.error("Failed to parse campaign rich data for", camp.id, e);
-            }
           }
         }
         setCampaignMetrics(metricsMap);
@@ -226,7 +413,6 @@ export default function BusinessDashboard() {
 
     // Listen to manual metric updates
     window.addEventListener("aether-metrics-update", loadData);
-    window.addEventListener("storage", loadData);
     window.addEventListener("aether-transactions-update", loadData);
 
     const handleRoleChange = () => {
@@ -237,7 +423,6 @@ export default function BusinessDashboard() {
     return () => {
       unsubscribe();
       window.removeEventListener("aether-metrics-update", loadData);
-      window.removeEventListener("storage", loadData);
       window.removeEventListener("aether-transactions-update", loadData);
       window.removeEventListener("role-change", handleRoleChange);
     };
@@ -278,35 +463,10 @@ export default function BusinessDashboard() {
       const res = await fundEscrowAction(participant.id, participant.payout);
 
       if (res.success) {
-        // Update campaign local state
-        const richCampaign = campaignDetails[campaignId];
-        if (richCampaign) {
-          const updatedParticipants = richCampaign.participants.map((p: Participant) => {
-            if (p.id === participant.id) {
-              return { ...p, status: "escrowed" as const };
-            }
-            return p;
-          });
-
-          const updatedTimeline = richCampaign.timeline.map((t) => {
-            if (t.label.includes("Stripe Escrow")) return { ...t, completed: true };
-            return t;
-          });
-
-          const updated = {
-            ...richCampaign,
-            participants: updatedParticipants,
-            timeline: updatedTimeline,
-            status: "escrowed" as const
-          };
-
-          localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updated));
-        }
-
-        window.dispatchEvent(new Event("storage"));
-        toast.success("Application Approved & Escrow Funded!", {
+        await loadData();
+        toast.success("Escrow funding session initialized", {
           id: "escrow-funding",
-          description: `Locked $${participant.payout.toLocaleString()} in Stripe escrow for ${participant.fullName}.`
+          description: `Stripe will mark ${participant.fullName} accepted after payment confirmation.`
         });
       } else {
         toast.error(res.error || "Funding failed.", { id: "escrow-funding" });
@@ -319,30 +479,24 @@ export default function BusinessDashboard() {
   };
 
   // Decline Application
-  const handleDeclineApplication = (campaignId: string, participantId: string) => {
+  const handleDeclineApplication = async (campaignId: string, participantId: string) => {
     toast.loading("Declining application...", { id: "decline-app" });
     try {
-      const richCampaign = campaignDetails[campaignId];
-      if (richCampaign) {
-        const updatedParticipants = richCampaign.participants.map((p: Participant) => {
-          if (p.id === participantId) {
-            return { ...p, status: "declined" as const };
-          }
-          return p;
-        });
+      const { error } = await supabase
+        .from("participations")
+        .update({ status: "declined" })
+        .eq("id", participantId)
+        .eq("campaign_id", campaignId);
 
-        const updated = {
-          ...richCampaign,
-          participants: updatedParticipants
-        };
-
-        localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updated));
-        window.dispatchEvent(new Event("storage"));
-        toast.success("Application declined successfully", {
-          id: "decline-app",
-          description: "Influencer was moved out of active pipelines."
-        });
+      if (error) {
+        throw error;
       }
+
+      await loadData();
+      toast.success("Application declined successfully", {
+        id: "decline-app",
+        description: "Creator was moved out of the active fixed-fee pipeline."
+      });
     } catch (err) {
       toast.error("Declining failed: " + (err instanceof Error ? err.message : ""), { id: "decline-app" });
     }
@@ -358,31 +512,7 @@ export default function BusinessDashboard() {
       const res = await releaseEscrowAction(participant.id);
 
       if (res.success) {
-        const richCampaign = campaignDetails[campaignId];
-        if (richCampaign) {
-          const updatedParticipants = richCampaign.participants.map((p: Participant) => {
-            if (p.id === participant.id) {
-              return { ...p, status: "released" as const };
-            }
-            return p;
-          });
-
-          const updatedTimeline = richCampaign.timeline.map((t) => {
-            if (t.label.includes("Content Release") || t.label.includes("Draft Deliverable") || t.label.includes("Review")) {
-              return { ...t, completed: true };
-            }
-            return t;
-          });
-
-          const updated = {
-            ...richCampaign,
-            participants: updatedParticipants,
-            timeline: updatedTimeline,
-            status: "released" as const
-          };
-
-          localStorage.setItem(`aether-campaign-rich-data-${campaignId}`, JSON.stringify(updated));
-        }
+        await loadData();
 
         // Trigger confetti celebration!
         confetti({
@@ -392,7 +522,6 @@ export default function BusinessDashboard() {
           colors: ["#34C759", "#007AFF", "#FF9500"]
         });
 
-        window.dispatchEvent(new Event("storage"));
         toast.success("Payout Released Instantly!", {
           id: "release-escrow",
           description: `Contract completed successfully. Payout dispatched to ${participant.fullName}.`
@@ -436,9 +565,7 @@ export default function BusinessDashboard() {
       const mName = months[date.getMonth()];
       
       if (monthlySpend[mName] !== undefined) {
-        if (tx.id.startsWith("tx_mock_") || tx.id.startsWith("tx_stripe_")) {
-          monthlySpend[mName] += tx.amount;
-        }
+        monthlySpend[mName] += tx.amount;
       }
     });
 
@@ -491,7 +618,7 @@ export default function BusinessDashboard() {
             {t("Aether Brand Studio")}
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight font-heading">
-            {profile?.company_name ? `${profile.company_name} ${t("Workspace")}` : `Sarah's ${t("Workspace")}`}
+            {profile?.company_name ? `${profile.company_name} ${t("Workspace")}` : t("Brand Workspace")}
           </h1>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
@@ -738,7 +865,7 @@ export default function BusinessDashboard() {
                   <div className="mt-6">
                     <h3 className="text-3xl font-bold tracking-tight text-foreground">{averageRoi}x</h3>
                     <span className="text-xs text-[#34C759] font-bold flex items-center gap-1 mt-1.5">
-                      +0.4x {t("from last campaign Q1")}
+                      {totalSpendVal > 0 ? t("Based on live attributed spend") : t("Awaiting attributed campaign spend")}
                     </span>
                   </div>
                 </div>
@@ -899,13 +1026,9 @@ export default function BusinessDashboard() {
                       >
                         <div className="space-y-3">
                           {/* Creator profile header */}
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3">
-                              <img 
-                                src={participant.avatarUrl} 
-                                alt={participant.fullName}
-                                className="w-10 h-10 rounded-full object-cover border border-border/10 shrink-0" 
-                              />
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-3">
+                              <AvatarBubble src={participant.avatarUrl} name={participant.fullName} />
                               <div>
                                 <h4 className="text-xs font-bold text-foreground leading-tight">{participant.fullName}</h4>
                                 <span className="text-[10px] text-muted-foreground mt-0.5 block">{participant.handle}</span>
@@ -918,7 +1041,7 @@ export default function BusinessDashboard() {
 
                           {/* Pitch content */}
                           <p className="text-[11px] text-muted-foreground leading-relaxed italic bg-secondary/20 p-3 rounded-xl border border-border/5">
-                            &quot;{participant.submissions?.[0]?.caption || `Hey! I love your brand and would love to collaborate on the ${campaignTitle} campaign. I will create a high quality aesthetic setup and highlight your layout details.`}&quot;
+                            &quot;{participant.pitch || participant.submissions?.[0]?.caption || t("No pitch attached.")}&quot;
                           </p>
                         </div>
 
@@ -991,11 +1114,7 @@ export default function BusinessDashboard() {
                           <div className="flex flex-col sm:flex-row gap-5 flex-1 min-w-0">
                             {/* Thumbnail overlay */}
                             <div className="w-full sm:w-28 h-28 rounded-xl overflow-hidden bg-secondary border border-border/15 shrink-0 relative group">
-                              <img 
-                                src={latestSub.imageUrl} 
-                                alt="Draft deliverable" 
-                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                              />
+                              <DraftPreview submission={latestSub} />
                               <div className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Play size={16} className="text-white" />
                               </div>

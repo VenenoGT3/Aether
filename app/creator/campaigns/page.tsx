@@ -24,7 +24,6 @@ interface CampaignParticipation {
   proposedPayout: number;
   status: "applied" | "offered" | "accepted" | "declined" | "escrowed" | "submitted" | "released" | "completed" | "cancelled" | "in_progress";
   appliedAt: string;
-  dueDate: string;
   deliverableType: string;
 }
 
@@ -35,7 +34,10 @@ interface RawParticipationRow {
   proposed_payout: number;
   status: CampaignParticipation["status"];
   applied_at?: string;
-  campaign?: { title?: string; deliverables?: Array<{ type?: string }> } | null;
+  campaign?: {
+    title?: string;
+    deliverables?: Array<{ type?: string }>;
+  } | null;
 }
 
 export default function InfluencerCampaignsPage() {
@@ -64,17 +66,18 @@ export default function InfluencerCampaignsPage() {
 
       if (error) throw error;
 
-      const formatted: CampaignParticipation[] = ((data || []) as RawParticipationRow[]).map((p) => ({
-        participationId: p.id,
-        campaignId: p.campaign_id,
-        title: p.campaign?.title || "Sponsorship Campaign",
-        brandName: "Brand Client",
-        proposedPayout: Number(p.proposed_payout),
-        status: p.status,
-        appliedAt: p.applied_at || new Date().toISOString(),
-        dueDate: "June 25, 2026",
-        deliverableType: p.campaign?.deliverables?.[0]?.type || "instagram_reel"
-      }));
+      const formatted: CampaignParticipation[] = ((data || []) as RawParticipationRow[]).map((p) => {
+        return {
+          participationId: p.id,
+          campaignId: p.campaign_id,
+          title: p.campaign?.title || "Campaign",
+          brandName: "Brand",
+          proposedPayout: Number(p.proposed_payout),
+          status: p.status,
+          appliedAt: p.applied_at || new Date().toISOString(),
+          deliverableType: p.campaign?.deliverables?.[0]?.type || "deliverable"
+        };
+      });
 
       setParticipations(formatted);
     } catch (err) {
@@ -89,14 +92,14 @@ export default function InfluencerCampaignsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
 
-    // Listen to changes from detail chat pages or discover updates
+    // Listen to explicit changes from discover/apply flows.
     const handleSync = () => {
       loadData();
     };
-    window.addEventListener("storage", handleSync);
+    window.addEventListener("aether-campaigns-update", handleSync);
     window.addEventListener("role-change", handleSync);
     return () => {
-      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("aether-campaigns-update", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
@@ -318,7 +321,7 @@ export default function InfluencerCampaignsPage() {
                             {item.title}
                           </h3>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {t("Brand Client:")} <span className="font-semibold text-foreground">{item.brandName}</span>
+                            {t("Brand:")} <span className="font-semibold text-foreground">{item.brandName}</span>
                           </p>
                         </div>
 

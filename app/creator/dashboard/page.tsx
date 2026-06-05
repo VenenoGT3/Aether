@@ -131,14 +131,12 @@ export default function InfluencerDashboard() {
       loadAll();
     };
     window.addEventListener("role-change", handleProfileUpdate);
-    window.addEventListener("storage", handleProfileUpdate);
     window.addEventListener("aether-metrics-update", handleProfileUpdate);
     window.addEventListener("aether-transactions-update", handleProfileUpdate);
     window.addEventListener("aether-posts-update", handleProfileUpdate);
     
     return () => {
       window.removeEventListener("role-change", handleProfileUpdate);
-      window.removeEventListener("storage", handleProfileUpdate);
       window.removeEventListener("aether-metrics-update", handleProfileUpdate);
       window.removeEventListener("aether-transactions-update", handleProfileUpdate);
       window.removeEventListener("aether-posts-update", handleProfileUpdate);
@@ -211,9 +209,7 @@ export default function InfluencerDashboard() {
       const mName = months[date.getMonth()];
       
       if (monthlyEarnings[mName] !== undefined) {
-        if (tx.id.startsWith("tx_mock_") || tx.id.startsWith("tx_stripe_")) {
-          monthlyEarnings[mName] += tx.amount;
-        }
+        monthlyEarnings[mName] += tx.amount;
       }
     });
 
