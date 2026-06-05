@@ -40,7 +40,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword(credentials);
-  if (error || !data.user) {
+  if (error || !data.user || !data.session) {
     return jsonError("Could not sign in to the test account.", 401);
   }
 
@@ -78,5 +78,9 @@ export async function POST(request: Request): Promise<Response> {
 
   return jsonSuccess({
     redirectTo: redirectFor(role, onboarded),
+    session: {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+    },
   });
 }

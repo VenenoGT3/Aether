@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { signInClient, getClientProfile } from "@/lib/supabase/client";
+import { signInClient, getClientProfile, supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles,
@@ -30,6 +30,10 @@ type TestLoginConfigResponse = {
 type TestLoginResponse = {
   success: true;
   redirectTo: string;
+  session: {
+    accessToken: string;
+    refreshToken: string;
+  };
 };
 
 function LoginForm() {
@@ -105,6 +109,15 @@ function LoginForm() {
     setTestLoading(role);
     try {
       const data = await apiPost<TestLoginResponse>("/api/test-login", { role });
+      const { error } = await supabase.auth.setSession({
+        access_token: data.session.accessToken,
+        refresh_token: data.session.refreshToken,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       toast.success(t("Welcome back!"), {
         description: t("Secure authentication completed."),
       });
