@@ -21,6 +21,11 @@ export const SERVER_SECRET_NAMES = [
   "AYRSHARE_API_KEY",
   "RESEND_API_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "ENABLE_TEST_LOGIN",
+  "TEST_BRAND_EMAIL",
+  "TEST_BRAND_PASSWORD",
+  "TEST_CREATOR_EMAIL",
+  "TEST_CREATOR_PASSWORD",
 ] as const;
 
 function requireServerSecret(name: string): string {
@@ -100,4 +105,37 @@ export function getAyrshareApiKey(): string | undefined {
 
 export function getResendApiKey(): string | undefined {
   return process.env.RESEND_API_KEY?.trim() || undefined;
+}
+
+export type TestLoginRole = "business" | "influencer";
+
+export function isTestLoginEnabled(): boolean {
+  return process.env.ENABLE_TEST_LOGIN?.trim().toLowerCase() === "true";
+}
+
+export function getAvailableTestLoginRoles(): TestLoginRole[] {
+  if (!isTestLoginEnabled()) return [];
+
+  const roles: TestLoginRole[] = [];
+  if (process.env.TEST_BRAND_EMAIL?.trim() && process.env.TEST_BRAND_PASSWORD?.trim()) {
+    roles.push("business");
+  }
+  if (process.env.TEST_CREATOR_EMAIL?.trim() && process.env.TEST_CREATOR_PASSWORD?.trim()) {
+    roles.push("influencer");
+  }
+  return roles;
+}
+
+export function getTestLoginCredentials(
+  role: TestLoginRole
+): { email: string; password: string } | null {
+  if (!isTestLoginEnabled()) return null;
+
+  const emailName = role === "business" ? "TEST_BRAND_EMAIL" : "TEST_CREATOR_EMAIL";
+  const passwordName =
+    role === "business" ? "TEST_BRAND_PASSWORD" : "TEST_CREATOR_PASSWORD";
+  const email = process.env[emailName]?.trim();
+  const password = process.env[passwordName]?.trim();
+
+  return email && password ? { email, password } : null;
 }

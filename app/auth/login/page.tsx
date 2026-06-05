@@ -1,14 +1,36 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { signInClient, getClientProfile } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Sparkles, ArrowRight, ArrowLeft, KeyRound, Mail, Loader2 } from "lucide-react";
+import {
+  Sparkles,
+  ArrowRight,
+  ArrowLeft,
+  KeyRound,
+  Mail,
+  Loader2,
+  Building2,
+  UserRound,
+} from "lucide-react";
 import { useTranslation } from "@/lib/translations";
 import { motion } from "framer-motion";
+import { apiGet, apiPost } from "@/lib/api/client";
+
+type TestLoginRole = "business" | "influencer";
+
+type TestLoginConfigResponse = {
+  success: true;
+  roles: TestLoginRole[];
+};
+
+type TestLoginResponse = {
+  success: true;
+  redirectTo: string;
+};
 
 function LoginForm() {
   const { t } = useTranslation();
@@ -17,8 +39,24 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [testLoginRoles, setTestLoginRoles] = useState<TestLoginRole[]>([]);
+  const [testLoading, setTestLoading] = useState<TestLoginRole | null>(null);
 
   const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+
+  useEffect(() => {
+    let active = true;
+    apiGet<TestLoginConfigResponse>("/api/test-login")
+      .then((data) => {
+        if (active) setTestLoginRoles(data.roles);
+      })
+      .catch(() => {
+        if (active) setTestLoginRoles([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +98,26 @@ function LoginForm() {
     } catch {
       toast.error("An unexpected error occurred during login.");
       setLoading(false);
+    }
+  };
+
+  const handleTestLogin = async (role: TestLoginRole) => {
+    setTestLoading(role);
+    try {
+      const data = await apiPost<TestLoginResponse>("/api/test-login", { role });
+      toast.success(t("Welcome back!"), {
+        description: t("Secure authentication completed."),
+      });
+      router.push(data.redirectTo);
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("Could not sign in to the test account.")
+      );
+    } finally {
+      setTestLoading(null);
     }
   };
 
@@ -171,6 +229,52 @@ function LoginForm() {
             )}
           </Button>
         </form>
+
+        {testLoginRoles.length > 0 && (
+          <div className="mt-5 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-border/30" />
+              <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                {t("Testing")}
+              </span>
+              <span className="h-px flex-1 bg-border/30" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {testLoginRoles.includes("business") && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl py-5 text-xs font-semibold gap-2"
+                  disabled={loading || testLoading !== null}
+                  onClick={() => void handleTestLogin("business")}
+                >
+                  {testLoading === "business" ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Building2 size={15} />
+                  )}
+                  {t("Brand")}
+                </Button>
+              )}
+              {testLoginRoles.includes("influencer") && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl py-5 text-xs font-semibold gap-2"
+                  disabled={loading || testLoading !== null}
+                  onClick={() => void handleTestLogin("influencer")}
+                >
+                  {testLoading === "influencer" ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <UserRound size={15} />
+                  )}
+                  {t("Creator")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 text-center text-xs text-muted-foreground">
           {t("Don't have an account?")}{" "}
