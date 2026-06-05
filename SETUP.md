@@ -208,7 +208,7 @@ Before trusting real money, run the full loop once in **Stripe test mode** on a 
 2. As a creator, **join** it and **submit a clip**.
 3. As the brand, **approve** the clip → it becomes `tracking`.
 4. Run `npm run worker:once` a couple of times → confirm `view_snapshots` + `earnings` rows appear and the campaign `budget_reserved` grows.
-5. Set `VIEW_HOLDBACK_HOURS=0`, run `npm run payouts:once` → confirm a `payouts` row + Stripe **test** transfer + `earnings` → `paid` + `budget_reserved` → `budget_paid`.
+5. Set `VIEW_HOLDBACK_HOURS=0`, run `npm run payouts:once` → confirm `earnings` move from `accrued` to `approved` and become withdrawable. For a full auto-transfer smoke test, also set `WORKER_AUTO_PAYOUTS=true` and confirm a `payouts` row + Stripe **test** transfer + `earnings` → `paid` + `budget_reserved` → `budget_paid`.
 6. **Reject** a tracking clip → confirm its unpaid `accrued` earnings become `reversed` and reserved budget is released.
 
 If all six pass, the money pipeline is proven.

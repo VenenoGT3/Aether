@@ -110,10 +110,12 @@ export async function createEscrowPaymentIntent(
 /**
  * Transfers funds from the platform Stripe balance to the Creator's Connected Account.
  */
+export type StripeTransferMetadata = Record<string, string>;
+
 export async function releaseEscrowPayment(
   amount: number,
   influencerStripeAccountId: string,
-  campaignId: string,
+  metadata: StripeTransferMetadata,
   /**
    * Stable Stripe idempotency key. CRITICAL for withdrawals: re-issuing the
    * same transfer (retry / reconcile) returns the original transfer instead of
@@ -128,7 +130,7 @@ export async function releaseEscrowPayment(
           amount: Math.round(amount * 100),
           currency: "usd",
           destination: influencerStripeAccountId,
-          metadata: { campaignId },
+          metadata,
         },
         idempotencyKey ? { idempotencyKey } : undefined
       )

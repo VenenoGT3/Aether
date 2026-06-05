@@ -14,7 +14,7 @@ It has been migrated to a **performance-based UGC + clipping platform**:
 - Creators **join openly** (no application/approval), submit **multiple clips**.
 - Brands **moderate** clips (approve → tracking, or reject).
 - A worker **tracks views** and **accrues earnings** (`views × CPM`, capped by pool + per-creator cap).
-- Earnings settle after a **holdback window**, then pay out automatically via **Stripe Connect**.
+- Earnings settle after a **holdback window**, then become withdrawable through **Stripe Connect** by default (`WORKER_AUTO_PAYOUTS=true` can enable automatic batch payouts).
 
 Both models coexist: every campaign has a `campaign_type` of `'fixed'` or `'performance'`. The legacy fixed-fee flow is untouched and still works.
 
@@ -45,7 +45,7 @@ create campaign (draft) → fund pool (Stripe PaymentIntent) → webhook → sta
 creator joins (participation 'active') → submits clip ('pending')
 brand approves → clip 'tracking'
 worker: fetch views → view_snapshots → record_clip_earning() → earnings 'accrued' (budget_reserved += )
-holdback elapses → payout worker: 'accrued' → 'approved' → claim → Stripe transfer → 'paid' (budget_reserved → budget_paid)
+holdback elapses → payout worker: 'accrued' → 'approved' → creator withdrawal claims balance → Stripe transfer → 'paid' (budget_reserved → budget_paid)
 reject/disqualify a clip → trigger reverses unpaid 'accrued' earnings, releases reserved budget
 ```
 

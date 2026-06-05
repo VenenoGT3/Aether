@@ -56,7 +56,7 @@ export default function Home() {
     },
     {
       icon: BarChart3,
-      title: t("Pay per view, automatically"),
+      title: t("Pay per verified view"),
       body: t("Views are synced, verified, and priced against your CPM. You only ever pay for the views you receive."),
     },
   ];
@@ -89,8 +89,8 @@ export default function Home() {
     {
       icon: ShieldCheck,
       color: "#34C759",
-      title: t("Protected, automated payouts"),
-      body: t("Stripe Connect escrow, a view-verification holdback window, and advanced bot & fake-account detection keep every payout fair."),
+      title: t("Protected creator withdrawals"),
+      body: t("Stripe Connect, a view-verification holdback window, and advanced bot & fake-account detection keep every withdrawal fair."),
     },
     {
       icon: Users,
@@ -136,7 +136,7 @@ export default function Home() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="text-muted-foreground text-lg sm:text-xl max-w-2xl leading-relaxed mb-12"
         >
-          {t("Aether is the pay-per-view UGC & clipping platform. Brands fund a budget, creators post clips, and payouts are calculated automatically from real views — no fixed fees, no guesswork.")}
+          {t("Aether is the pay-per-view UGC & clipping platform. Brands fund a budget, creators post clips, and earnings are calculated automatically from real views — no fixed fees, no guesswork.")}
         </motion.p>
 
         <motion.div
@@ -165,7 +165,7 @@ export default function Home() {
           className="mt-12 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 text-xs font-semibold text-muted-foreground"
         >
           <span className="flex items-center gap-1.5"><Eye size={14} className="text-[#007AFF]" /> {t("Pay per 1,000 views")}</span>
-          <span className="flex items-center gap-1.5"><Wallet size={14} className="text-[#34C759]" /> {t("Automated payouts")}</span>
+          <span className="flex items-center gap-1.5"><Wallet size={14} className="text-[#34C759]" /> {t("Creator withdrawals")}</span>
           <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-[#FF9500]" /> {t("Fraud-protected")}</span>
           <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-[#5856D6]" /> {t("Stripe-secured escrow")}</span>
         </motion.div>

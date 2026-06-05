@@ -1,6 +1,6 @@
 # Aether
 
-**Performance-based UGC + Clipping platform.** Brands fund a budget pool and pay creators **per view** (CPM). Creators join campaigns openly (no application), post short-form clips, and earn automatically as their views accrue — with brand moderation, a holdback window, and automated batched payouts via Stripe Connect.
+**Performance-based UGC + Clipping platform.** Brands fund a budget pool and pay creators **per view** (CPM). Creators join campaigns openly (no application), post short-form clips, and earn as their views accrue — with brand moderation, a holdback window, and creator-initiated Stripe Connect withdrawals by default.
 
 The original **fixed-fee escrow** model (apply → approve → escrow → manual release) is still fully supported. The two coexist via a `campaign_type` discriminator (`'fixed'` vs `'performance'`), so the platform handles both during and after the transition.
 
@@ -19,7 +19,7 @@ This is an **honest** status. The performance model is built end-to-end and the 
 - **View tracking → earnings** — a worker syncs views and accrues earnings via an atomic, pool-aware SQL function (`record_clip_earning`).
 - **Pooled budgets + caps** — per-campaign budget pool, per-creator caps, atomic spend.
 - **Real pool funding** — performance campaigns must be paid (Stripe PaymentIntent) before going live; they stay `draft` until the webhook confirms payment.
-- **Automated payouts** — a batch worker promotes earnings past the holdback window and pays creators via idempotent Stripe transfers.
+- **Withdrawable earnings** — a batch worker promotes earnings past the holdback window; creators withdraw approved balances via idempotent Stripe transfers by default (`WORKER_AUTO_PAYOUTS=true` enables fully automatic payouts).
 - **Earnings reversal** — rejecting/disqualifying a clip reverses its unpaid earnings (DB trigger) and releases reserved budget.
 - **UI** — performance campaign builder, creator Clips & Earnings page, brand moderation + burn-down, dashboard summaries.
 - **Legacy fixed-fee flow** — unchanged and working.

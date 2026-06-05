@@ -71,7 +71,7 @@ export function CreatorPerformanceSummary() {
       label: t("Ready for payout"),
       value: `$${breakdown.readyForPayout.toLocaleString()}`,
       sub: t("Cleared holdback"),
-      hint: t("Cleared the holdback window — included in your next automatic payout."),
+      hint: t("Cleared the holdback window — available to withdraw from your Creator Wallet."),
       icon: Wallet,
       color: "#007AFF",
     },
@@ -116,7 +116,7 @@ export function CreatorPerformanceSummary() {
         ))}
       </div>
 
-      {/* How automatic payouts work */}
+      {/* How withdrawals work */}
       <div className="flex items-start gap-2 mb-6 px-1 text-[11px] text-muted-foreground leading-relaxed">
         <Info size={13} className="shrink-0 mt-0.5 text-primary" />
         <span>

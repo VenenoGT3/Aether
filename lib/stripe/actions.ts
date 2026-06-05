@@ -250,7 +250,11 @@ export async function releaseEscrowAction(participationId: string) {
     const { success, transferId } = await releaseEscrowPayment(
       amount,
       influencerProfile.stripe_connect_id,
-      participation.campaign_id
+      {
+        kind: "escrow_release",
+        campaignId: participation.campaign_id,
+        participationId,
+      }
     );
 
     if (!success) {
@@ -420,7 +424,12 @@ export async function requestWithdrawalAction() {
     //    claim (balance returns). On an UNKNOWN outcome leave it 'processing'
     //    for the reconciler — never release into a possible double-pay.
     try {
-      const transfer = await releaseEscrowPayment(net, account, idempotencyKey, idempotencyKey);
+      const transfer = await releaseEscrowPayment(
+        net,
+        account,
+        { kind: "withdrawal", payoutId },
+        idempotencyKey
+      );
       const { error: settleErr } = await supabase.rpc("settle_withdrawal", {
         p_payout_id: payoutId,
         p_transfer_id: transfer.transferId,

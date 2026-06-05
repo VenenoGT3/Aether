@@ -789,7 +789,7 @@ export default function NewCampaignWizard() {
                         </h4>
                         <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
                           {isPerformance
-                            ? t("The pool is funded on publish. Earnings accrue as views come in and are paid out automatically after the holdback window.")
+                            ? t("The pool is funded on publish. Earnings accrue as views come in and become withdrawable after the holdback window.")
                             : t("Budget is safely locked upon publishing and only routed to the creator's payout balance after content draft approval.")}
                         </p>
                       </div>
