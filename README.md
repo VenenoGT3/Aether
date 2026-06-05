@@ -96,7 +96,7 @@ lib/
   stripe/                Connect, actions (pool funding, escrow), webhook handler
   api/                   API guard, schemas, services (join, clip submit, moderation)
 supabase/migrations/     Schema (additive; fixed-fee + performance coexist)
-supabase/functions/      stripe-webhook Edge Function
+supabase/functions/      stripe-webhook + social-oauth Edge Functions
 types/                   Zod schemas / DB types
 docs/                    Reference docs (SECRETS, SECURITY, PERMISSIONS, etc.)
 ```

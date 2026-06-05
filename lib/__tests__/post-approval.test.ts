@@ -9,9 +9,9 @@ describe("post approval", () => {
   const businessId = "11111111-1111-1111-1111-111111111111";
   const influencerId = "33333333-3333-3333-3333-333333333333";
 
-  it("allows business to approve submitted posts", () => {
+  it("allows business to approve posts for accepted participations", () => {
     expect(() =>
-      assertCanApprovePost(businessId, businessId, "submitted")
+      assertCanApprovePost(businessId, businessId, "accepted")
     ).not.toThrow();
   });
 
@@ -23,7 +23,7 @@ describe("post approval", () => {
 
   it("rejects non-owner business from approving", () => {
     expect(() =>
-      assertCanApprovePost(influencerId, businessId, "submitted")
+      assertCanApprovePost(influencerId, businessId, "accepted")
     ).toThrow(AuthorizationError);
   });
 

@@ -33,18 +33,16 @@ async function handleEvent(
         };
       };
 
-      // Performance campaign pool funding: activate the campaign on payment.
+      // Performance campaign pool funding: activate the campaign and record the
+      // platform-fee ledger through the same idempotent RPC used by the Vercel
+      // fallback handler.
       if (paymentIntent.metadata?.kind === "pool_funding") {
         const campaignId = paymentIntent.metadata?.campaignId;
-        const update = { status: "open", funded_at: new Date().toISOString() };
-        const q = campaignId
-          ? supabase.from("campaigns").update(update).eq("id", campaignId)
-          : supabase
-              .from("campaigns")
-              .update(update)
-              .eq("funding_payment_intent_id", paymentIntent.id);
-        const { error: campErr } = await q;
-        if (campErr) console.error("campaign pool funding:", campErr.message);
+        const { error } = await supabase.rpc("settle_pool_funding_payment", {
+          p_payment_intent_id: paymentIntent.id,
+          p_campaign_id: campaignId ?? null,
+        });
+        if (error) console.error("campaign pool funding:", error.message);
         break;
       }
 
@@ -70,7 +68,7 @@ async function handleEvent(
       if (targetPartId) {
         const { error: partError } = await supabase
           .from("participations")
-          .update({ status: "in_progress" })
+          .update({ status: "accepted" })
           .eq("id", targetPartId);
         if (partError) console.error("participation update:", partError.message);
       }

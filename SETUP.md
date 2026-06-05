@@ -78,6 +78,8 @@ Aether uses **Stripe Connect** for creator payouts and **PaymentIntents** for fu
 
    Local testing of the legacy Vercel handler: `STRIPE_WEBHOOK_HANDLER=vercel` + `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
 
+4. Deploy `supabase/functions/social-oauth` for creator TikTok/YouTube account linking, with the OAuth secrets listed in [docs/SECRETS.md](docs/SECRETS.md).
+
 ### 5. Redis + the worker
 
 The worker is a **standalone Node process** (not Next.js). It needs Supabase (service role) + Redis, and optionally Stripe (live payouts). It also requires at least one trusted view source: YouTube official, TikTok official, or Ayrshare.
@@ -111,6 +113,8 @@ The worker is a **long-running background process with no HTTP port**, and must 
 - `STRIPE_SECRET_KEY` — required for creator payouts.
 - `YOUTUBE_DATA_API_KEY` — official YouTube video statistics.
 - `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` — TikTok Login Kit credentials; each creator must also connect TikTok with `video.list` scope before TikTok direct polling can accrue.
+- `YOUTUBE_OAUTH_CLIENT_ID` + `YOUTUBE_OAUTH_CLIENT_SECRET` — YouTube creator account linking in `supabase/functions/social-oauth`.
+- `SOCIAL_OAUTH_FUNCTION_URL` — optional explicit social OAuth callback base; defaults to the deployed function URL.
 - `AYRSHARE_API_KEY` — optional fallback/aggregator.
 - At least one trusted view provider is required; the worker hard-fails without one.
 

@@ -90,6 +90,32 @@ https://<project-ref>.supabase.co/functions/v1/stripe-webhook
 
 Do **not** point production Stripe webhooks at `/api/webhooks/stripe` on Vercel when `STRIPE_WEBHOOK_HANDLER=supabase`.
 
+### Edge Function: `social-oauth`
+
+**Dashboard → Edge Functions → social-oauth → Secrets:**
+
+| Secret | Value |
+|--------|--------|
+| `TIKTOK_CLIENT_KEY` | TikTok Login Kit client key |
+| `TIKTOK_CLIENT_SECRET` | TikTok Login Kit client secret |
+| `YOUTUBE_OAUTH_CLIENT_ID` | Google OAuth client id for YouTube ownership verification |
+| `YOUTUBE_OAUTH_CLIENT_SECRET` | Google OAuth client secret |
+| `SOCIAL_OAUTH_FUNCTION_URL` | Optional explicit callback base, e.g. `https://<project-ref>.supabase.co/functions/v1/social-oauth` |
+
+Supabase injects automatically:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+### Deploy
+
+```bash
+supabase functions deploy social-oauth --no-verify-jwt
+```
+
+`--no-verify-jwt` is required because OAuth providers redirect to the callback
+without a Supabase user JWT; the function verifies its own stored state.
+
 ---
 
 ## Worker (standalone process)
@@ -150,7 +176,7 @@ Rules:
 
 1. Rotate key in Stripe / Supabase dashboard.
 2. Update Vercel **and** Supabase Edge secrets if shared (e.g. `STRIPE_WEBHOOK_SECRET`).
-3. Redeploy Vercel + `supabase functions deploy stripe-webhook`.
+3. Redeploy Vercel + affected Edge Functions, e.g. `supabase functions deploy stripe-webhook` and `supabase functions deploy social-oauth`.
 4. Revoke old key after traffic is clean.
 
 ---

@@ -138,7 +138,8 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
    - `STRIPE_WEBHOOK_HANDLER=supabase` (the default, required on Vercel Production).
 3. **Database**: production Supabase project `baiyjsjocwccmlopqyqy` is migrated through
    `20260604125713_function_search_path_hardening`. For future changes, run new SQL
-   migrations in timestamp order, then deploy the `stripe-webhook` Edge Function with its secrets.
+   migrations in timestamp order, then deploy the `stripe-webhook` and `social-oauth`
+   Edge Functions with their secrets.
 4. **Stripe**: point the webhook at the Supabase Edge Function URL
    (`<supabase-url>/functions/v1/stripe-webhook`); set `STRIPE_WEBHOOK_SECRET` in Supabase.
 5. **Redis (Upstash)**: provision and set `UPSTASH_REDIS_REST_URL` / `_TOKEN` for the app,

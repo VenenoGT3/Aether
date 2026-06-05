@@ -3,15 +3,8 @@ import { assertParticipationAccess } from "@/lib/api/participation-access";
 import type { PostSubmitBody } from "@/lib/api/schemas";
 import { reportError } from "@/lib/errors";
 
-/** Allowed DB + app participation statuses for deliverable upload */
-const SUBMITTABLE_STATUSES = [
-  "accepted",
-  "offered",
-  "applied",
-  "in_progress",
-  "escrowed",
-  "submitted",
-];
+/** Canonical DB participation statuses that have funded escrow. */
+const SUBMITTABLE_STATUSES = ["accepted"];
 
 function detectPlatform(
   postUrl: string,

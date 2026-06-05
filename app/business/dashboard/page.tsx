@@ -275,7 +275,7 @@ export default function BusinessDashboard() {
     toast.loading("Initializing secure escrow funding...", { id: "escrow-funding" });
 
     try {
-      const res = await fundEscrowAction(campaignId, participant.payout);
+      const res = await fundEscrowAction(participant.id, participant.payout);
 
       if (res.success) {
         // Update campaign local state
@@ -355,7 +355,7 @@ export default function BusinessDashboard() {
     toast.loading("Releasing Stripe Connect payout...", { id: "release-escrow" });
 
     try {
-      const res = await releaseEscrowAction(campaignId);
+      const res = await releaseEscrowAction(participant.id);
 
       if (res.success) {
         const richCampaign = campaignDetails[campaignId];
