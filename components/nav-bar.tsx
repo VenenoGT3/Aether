@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Sparkles, BarChart3, LogOut } from "lucide-react";
+import { ArrowRight, Sparkles, BarChart3, LogOut } from "lucide-react";
 
 function initials(name: string): string {
   return name
@@ -37,6 +37,7 @@ export function NavBar() {
   const pathname = usePathname();
   const [user, setUser] = useState<Profile | null>(null);
   const role: "business" | "influencer" = user?.role === "business" ? "business" : "influencer";
+  const isHomePage = pathname === "/";
 
   useEffect(() => {
     let active = true;
@@ -77,7 +78,7 @@ export function NavBar() {
           </Link>
 
           {/* Navigation Links based on role */}
-          {user && (
+          {user ? (
             <nav className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
               {role === "business" ? (
                 <>
@@ -143,7 +144,24 @@ export function NavBar() {
                 </>
               )}
             </nav>
-          )}
+          ) : isHomePage ? (
+            <nav className="hidden lg:flex items-center gap-1 rounded-2xl border border-white/10 bg-slate-950/60 p-1 text-xs font-semibold text-muted-foreground">
+              {[
+                ["#process", "Process"],
+                ["#marketplace", "Marketplace"],
+                ["#security", "Security"],
+                ["#start", "Start"],
+              ].map(([href, label]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="rounded-xl px-3 py-2 transition-all hover:bg-white/[0.06] hover:text-foreground"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </div>
 
         {/* Action Controls */}
@@ -209,10 +227,17 @@ export function NavBar() {
             <>
               <LanguageToggle />
               <Link href="/auth/login">
-                <Button className="rounded-full px-5 py-1.5 font-semibold text-sm cursor-pointer shadow-sm hover:scale-[1.02] transition-transform">
+                <Button variant={isHomePage ? "outline" : "default"} className="rounded-full px-5 py-1.5 font-semibold text-sm cursor-pointer shadow-sm hover:scale-[1.02] transition-transform">
                   {t("Sign In")}
                 </Button>
               </Link>
+              {isHomePage && (
+                <Link href="/auth/signup?role=business" className="hidden sm:block">
+                  <Button className="rounded-full px-5 py-1.5 font-semibold text-sm cursor-pointer shadow-sm hover:scale-[1.02] transition-transform gap-1.5">
+                    {t("Start")} <ArrowRight size={13} />
+                  </Button>
+                </Link>
+              )}
             </>
           )}
         </div>
