@@ -74,6 +74,8 @@ function initials(name: string): string {
 }
 
 function CreatorBrandMark() {
+  const { t } = useTranslation();
+
   return (
     <Link href="/creator/dashboard" className="flex min-w-0 items-center gap-3">
       <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl creator-gradient-accent text-white shadow-[0_12px_30px_-16px_rgba(77,142,255,0.9)]">
@@ -82,7 +84,7 @@ function CreatorBrandMark() {
       <span className="min-w-0">
         <span className="block text-sm font-semibold tracking-normal text-white">CreatorHub</span>
         <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-          Aether rewards
+          {t("Aether rewards")}
         </span>
       </span>
     </Link>
@@ -150,7 +152,7 @@ function CreatorProfileMenu({ user }: { user: Profile | null }) {
   const router = useRouter();
   const { t } = useTranslation();
   const displayName = user?.full_name || user?.social_handle || "Creator";
-  const subtitle = user?.social_handle || user?.email || "Creator workspace";
+  const subtitle = user?.social_handle || user?.email || t("Creator workspace");
 
   if (!user) {
     return (
@@ -276,7 +278,7 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
 
           <div className="flex shrink-0 items-center gap-2">
             <CreatorStatusPill className="hidden lg:inline-flex" tone="accent">
-              {profileLoaded ? creatorName : "Loading"}
+              {profileLoaded ? creatorName : t("Loading")}
             </CreatorStatusPill>
             <div className="hidden sm:block">
               <LanguageToggle />
@@ -299,7 +301,7 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
           <activeItem.icon size={14} className="shrink-0 text-[var(--creator-primary)]" aria-hidden="true" />
           <span className="truncate font-semibold text-white">{t(activeItem.label)}</span>
         </span>
-        <span className="truncate">{profileLoaded ? creatorName : "Loading workspace"}</span>
+        <span className="truncate">{profileLoaded ? creatorName : t("Loading workspace")}</span>
       </div>
 
       <div className="relative z-10">{children}</div>
@@ -324,4 +326,3 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-

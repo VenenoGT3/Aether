@@ -113,7 +113,7 @@ export default function BusinessOnboarding() {
             <Sparkles size={12} className="text-[#007AFF]" />
             <span>Aether Brand Studio</span>
           </motion.div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2 font-heading">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2 font-sans">
             {t("Setup your Workspace")}
           </h1>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">

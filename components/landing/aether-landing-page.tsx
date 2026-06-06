@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LandingStats } from "@/lib/supabase/landing-stats";
+import { useTranslation } from "@/lib/translations";
 
 type Props = {
   stats: LandingStats;
@@ -85,17 +86,17 @@ const marketplaceCards = [
   },
 ];
 
-function compact(value: number | null): string {
-  if (value === null) return "Ready";
-  return new Intl.NumberFormat("en", {
+function compact(value: number | null, locale: string, fallback: string): string {
+  if (value === null) return fallback;
+  return new Intl.NumberFormat(locale, {
     notation: value >= 10_000 ? "compact" : "standard",
     maximumFractionDigits: value >= 10_000 ? 1 : 0,
   }).format(value);
 }
 
-function money(value: number | null): string {
-  if (value === null) return "Secured";
-  return new Intl.NumberFormat("en", {
+function money(value: number | null, locale: string, fallback: string): string {
+  if (value === null) return fallback;
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
     notation: value >= 10_000 ? "compact" : "standard",
@@ -135,30 +136,32 @@ function StatCard({
 }
 
 export function AetherLandingPage({ stats }: Props) {
+  const { t, locale } = useTranslation();
+  const formatterLocale = locale === "it" ? "it-IT" : "en-US";
   const progress = percentFromViews(stats.verifiedViews);
 
   const liveStats = [
     {
-      label: "Open campaigns",
-      value: compact(stats.openCampaigns),
+      label: t("Open campaigns"),
+      value: compact(stats.openCampaigns, formatterLocale, t("Ready")),
       icon: Megaphone,
       tone: "text-[#adc6ff]",
     },
     {
-      label: "Creator network",
-      value: compact(stats.activeCreators),
+      label: t("Creator network"),
+      value: compact(stats.activeCreators, formatterLocale, t("Ready")),
       icon: Film,
       tone: "text-[#d0bcff]",
     },
     {
-      label: "Verified views",
-      value: compact(stats.verifiedViews),
+      label: t("Verified views"),
+      value: compact(stats.verifiedViews, formatterLocale, t("Ready")),
       icon: Eye,
       tone: "text-emerald-300",
     },
     {
-      label: "Creator earnings",
-      value: money(stats.creatorEarnings),
+      label: t("Creator earnings"),
+      value: money(stats.creatorEarnings, formatterLocale, t("Secured")),
       icon: Wallet,
       tone: "text-amber-300",
     },
@@ -178,7 +181,7 @@ export function AetherLandingPage({ stats }: Props) {
         >
           <ShieldCheck className="h-3.5 w-3.5 text-[#adc6ff]" />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#adc6ff]">
-            UGC and clipping marketplace
+            {t("UGC and clipping marketplace")}
           </span>
         </motion.div>
 
@@ -188,9 +191,9 @@ export function AetherLandingPage({ stats }: Props) {
           transition={{ ...appleSpring, delay: 0.06 }}
           className="max-w-5xl font-sans text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-6xl lg:text-7xl"
         >
-          Performance creator campaigns, paid by verified views
+          {t("Performance creator campaigns, paid by verified views")}
           <span className="mt-3 block bg-gradient-to-r from-[#adc6ff] via-[#c4abff] to-[#d0bcff] bg-clip-text text-transparent">
-            not guesswork
+            {t("not guesswork")}
           </span>
         </motion.h1>
 
@@ -200,9 +203,9 @@ export function AetherLandingPage({ stats }: Props) {
           transition={{ ...appleSpring, delay: 0.12 }}
           className="mt-6 max-w-3xl text-base leading-8 text-[#c2c6d6] sm:text-lg"
         >
-          Aether connects brands with creators and clipping editors. Brands fund
-          a capped pool, creators publish native short-form content, and payouts
-          are calculated from tracked, fraud-checked views.
+          {t(
+            "Aether connects brands with creators and clipping editors. Brands fund a capped pool, creators publish native short-form content, and payouts are calculated from tracked, fraud-checked views."
+          )}
         </motion.p>
 
         <motion.div
@@ -214,7 +217,7 @@ export function AetherLandingPage({ stats }: Props) {
           <Link href="/auth/signup?role=business" className="w-full sm:w-auto">
             <Button className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#adc6ff] to-[#54a2ff] px-7 text-sm font-black text-[#07101f] shadow-[0_0_28px_rgba(173,198,255,0.24)] hover:scale-[1.02] active:scale-[0.98]">
               <Zap className="h-4 w-4 fill-current" />
-              Start a campaign
+              {t("Start a campaign")}
             </Button>
           </Link>
           <Link href="/auth/signup?role=influencer" className="w-full sm:w-auto">
@@ -222,7 +225,7 @@ export function AetherLandingPage({ stats }: Props) {
               variant="outline"
               className="h-12 w-full rounded-2xl border-white/10 bg-slate-950/70 px-7 text-sm font-bold text-white hover:scale-[1.02] hover:bg-white/[0.06] active:scale-[0.98]"
             >
-              Join as creator
+              {t("Join as creator")}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
@@ -238,7 +241,7 @@ export function AetherLandingPage({ stats }: Props) {
             <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/85 px-3 py-2 backdrop-blur">
               <span className="h-2 w-2 rounded-full bg-rose-500" />
               <span className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-rose-300">
-                Live escrow monitor
+                {t("Live escrow monitor")}
               </span>
             </div>
             <div
@@ -260,10 +263,10 @@ export function AetherLandingPage({ stats }: Props) {
       <section id="process" className="mx-auto w-full max-w-4xl px-5 py-20 sm:px-6">
         <div className="mb-14 text-center">
           <h2 className="font-sans text-3xl font-black tracking-tight text-white sm:text-5xl">
-            The UGC and clipping workflow
+            {t("The UGC and clipping workflow")}
           </h2>
           <p className="mt-3 text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
-            From brief to verified payout
+            {t("From brief to verified payout")}
           </p>
         </div>
 
@@ -281,8 +284,8 @@ export function AetherLandingPage({ stats }: Props) {
               <span className={`absolute -left-[42px] flex h-8 w-8 items-center justify-center rounded-2xl border border-white/10 bg-slate-950 font-mono text-xs font-black shadow-[0_0_18px_rgba(173,198,255,0.12)] sm:-left-[48px] ${step.accent}`}>
                 {index + 1}
               </span>
-              <h3 className={`font-sans text-lg font-black ${step.accent}`}>{step.title}</h3>
-              <p className="mt-2 text-sm leading-7 text-[#c2c6d6]">{step.body}</p>
+              <h3 className={`font-sans text-lg font-black ${step.accent}`}>{t(step.title)}</h3>
+              <p className="mt-2 text-sm leading-7 text-[#c2c6d6]">{t(step.body)}</p>
             </motion.div>
           ))}
         </div>
@@ -292,12 +295,12 @@ export function AetherLandingPage({ stats }: Props) {
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto mb-12 max-w-3xl text-center">
             <h2 className="font-sans text-3xl font-black tracking-tight text-white sm:text-5xl">
-              One marketplace for UGC, clipping, and performance payout logic
+              {t("One marketplace for UGC, clipping, and performance payout logic")}
             </h2>
             <p className="mt-4 text-[#c2c6d6]">
-              Aether brings the full campaign path into one product: signup,
-              onboarding, campaign creation, creator discovery, tracked clips,
-              and payouts.
+              {t(
+                "Aether brings the full campaign path into one product: signup, onboarding, campaign creation, creator discovery, tracked clips, and payouts."
+              )}
             </p>
           </div>
 
@@ -317,8 +320,8 @@ export function AetherLandingPage({ stats }: Props) {
                   <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border ${card.border} ${card.bg} ${card.color}`}>
                     <Icon size={23} />
                   </div>
-                  <h3 className="font-sans text-xl font-black text-white">{card.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-[#c2c6d6]">{card.body}</p>
+                  <h3 className="font-sans text-xl font-black text-white">{t(card.title)}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[#c2c6d6]">{t(card.body)}</p>
                 </motion.div>
               );
             })}
@@ -329,15 +332,15 @@ export function AetherLandingPage({ stats }: Props) {
       <section className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-12 px-5 py-24 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
           <h2 className="font-sans text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl">
-            Efficiency for brands,
+            {t("Efficiency for brands,")}
             <span className="block bg-gradient-to-r from-[#adc6ff] to-[#d0bcff] bg-clip-text text-transparent">
-              protection for creators
+              {t("protection for creators")}
             </span>
           </h2>
           <p className="mt-5 text-base leading-8 text-[#c2c6d6]">
-            Aether replaces fixed-fee uncertainty with a budget pool, creator
-            caps, view verification, fraud screening, and Stripe payout flows
-            designed for performance campaigns.
+            {t(
+              "Aether replaces fixed-fee uncertainty with a budget pool, creator caps, view verification, fraud screening, and Stripe payout flows designed for performance campaigns."
+            )}
           </p>
 
           <div className="mt-8 space-y-5">
@@ -371,8 +374,8 @@ export function AetherLandingPage({ stats }: Props) {
                     <Icon size={19} />
                   </span>
                   <div>
-                    <h3 className="font-sans text-sm font-black text-white">{item.title}</h3>
-                    <p className="mt-1 text-sm leading-6 text-[#c2c6d6]">{item.body}</p>
+                    <h3 className="font-sans text-sm font-black text-white">{t(item.title)}</h3>
+                    <p className="mt-1 text-sm leading-6 text-[#c2c6d6]">{t(item.body)}</p>
                   </div>
                 </div>
               );
@@ -384,17 +387,20 @@ export function AetherLandingPage({ stats }: Props) {
           <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
             <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#adc6ff]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#adc6ff]" />
-              Active campaign monitor
+              {t("Active campaign monitor")}
             </span>
             <span className="font-mono text-xl font-black text-white">
-              {money(stats.fundedPool)}
+              {money(stats.fundedPool, formatterLocale, t("Secured"))}
             </span>
           </div>
 
           <div className="space-y-3">
             <div className="flex justify-between text-xs font-mono text-[#c2c6d6]">
               <span>
-                Verified views: {stats.verifiedViews === null ? "sync ready" : compact(stats.verifiedViews)}
+                {t("Verified views")}:{" "}
+                {stats.verifiedViews === null
+                  ? t("sync ready")
+                  : compact(stats.verifiedViews, formatterLocale, t("Ready"))}
               </span>
               <span className="font-black text-[#adc6ff]">{progress}%</span>
             </div>
@@ -409,25 +415,25 @@ export function AetherLandingPage({ stats }: Props) {
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-center">
               <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                Campaign CPM
+                {t("Campaign CPM")}
               </span>
               <span className="mt-1 block font-mono text-xl font-black text-white">$5.10</span>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-center">
               <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                Provider
+                {t("Provider")}
               </span>
               <span className="mt-1 block font-mono text-xl font-black text-emerald-300">
-                Official
+                {t("Official")}
               </span>
             </div>
           </div>
 
           <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-[11px] font-mono text-[#c2c6d6]">
-            <span>Escrow vault and fraud checks</span>
+            <span>{t("Escrow vault and fraud checks")}</span>
             <span className="flex items-center gap-1 font-black text-emerald-300">
               <CheckCircle2 size={14} />
-              protected
+              {t("protected")}
             </span>
           </div>
         </div>
@@ -438,21 +444,20 @@ export function AetherLandingPage({ stats }: Props) {
           <div className="mb-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <span className="flex items-center gap-2 rounded-full border border-[#adc6ff]/20 bg-[#adc6ff]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#adc6ff]">
               <ShieldCheck size={16} />
-              Escrow guarded
+              {t("Escrow guarded")}
             </span>
             <span className="flex items-center gap-2 rounded-full border border-[#d0bcff]/20 bg-[#d0bcff]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#d0bcff]">
               <CheckCircle2 size={16} />
-              Fraud ledger
+              {t("Fraud ledger")}
             </span>
           </div>
           <h2 className="font-sans text-3xl font-black tracking-tight text-white sm:text-5xl">
-            Built around money-path integrity
+            {t("Built around money-path integrity")}
           </h2>
           <p className="mx-auto mt-5 max-w-3xl text-sm leading-8 text-[#c2c6d6] sm:text-base">
-            Campaign budgets, earned views, creator earnings, payout claims, and
-            moderation decisions stay in the production Aether backend. The
-            landing UI now points users into those flows instead of running a
-            disconnected demo.
+            {t(
+              "Campaign budgets, earned views, creator earnings, payout claims, and moderation decisions stay in the production Aether backend. The landing UI now points users into those flows instead of running a disconnected demo."
+            )}
           </p>
         </div>
       </section>
@@ -461,16 +466,17 @@ export function AetherLandingPage({ stats }: Props) {
         <div className="flex min-h-[320px] flex-col justify-between rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 backdrop-blur-xl">
           <div>
             <h2 className="font-sans text-3xl font-black tracking-tight text-white">
-              Ready to launch a campaign?
+              {t("Ready to launch a campaign?")}
             </h2>
             <p className="mt-4 text-sm leading-7 text-[#c2c6d6]">
-              Start from the real brand onboarding path, then create and fund a
-              performance campaign inside Aether.
+              {t(
+                "Start from the real brand onboarding path, then create and fund a performance campaign inside Aether."
+              )}
             </p>
           </div>
           <Link href="/auth/signup?role=business" className="mt-8">
             <Button className="h-12 w-full rounded-2xl bg-white text-sm font-black text-slate-950 hover:bg-[#adc6ff]">
-              Create brand account
+              {t("Create brand account")}
               <ArrowRight size={16} />
             </Button>
           </Link>
@@ -479,16 +485,17 @@ export function AetherLandingPage({ stats }: Props) {
         <div className="flex min-h-[320px] flex-col justify-between rounded-[2rem] border border-[#d0bcff]/20 bg-white/[0.04] p-8 backdrop-blur-xl">
           <div>
             <h2 className="font-sans text-3xl font-black tracking-tight text-white">
-              Creator or clipping editor?
+              {t("Creator or clipping editor?")}
             </h2>
             <p className="mt-4 text-sm leading-7 text-[#c2c6d6]">
-              Create a creator account, connect social profiles, discover live
-              campaigns, submit clips, and withdraw approved earnings.
+              {t(
+                "Create a creator account, connect social profiles, discover live campaigns, submit clips, and withdraw approved earnings."
+              )}
             </p>
           </div>
           <Link href="/auth/signup?role=influencer" className="mt-8">
             <Button className="h-12 w-full rounded-2xl bg-[#571bc1] text-sm font-black text-white hover:bg-[#6d28d9]">
-              Join creator network
+              {t("Join creator network")}
               <Sparkles size={16} />
             </Button>
           </Link>
@@ -496,16 +503,16 @@ export function AetherLandingPage({ stats }: Props) {
       </section>
 
       <footer className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-4 border-t border-white/10 px-5 py-10 text-xs text-[#c2c6d6] sm:px-6 md:flex-row">
-        <span>&copy; {new Date().getFullYear()} Aether. Performance creator marketing.</span>
+        <span>&copy; {new Date().getFullYear()} {t("Aether. Performance creator marketing.")}</span>
         <div className="flex gap-6">
           <Link href="/privacy" className="hover:text-white">
-            Privacy
+            {t("Privacy")}
           </Link>
           <Link href="/auth/login" className="hover:text-white">
-            Sign in
+            {t("Sign in")}
           </Link>
           <Link href="/auth/signup?role=business" className="hover:text-white">
-            Start
+            {t("Start")}
           </Link>
         </div>
       </footer>

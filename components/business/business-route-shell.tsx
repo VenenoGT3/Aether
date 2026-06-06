@@ -80,6 +80,8 @@ function initials(name: string): string {
 }
 
 function BusinessBrandMark() {
+  const { t } = useTranslation();
+
   return (
     <Link href="/business/dashboard" className="flex min-w-0 items-center gap-3">
       <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-[var(--business-primary)] to-[var(--business-secondary)] text-sm font-black text-[var(--business-bg)] shadow-[0_12px_28px_-16px_rgba(173,198,255,0.8)]">
@@ -90,7 +92,7 @@ function BusinessBrandMark() {
           Aether Business
         </span>
         <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
-          Content Rewards
+          {t("Content Rewards")}
         </span>
       </span>
     </Link>
@@ -160,7 +162,7 @@ function BusinessProfileMenu({ user }: { user: Profile | null }) {
   const router = useRouter();
   const { t } = useTranslation();
   const displayName = user?.company_name || user?.full_name || "Aether";
-  const subtitle = user?.email || user?.website || "Business workspace";
+  const subtitle = user?.email || user?.website || t("Business workspace");
 
   if (!user) {
     return (
@@ -280,7 +282,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
 
           <div className="flex shrink-0 items-center gap-2">
             <BusinessStatusPill className="hidden lg:inline-flex" tone="accent">
-              {profileLoaded ? businessName : "Loading"}
+              {profileLoaded ? businessName : t("Loading")}
             </BusinessStatusPill>
             <Link
               href="/business/campaigns/new"
@@ -297,7 +299,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
             </div>
             <Link
               href="/business/campaigns/new"
-              aria-label="New campaign"
+              aria-label={t("New campaign")}
               className="inline-flex size-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[var(--business-primary)] sm:hidden"
             >
               <Plus size={18} aria-hidden="true" />
@@ -312,7 +314,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
           <activeItem.icon size={14} className="shrink-0 text-[var(--business-primary)]" aria-hidden="true" />
           <span className="truncate font-semibold text-[var(--business-text)]">{t(activeItem.label)}</span>
         </span>
-        <span className="truncate">{profileLoaded ? businessName : "Loading workspace"}</span>
+        <span className="truncate">{profileLoaded ? businessName : t("Loading workspace")}</span>
       </div>
 
       <div className="relative z-10 pb-[calc(env(safe-area-inset-bottom)+6rem)] md:pb-0">{children}</div>

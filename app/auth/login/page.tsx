@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { LanguageToggle } from "@/components/language-toggle";
 import { signInClient, getClientProfile, supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
@@ -15,6 +16,7 @@ import {
   Loader2,
   Building2,
   UserRound,
+  ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "@/lib/translations";
 import { motion } from "framer-motion";
@@ -65,7 +67,7 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      toast.error("Please enter both email and password.");
+      toast.error(t("Please enter both email and password."));
       return;
     }
 
@@ -75,13 +77,13 @@ function LoginForm() {
       const { error } = await signInClient(email, password);
       
       if (error) {
-        toast.error(error.message || "Failed to sign in. Please verify your credentials.");
+        toast.error(error.message || t("Failed to sign in. Please verify your credentials."));
         setLoading(false);
         return;
       }
 
-      toast.success("Welcome back!", {
-        description: "Secure authentication completed.",
+      toast.success(t("Welcome back!"), {
+        description: t("Secure authentication completed."),
       });
 
       // Fetch the updated profile to determine onboarding direction
@@ -100,7 +102,7 @@ function LoginForm() {
       
       router.refresh();
     } catch {
-      toast.error("An unexpected error occurred during login.");
+      toast.error(t("An unexpected error occurred during login."));
       setLoading(false);
     }
   };
@@ -142,46 +144,80 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-4rem)] p-6 bg-secondary/10 relative">
-      {/* Background ambient lighting */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-[#007AFF]/5 via-transparent to-[#FF9500]/5 pointer-events-none" />
+    <div className="relative flex min-h-[calc(100vh-4rem)] flex-1 items-center justify-center overflow-hidden bg-[#0c1324] px-4 py-10 text-[#dce1fb] sm:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(173,198,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(173,198,255,0.045)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_at_top,rgba(77,142,255,0.20),rgba(12,19,36,0.62)_48%,transparent_76%)]" />
+      <div className="pointer-events-none absolute -left-24 top-28 h-72 w-72 rounded-full bg-[#adc6ff]/10 blur-[90px]" />
+      <div className="pointer-events-none absolute -right-20 bottom-16 h-80 w-80 rounded-full bg-[#d0bcff]/10 blur-[100px]" />
 
-      {/* Back button */}
       <Link
         href="/"
-        className="absolute top-6 left-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        className="absolute left-5 top-5 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#c2c6d6] backdrop-blur-xl transition-colors hover:text-white sm:left-6 sm:top-6"
       >
         <ArrowLeft size={14} /> {t("Back to home")}
       </Link>
+      <div className="absolute right-5 top-5 z-10 sm:right-6 sm:top-6">
+        <LanguageToggle />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={appleSpring}
-        className="w-full max-w-md p-8 rounded-3xl bg-card border border-border/30 shadow-md relative z-10 glass-panel"
+        className="relative z-10 grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] shadow-[0_30px_100px_-50px_rgba(0,0,0,0.95)] backdrop-blur-2xl md:grid-cols-[0.92fr_1.08fr]"
       >
-        {/* Logo and title */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#007AFF] to-[#34C759] shadow-sm flex items-center justify-center mb-4">
-            <Sparkles size={20} className="text-white" />
-          </span>
-          <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-            {t("Welcome Back")}
-          </h2>
-          <p className="text-muted-foreground text-sm mt-2">
-            {t("Sign in to access your Aether workspace.")}
-          </p>
+        <div className="relative hidden min-h-[560px] flex-col justify-between overflow-hidden border-r border-white/10 bg-slate-950/70 p-8 md:flex">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(173,198,255,0.16),transparent_32%),radial-gradient(circle_at_80%_70%,rgba(208,188,255,0.12),transparent_36%)]" />
+          <div className="relative">
+            <span className="mb-6 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#adc6ff] to-[#54a2ff] text-[#07101f] shadow-[0_0_32px_rgba(173,198,255,0.24)]">
+              <Sparkles size={20} />
+            </span>
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#adc6ff]/20 bg-[#adc6ff]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#adc6ff]">
+              <ShieldCheck size={13} />
+              {t("Protected workspace")}
+            </p>
+            <h1 className="max-w-sm font-sans text-4xl font-black leading-tight tracking-tight text-white">
+              {t("Access campaigns, payouts, and creator workflows.")}
+            </h1>
+          </div>
+          <div className="relative grid gap-3 text-sm text-[#c2c6d6]">
+            {[
+              t("Verified view tracking"),
+              t("Stripe-backed payouts"),
+              t("Brand and creator workspaces"),
+            ].map((item) => (
+              <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <span className="h-2 w-2 rounded-full bg-[#adc6ff]" />
+                <span className="font-semibold">{item}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="p-6 sm:p-8 md:p-10">
+          <div className="mb-8">
+            <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#adc6ff] to-[#54a2ff] text-[#07101f] md:hidden">
+              <Sparkles size={18} />
+            </span>
+            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#adc6ff]">
+              {t("Secure sign in")}
+            </p>
+            <h2 className="font-sans text-3xl font-black tracking-tight text-white">
+              {t("Welcome Back")}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[#c2c6d6]">
+              {t("Sign in to access your Aether workspace.")}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="email" className="text-xs font-semibold text-muted-foreground block">
+              <label htmlFor="email" className="block text-xs font-bold text-[#c2c6d6]">
                 {t("Email Address")}
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
                   <Mail size={16} />
                 </span>
                 <input
@@ -190,7 +226,7 @@ function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-colors"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
                   required
                 />
               </div>
@@ -198,19 +234,19 @@ function LoginForm() {
 
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label htmlFor="password" className="text-xs font-semibold text-muted-foreground block">
+                <label htmlFor="password" className="block text-xs font-bold text-[#c2c6d6]">
                   {t("Password")}
                 </label>
                 <Link
                   href="#"
-                  className="text-xs font-medium text-primary hover:underline"
+                  className="text-xs font-semibold text-[#adc6ff] hover:text-white"
                   onClick={() => toast.info(t("Password reset is coming soon."), { description: t("Please contact support to reset your password.") })}
                 >
                   {t("Forgot password?")}
                 </Link>
               </div>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
                   <KeyRound size={16} />
                 </span>
                 <input
@@ -219,7 +255,7 @@ function LoginForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-colors"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
                   required
                 />
               </div>
@@ -228,7 +264,7 @@ function LoginForm() {
 
           <Button
             type="submit"
-            className="w-full rounded-2xl py-6 font-semibold text-sm shadow-sm hover:scale-[1.01] active:scale-[0.99] transition-transform cursor-pointer gap-2 mt-2"
+            className="mt-2 h-12 w-full rounded-2xl bg-gradient-to-r from-[#adc6ff] to-[#54a2ff] text-sm font-black text-[#07101f] shadow-[0_0_28px_rgba(173,198,255,0.20)] hover:brightness-105"
             disabled={loading}
           >
             {loading ? (
@@ -246,18 +282,18 @@ function LoginForm() {
         {testLoginRoles.length > 0 && (
           <div className="mt-5 space-y-3">
             <div className="flex items-center gap-3">
-              <span className="h-px flex-1 bg-border/30" />
-              <span className="text-[10px] font-bold uppercase text-muted-foreground">
+              <span className="h-px flex-1 bg-white/10" />
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c2c6d6]">
                 {t("Testing")}
               </span>
-              <span className="h-px flex-1 bg-border/30" />
+              <span className="h-px flex-1 bg-white/10" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               {testLoginRoles.includes("business") && (
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-2xl py-5 text-xs font-semibold gap-2"
+                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-bold text-white hover:bg-white/[0.08]"
                   disabled={loading || testLoading !== null}
                   onClick={() => void handleTestLogin("business")}
                 >
@@ -273,7 +309,7 @@ function LoginForm() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-2xl py-5 text-xs font-semibold gap-2"
+                  className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-xs font-bold text-white hover:bg-white/[0.08]"
                   disabled={loading || testLoading !== null}
                   onClick={() => void handleTestLogin("influencer")}
                 >
@@ -289,11 +325,12 @@ function LoginForm() {
           </div>
         )}
 
-        <div className="mt-8 text-center text-xs text-muted-foreground">
+        <div className="mt-8 text-center text-xs text-[#c2c6d6]">
           {t("Don't have an account?")}{" "}
-          <Link href="/auth/signup" className="text-primary font-semibold hover:underline">
+          <Link href="/auth/signup" className="font-bold text-[#adc6ff] hover:text-white">
             {t("Sign up now")}
           </Link>
+        </div>
         </div>
       </motion.div>
     </div>
@@ -303,10 +340,9 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-4rem)] p-6 bg-secondary/10 relative animate-pulse">
-        <div className="absolute inset-0 bg-gradient-to-tr from-[#007AFF]/5 via-transparent to-[#FF9500]/5 pointer-events-none" />
-        <div className="w-full max-w-md p-8 rounded-3xl bg-card border border-border/30 shadow-md relative z-10 glass-panel flex flex-col items-center justify-center min-h-[350px]">
-          <Loader2 className="animate-spin text-primary" size={32} />
+      <div className="relative flex min-h-[calc(100vh-4rem)] flex-1 items-center justify-center bg-[#0c1324] p-6">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 shadow-2xl backdrop-blur-xl flex min-h-[350px] flex-col items-center justify-center">
+          <Loader2 className="animate-spin text-[#adc6ff]" size={32} />
         </div>
       </div>
     }>
