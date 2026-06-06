@@ -12,6 +12,7 @@ import {
   Megaphone,
   Plus,
   Settings2,
+  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -51,6 +52,12 @@ const businessNavItems = [
     href: "/business/moderation",
     icon: ClipboardCheck,
     match: (pathname: string) => pathname === "/business/moderation",
+  },
+  {
+    label: "Treasury",
+    href: "/business/payments",
+    icon: Wallet,
+    match: (pathname: string) => pathname === "/business/payments",
   },
   {
     label: "Setup",
