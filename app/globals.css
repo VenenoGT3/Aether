@@ -283,3 +283,96 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Creator frontend design system: scoped extraction from VenenoGT3/Fronted-Aether.
+   These classes are inert until a creator route opts into the .creator-portal scope. */
+.creator-portal {
+  --creator-bg: #070d1e;
+  --creator-surface: #0f172a;
+  --creator-surface-high: #1e293b;
+  --creator-primary: #4d8eff;
+  --creator-violet: #9f8dfa;
+  --creator-cyan: #22d3ee;
+  --creator-text: #f8fafc;
+  --creator-muted: rgba(248, 250, 252, 0.6);
+  --creator-success: #34d399;
+  --creator-warning: #f59e0b;
+  --creator-danger: #f87171;
+  --creator-shadow: 0 18px 60px -28px rgba(0, 0, 0, 0.85);
+  color: var(--creator-text);
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.creator-portal .creator-display {
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.creator-portal .creator-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.creator-portal .creator-glass {
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), var(--creator-shadow);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.creator-portal .creator-glass-high {
+  background: rgba(30, 41, 59, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1), var(--creator-shadow);
+  -webkit-backdrop-filter: blur(32px);
+  backdrop-filter: blur(32px);
+}
+
+.creator-portal .creator-gradient-accent {
+  background: linear-gradient(135deg, var(--creator-primary) 0%, var(--creator-violet) 100%);
+}
+
+.creator-portal .creator-gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.creator-portal .creator-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--creator-text);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.creator-portal .creator-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(77, 142, 255, 0.58);
+  box-shadow: 0 0 0 3px rgba(77, 142, 255, 0.16);
+  outline: none;
+}
+
+.creator-portal .creator-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.creator-portal .creator-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.creator-portal .creator-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+body:has(.creator-route-shell) > main {
+  padding-bottom: 0 !important;
+}

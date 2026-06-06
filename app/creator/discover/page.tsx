@@ -2,38 +2,46 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { 
-  Search, 
-  SlidersHorizontal, 
-  Sparkles, 
-  DollarSign, 
-  Zap, 
-  Clock, 
-  ArrowRight, 
-  User, 
-  Check, 
-  Megaphone,
-  FileText,
-  Scissors,
-  Eye
-} from "lucide-react";
-import { CAMPAIGN_CATEGORY_LABELS } from "@/lib/campaign-category";
-import { Button } from "@/components/ui/button";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription,
-  DialogFooter
-} from "@/components/ui/dialog";
-import { getClientProfile, supabase } from "@/lib/supabase/client";
-import { apiPost, apiGet } from "@/lib/api/client";
-import { useJoinedCampaigns } from "@/lib/supabase/clips";
-import { Profile } from "@/types";
-import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import {
+  Check,
+  Clock,
+  DollarSign,
+  Eye,
+  FileText,
+  Megaphone,
+  Scissors,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  User,
+  Zap,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  CreatorActionButton,
+  CreatorEmptyState,
+  CreatorGlassCard,
+  CreatorPageShell,
+  CreatorSectionHeader,
+  CreatorStatusPill,
+} from "@/components/creator/creator-ui";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { CAMPAIGN_CATEGORY_LABELS } from "@/lib/campaign-category";
+import { apiGet, apiPost } from "@/lib/api/client";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
+import { useJoinedCampaigns } from "@/lib/supabase/clips";
 import { useTranslation } from "@/lib/translations";
+import type { Profile } from "@/types";
 
 interface Campaign {
   id: string;
@@ -54,7 +62,6 @@ interface Campaign {
   cpm_rate?: number | null;
 }
 
-/** Raw campaign row as returned by the /api/campaigns/search endpoint. */
 interface RawSearchCampaign {
   id: string;
   title: string;
@@ -76,29 +83,38 @@ type CreatorProfileForAi = Profile & {
   followers?: number;
 };
 
+function daysLeft(timeline?: { end_date: string }) {
+  if (!timeline?.end_date) return 30;
+  const diff = new Date(timeline.end_date).getTime() - Date.now();
+  return Math.max(0, Math.ceil(diff / 86_400_000));
+}
+
+function campaignLogo(campaign: Campaign) {
+  const niche = campaign.target_niches[0]?.toLowerCase() || "";
+  if (niche.includes("fashion")) return "FW";
+  if (niche.includes("food")) return "FD";
+  if (niche.includes("beauty")) return "BT";
+  if (niche.includes("fitness")) return "FT";
+  if (niche.includes("travel")) return "TR";
+  return "AE";
+}
+
 export default function DiscoverPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<Profile | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [appliedCampaignIds, setAppliedCampaignIds] = useState<Set<string>>(new Set());
-  
-  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNiche, setSelectedNiche] = useState<string>("All");
   const [selectedBudget, setSelectedBudget] = useState<string>("All");
   const [selectedSpeed, setSelectedSpeed] = useState<string>("All");
   const [selectedType, setSelectedType] = useState<string>("All");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-
-  // Dialog State
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const { joinedIds, join } = useJoinedCampaigns();
   const [joiningId, setJoiningId] = useState<string | null>(null);
-  // Performance join modal (creator sets their CPM before joining).
   const [joinModalCampaign, setJoinModalCampaign] = useState<Campaign | null>(null);
-  
-  // Application Form State
   const [proposedPayout, setProposedPayout] = useState<number>(0);
   const [socialHandle, setSocialHandle] = useState("");
   const [pitchText, setPitchText] = useState("");
@@ -112,94 +128,77 @@ export default function DiscoverPage() {
       setLoading(true);
       const profile = await getClientProfile();
       setUser(profile);
-      
-      if (profile && profile.social_handle) {
+
+      if (profile?.social_handle) {
         setSocialHandle(profile.social_handle);
       }
 
-      let rawCamps: Campaign[] = [];
+      const searchData = await apiGet<{ campaigns: RawSearchCampaign[] }>(
+        "/api/campaigns/search?page=1&limit=50"
+      );
+      const rawCamps = (searchData.campaigns || []).map((c) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description || "",
+        businessName: "Brand",
+        budget_total: Number(c.budget_total),
+        target_niches: c.target_niches || [],
+        deliverables: c.deliverables || [],
+        timeline: c.timeline || { start_date: "", end_date: "" },
+        payout_speed: c.campaign_type === "performance" ? "Pay per view" : "Instant Escrow",
+        days_left: daysLeft(c.timeline),
+        image_url: c.target_niches.includes("Tech")
+          ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80"
+          : c.target_niches.includes("Fashion")
+            ? "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
+            : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=900&q=80",
+        campaign_type: c.campaign_type,
+        campaign_category: c.campaign_category,
+        cpm_rate:
+          c.brand_cpm_rate != null
+            ? Number(c.brand_cpm_rate)
+            : c.cpm_rate != null
+              ? Number(c.cpm_rate)
+              : null,
+      })) satisfies Campaign[];
 
-      {
-        const searchData = await apiGet<{
-          campaigns: RawSearchCampaign[];
-        }>("/api/campaigns/search?page=1&limit=50");
-
-        rawCamps = (searchData.campaigns || []).map((c) => ({
-          id: c.id,
-          title: c.title,
-          description: c.description || "",
-          businessName: "Brand",
-          budget_total: Number(c.budget_total),
-          target_niches: c.target_niches || [],
-          deliverables: c.deliverables || [],
-          timeline: c.timeline || { start_date: "", end_date: "" },
-          // Performance campaigns pay per view; fixed campaigns use escrow.
-          payout_speed:
-            c.campaign_type === "performance" ? "Pay per view (CPM)" : "Instant Escrow",
-          days_left: 30,
-          image_url: c.target_niches.includes("Tech") 
-            ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80" 
-            : c.target_niches.includes("Fashion")
-            ? "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80"
-            : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80",
-          // Drives the Join (performance) vs Apply (fixed) branch on the card.
-          campaign_type: c.campaign_type,
-          campaign_category: c.campaign_category,
-          cpm_rate:
-            c.brand_cpm_rate != null
-              ? Number(c.brand_cpm_rate)
-              : c.cpm_rate != null
-                ? Number(c.cpm_rate)
-                : null,
-        }));
-
-        if (profile) {
-          const { data: parts } = await supabase
-            .from("participations")
-            .select("campaign_id")
-            .eq("influencer_id", profile.user_id);
-          
-          const appliedIds = new Set<string>((parts || []).map(p => p.campaign_id));
-          setAppliedCampaignIds(appliedIds);
-        }
-      }
-
-      // Rank and match raw campaigns using only real profile fields.
       if (profile) {
+        const { data: parts } = await supabase
+          .from("participations")
+          .select("campaign_id")
+          .eq("influencer_id", profile.user_id);
+        setAppliedCampaignIds(new Set<string>((parts || []).map((p) => p.campaign_id)));
+
         const profileForAi = profile as CreatorProfileForAi;
-        const creatorNiches =
-          profileForAi.niches?.length
-            ? profileForAi.niches
-            : profileForAi.niche
-              ? [profileForAi.niche]
-              : [];
+        const creatorNiches = profileForAi.niches?.length
+          ? profileForAi.niches
+          : profileForAi.niche
+            ? [profileForAi.niche]
+            : [];
+
         try {
-          const matchData = await apiPost<{
-            success: boolean;
-            campaigns?: typeof rawCamps;
-          }>("/api/ai/discover", {
-            creator: {
-              name: profile.full_name || "Creator",
-              bio: profile.bio || "",
-              niches: creatorNiches,
-              followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
-              engagement: Number(profile.engagement_rate) || 0,
-            },
-            campaigns: rawCamps,
-          });
-          if (matchData.success && matchData.campaigns) {
-            setCampaigns(matchData.campaigns);
-          } else {
-            setCampaigns(rawCamps);
-          }
+          const matchData = await apiPost<{ success: boolean; campaigns?: Campaign[] }>(
+            "/api/ai/discover",
+            {
+              creator: {
+                name: profile.full_name || "Creator",
+                bio: profile.bio || "",
+                niches: creatorNiches,
+                followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
+                engagement: Number(profile.engagement_rate) || 0,
+              },
+              campaigns: rawCamps,
+            }
+          );
+          setCampaigns(matchData.success && matchData.campaigns ? matchData.campaigns : rawCamps);
         } catch {
           setCampaigns(rawCamps);
         }
       } else {
         setCampaigns(rawCamps);
       }
-    } catch (err) {
-      console.error("Error loading discover data:", err);
+    } catch (error) {
+      console.error("Error loading discover data:", error);
       toast.error(t("Failed to load campaigns."));
     } finally {
       setLoading(false);
@@ -209,8 +208,6 @@ export default function DiscoverPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
-
-    // Listen to explicit campaign/profile changes.
     const handleSync = () => {
       loadData();
     };
@@ -220,42 +217,39 @@ export default function DiscoverPage() {
       window.removeEventListener("aether-campaigns-update", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- page-level data bootstrap
   }, []);
 
-  // CONFETTI CELEBRATION EFFECT
   const triggerConfetti = () => {
     confetti({
       particleCount: 140,
       spread: 80,
       origin: { y: 0.6 },
-      colors: ["#007AFF", "#34C759", "#FF9500", "#5856D6"]
+      colors: ["#4d8eff", "#34d399", "#f59e0b", "#9f8dfa"],
     });
   };
 
-  // ONE-CLICK "EXPRESS INTEREST"
   const handleExpressInterest = async (campaign: Campaign) => {
     toast.loading(t("Sending quick application..."), { id: "express-interest" });
     try {
-      const proposed = campaign.budget_total;
-
       await apiPost(`/api/campaigns/${campaign.id}/apply`, {
-        proposed_payout: proposed,
+        proposed_payout: campaign.budget_total,
       });
 
-      setAppliedCampaignIds(prev => new Set([...prev, campaign.id]));
+      setAppliedCampaignIds((prev) => new Set([...prev, campaign.id]));
       window.dispatchEvent(new Event("aether-campaigns-update"));
       toast.success(t("Interest expressed!"), {
         id: "express-interest",
-        description: t("Your stats and rate card have been sent to the brand.")
+        description: t("Your stats and rate card have been sent to the brand."),
       });
       triggerConfetti();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("Failed to submit quick application"), { id: "express-interest" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Failed to submit quick application"), {
+        id: "express-interest",
+      });
     }
   };
 
-  // PERFORMANCE: open the join modal so the creator can set their CPM first.
   const confirmJoin = async () => {
     if (!joinModalCampaign) return;
     const campaign = joinModalCampaign;
@@ -276,7 +270,6 @@ export default function DiscoverPage() {
     }
   };
 
-  // OPEN DETAILED APPLY MODAL (or the open-join modal for performance campaigns)
   const openApplyModal = (campaign: Campaign) => {
     if (campaign.campaign_type === "performance") {
       setJoinModalCampaign(campaign);
@@ -289,48 +282,44 @@ export default function DiscoverPage() {
     setIsApplyModalOpen(true);
   };
 
-  // CALL GROK AI PITCH WRITER
   const handleAIGeneratePitch = async () => {
     if (!selectedCampaign) return;
     if (!user) {
       toast.error(t("Create a creator profile before generating a pitch."));
       return;
     }
+
     setIsAILoading(true);
-    
     toast.loading(t("Aether AI is writing your pitch..."), { id: "ai-pitch" });
+
     try {
       const profileForAi = user as CreatorProfileForAi;
-      const creatorNiches =
-        profileForAi.niches?.length
-          ? profileForAi.niches
-          : profileForAi.niche
-            ? [profileForAi.niche]
-            : [];
-      const data = await apiPost<{ pitch?: string; generatedBy?: string }>(
-        "/api/ai/pitch",
-        {
-          campaign: {
-            title: selectedCampaign.title,
-            description: selectedCampaign.description,
-            niches: selectedCampaign.target_niches,
-            budget: selectedCampaign.budget_total,
-            brandName: selectedCampaign.businessName,
-          },
-          creator: {
-            name: user.full_name || "Creator",
-            bio: user.bio || "",
-            niches: creatorNiches,
-            followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
-            engagement: Number(user.engagement_rate) || 0,
-          },
-          tone: pitchTone,
-        }
-      );
+      const creatorNiches = profileForAi.niches?.length
+        ? profileForAi.niches
+        : profileForAi.niche
+          ? [profileForAi.niche]
+          : [];
+      const data = await apiPost<{ pitch?: string; generatedBy?: string }>("/api/ai/pitch", {
+        campaign: {
+          title: selectedCampaign.title,
+          description: selectedCampaign.description,
+          niches: selectedCampaign.target_niches,
+          budget: selectedCampaign.budget_total,
+          brandName: selectedCampaign.businessName,
+        },
+        creator: {
+          name: user.full_name || "Creator",
+          bio: user.bio || "",
+          niches: creatorNiches,
+          followers: Number(profileForAi.follower_count ?? profileForAi.followers ?? 0),
+          engagement: Number(user.engagement_rate) || 0,
+        },
+        tone: pitchTone,
+      });
       setPitchText(data.pitch || "");
-      toast.success(t("AI pitch ready!"), { 
+      toast.success(t("AI pitch ready!"), {
         id: "ai-pitch",
-        description: data.generatedBy === "grok" ? t("Written with Grok 4.3.") : t("Loaded matching template.")
+        description: data.generatedBy === "grok" ? t("Written with Grok 4.3.") : t("Loaded matching template."),
       });
     } catch {
       toast.error(t("AI Assistant is offline. Please write manually."), { id: "ai-pitch" });
@@ -339,9 +328,8 @@ export default function DiscoverPage() {
     }
   };
 
-  // SUBMIT FORM IN APPLY MODAL
-  const handleApplySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleApplySubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!selectedCampaign) return;
     setIsSubmitting(true);
 
@@ -352,635 +340,420 @@ export default function DiscoverPage() {
         pitch: pitchText.trim() || undefined,
       });
 
-      setAppliedCampaignIds(prev => new Set([...prev, selectedCampaign.id]));
+      setAppliedCampaignIds((prev) => new Set([...prev, selectedCampaign.id]));
       setIsApplyModalOpen(false);
       window.dispatchEvent(new Event("aether-campaigns-update"));
-      
       toast.success(t("Application submitted successfully!"), {
         id: "apply",
-        description: t("The brand has been notified and will review your pitch.")
+        description: t("The brand has been notified and will review your pitch."),
       });
       triggerConfetti();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("Failed to submit application"), { id: "apply" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Failed to submit application"), { id: "apply" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // CURATED AI MATCH RECOMMENDATIONS ("FOR YOU")
-  const recommendedCampaigns = campaigns
-    .filter(c => !appliedCampaignIds.has(c.id))
-    .slice(0, 2);
+  const allNiches = ["All", "Tech", "Fashion", "Food", "Fitness", "Travel", "Beauty", "Minimalism"];
 
-  // FILTERED CAMPAIGNS FEED
-  const filteredCampaigns = campaigns.filter(c => {
-    // 1. Search Query
+  const filteredCampaigns = campaigns.filter((campaign) => {
     const query = searchQuery.toLowerCase().trim();
     if (query) {
-      const matchTitle = c.title.toLowerCase().includes(query);
-      const matchBrand = c.businessName.toLowerCase().includes(query);
-      const matchDesc = c.description.toLowerCase().includes(query);
-      if (!matchTitle && !matchBrand && !matchDesc) return false;
+      const matches =
+        campaign.title.toLowerCase().includes(query) ||
+        campaign.businessName.toLowerCase().includes(query) ||
+        campaign.description.toLowerCase().includes(query);
+      if (!matches) return false;
     }
-
-    // 2. Niche Filter
     if (selectedNiche !== "All") {
-      const hasNiche = c.target_niches.some(n => n.toLowerCase() === selectedNiche.toLowerCase());
+      const hasNiche = campaign.target_niches.some((niche) => niche.toLowerCase() === selectedNiche.toLowerCase());
       if (!hasNiche) return false;
     }
-
-    // 3. Budget Filter
     if (selectedBudget !== "All") {
-      const budget = c.budget_total;
+      const budget = campaign.budget_total;
       if (selectedBudget === "low" && budget >= 4000) return false;
       if (selectedBudget === "mid" && (budget < 4000 || budget >= 8000)) return false;
       if (selectedBudget === "high" && budget < 8000) return false;
     }
-
-    // 4. Deliverable / Content Type
     if (selectedType !== "All") {
-      const hasType = c.deliverables.some(d => d.type.toLowerCase().includes(selectedType.toLowerCase()));
+      const hasType = campaign.deliverables.some((d) => d.type.toLowerCase().includes(selectedType.toLowerCase()));
       if (!hasType) return false;
     }
-
-    // 5. Payout Speed
     if (selectedSpeed !== "All") {
-      if (selectedSpeed === "escrow" && c.payout_speed !== "Instant Escrow") return false;
-      if (selectedSpeed === "standard" && c.payout_speed === "Instant Escrow") return false;
+      if (selectedSpeed === "escrow" && campaign.payout_speed !== "Instant Escrow") return false;
+      if (selectedSpeed === "standard" && campaign.payout_speed === "Instant Escrow") return false;
     }
-
-    // 6. Content Type (UGC vs Clipping) — applies to performance campaigns; a
-    // specific category excludes fixed campaigns (which have no category).
-    if (selectedCategory !== "All" && c.campaign_category !== selectedCategory) {
-      return false;
-    }
-
+    if (selectedCategory !== "All" && campaign.campaign_category !== selectedCategory) return false;
     return true;
   });
 
-  const allNiches = ["All", "Tech", "Fashion", "Food", "Fitness", "Travel", "Beauty", "Minimalism"];
+  const recommendedCampaigns = campaigns.filter((campaign) => !appliedCampaignIds.has(campaign.id)).slice(0, 2);
+  const filtersActive =
+    selectedNiche !== "All" ||
+    selectedBudget !== "All" ||
+    selectedSpeed !== "All" ||
+    selectedType !== "All" ||
+    selectedCategory !== "All" ||
+    !!searchQuery;
+
+  const resetFilters = () => {
+    setSelectedNiche("All");
+    setSelectedBudget("All");
+    setSelectedSpeed("All");
+    setSelectedType("All");
+    setSelectedCategory("All");
+    setSearchQuery("");
+  };
 
   return (
-    <div className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 md:py-16">
-      {/* Page Header (App Store Today tab style) */}
-      <div className="mb-10">
-        <span className="text-xs font-bold text-[#007AFF] uppercase tracking-wider block mb-1.5">
-          {new Date().toLocaleDateString(t("en-US"), { weekday: 'long', month: 'long', day: 'numeric' })}
-        </span>
-        <h1 className="text-4xl font-extrabold tracking-tight">{t("Today")}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t("Discover live campaigns and secure escrow collaborations.")}</p>
-      </div>
+    <CreatorPageShell>
+      <CreatorSectionHeader
+        eyebrow={new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })}
+        title={t("Discover")}
+        description={t("Browse active brand pools, compare CPM terms, and apply with a real Aether creator profile.")}
+        action={
+          <CreatorActionButton href="/creator/clips" variant="secondary">
+            <Zap size={15} className="text-[var(--creator-success)]" />
+            {t("Submit Clips")}
+          </CreatorActionButton>
+        }
+      />
 
       {loading ? (
-        <div className="space-y-12">
-          {/* Curated Carousel Skeleton */}
-          <div className="mb-14">
-            <div className="flex justify-between items-center mb-5">
-              <div className="h-6 w-32 bg-secondary/80 rounded apple-skeleton" />
-              <div className="h-4 w-40 bg-secondary/80 rounded apple-skeleton" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {[1, 2].map((i) => (
-                <div key={i} className="rounded-3xl border border-border/30 bg-card p-8 h-[280px] flex flex-col justify-between shadow-sm">
-                  <div className="flex justify-between items-center">
-                    <div className="h-6 w-20 bg-secondary/80 rounded-full apple-skeleton" />
-                    <div className="h-6 w-24 bg-secondary/80 rounded-full apple-skeleton" />
-                  </div>
-                  <div className="space-y-3 pt-4 mt-auto">
-                    <div className="h-3.5 w-24 bg-secondary/80 rounded apple-skeleton" />
-                    <div className="h-6 w-[80%] bg-secondary/80 rounded apple-skeleton" />
-                    <div className="h-4 w-full bg-secondary/80 rounded apple-skeleton" />
-                    <div className="flex justify-between items-center border-t border-border/10 pt-3.5 mt-3.5">
-                      <div className="flex gap-4">
-                        <div className="h-3 w-12 bg-secondary/80 rounded apple-skeleton" />
-                        <div className="h-3 w-16 bg-secondary/80 rounded apple-skeleton" />
-                      </div>
-                      <div className="w-10 h-10 rounded-2xl bg-secondary/80 apple-skeleton" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Explore Feed list Skeleton */}
-          <div className="space-y-6">
-            <div className="flex justify-between items-center border-b border-border/10 pb-4">
-              <div className="h-6 w-32 bg-secondary/80 rounded apple-skeleton" />
-              <div className="h-4 w-28 bg-secondary/80 rounded apple-skeleton" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[1, 2, 3].map((j) => (
-                <div key={j} className="rounded-3xl border border-border/30 bg-card overflow-hidden flex flex-col justify-between shadow-sm">
-                  <div className="h-36 w-full bg-secondary/40 border-b border-border/15 relative">
-                    <div className="h-full w-full bg-secondary/80 apple-skeleton" />
-                  </div>
-                  <div className="p-6 space-y-4 flex-1">
-                    <div className="h-3.5 w-[90%] bg-secondary/85 rounded apple-skeleton" />
-                    <div className="space-y-2">
-                      <div className="h-3 w-full bg-secondary/85 rounded apple-skeleton" />
-                      <div className="h-3 w-[70%] bg-secondary/85 rounded apple-skeleton" />
-                    </div>
-                    <div className="p-3 bg-secondary/25 border border-border/10 rounded-2xl space-y-2">
-                      <div className="h-3 w-16 bg-secondary/85 rounded apple-skeleton" />
-                      <div className="h-3.5 w-32 bg-secondary/85 rounded apple-skeleton" />
-                    </div>
-                  </div>
-                  <div className="px-6 pb-6 pt-4 border-t border-border/10 flex items-center justify-between gap-3 bg-secondary/5">
-                    <div className="space-y-1">
-                      <div className="h-2 w-12 bg-secondary/85 rounded apple-skeleton" />
-                      <div className="h-4 w-20 bg-secondary/85 rounded apple-skeleton" />
-                    </div>
-                    <div className="h-9 w-24 bg-secondary/80 rounded-full apple-skeleton" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((item) => (
+            <CreatorGlassCard key={item} className="h-72 animate-pulse" />
+          ))}
         </div>
       ) : (
         <>
-          {/* Recommended "For You" Section (Apple Card Carousel) */}
-          {recommendedCampaigns.length > 0 && (
-            <div className="mb-14">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-xl font-extrabold tracking-tight flex items-center gap-1.5">
-                  <Sparkles size={18} className="text-[#FF9500]" /> {t("For You")}
+          {recommendedCampaigns.length > 0 ? (
+            <section className="mt-8">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <Sparkles size={18} className="text-[var(--creator-warning)]" />
+                  {t("For You")}
                 </h2>
-                <span className="text-xs font-semibold text-muted-foreground">{t("Based on your media kit")}</span>
+                <span className="text-xs font-semibold text-white/45">{t("Based on your media kit")}</span>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {recommendedCampaigns.slice(0, 2).map((camp) => (
-                  <motion.div
-                    key={camp.id}
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    whileHover={{ y: -6 }}
-                    transition={{ type: "spring", stiffness: 280, damping: 25 }}
-                    className="apple-card group relative min-h-[280px] flex flex-col justify-between overflow-hidden cursor-pointer"
-                    onClick={() => openApplyModal(camp)}
+              <div className="grid gap-4 md:grid-cols-2">
+                {recommendedCampaigns.map((campaign) => (
+                  <button
+                    key={campaign.id}
+                    onClick={() => openApplyModal(campaign)}
+                    className="creator-glass group relative min-h-64 overflow-hidden rounded-2xl text-left transition-all hover:-translate-y-1 hover:border-white/15"
                   >
-                    {/* Background image & gradient overlay */}
-                    <div 
-                      className="absolute inset-0 bg-cover bg-center z-0 transition-transform duration-700 group-hover:scale-105"
-                      style={{ backgroundImage: `url(${camp.image_url})` }}
+                    <div
+                      className="absolute inset-0 bg-cover bg-center opacity-55 transition-transform duration-700 group-hover:scale-105"
+                      style={{ backgroundImage: `url(${campaign.image_url})` }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
-
-                    {/* Match Badge */}
-                    <div className="z-20 p-6 flex justify-between items-start">
-                      <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-[10px] font-bold text-white uppercase tracking-wider border border-white/10 flex items-center gap-1">
-                        <Sparkles size={10} className="text-[#FF9500] fill-[#FF9500]" /> {camp.matchScore || 90}% {t("Match")}
-                      </span>
-                      <span className="px-2.5 py-1 bg-[#34C759] rounded-full text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-0.5">
-                        <Zap size={9} /> {t("Instant Escrow")}
-                      </span>
-                    </div>
-
-                    {/* Details Footer */}
-                    <div className="z-20 p-6 text-white space-y-3 mt-auto">
+                    <div className="absolute inset-0 bg-gradient-to-t from-[rgba(7,13,30,0.96)] via-[rgba(7,13,30,0.68)] to-[rgba(7,13,30,0.10)]" />
+                    <div className="relative z-10 flex h-full min-h-64 flex-col justify-between p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <CreatorStatusPill tone="warning">
+                          <Sparkles size={10} />
+                          {campaign.matchScore || 90}% {t("Match")}
+                        </CreatorStatusPill>
+                        <CreatorStatusPill tone={campaign.campaign_type === "performance" ? "success" : "accent"}>
+                          {campaign.campaign_type === "performance" ? t("CPM") : t("Escrow")}
+                        </CreatorStatusPill>
+                      </div>
                       <div>
-                        <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest block mb-1">
-                          {camp.businessName}
-                        </span>
-                        <h3 className="text-2xl font-bold tracking-tight leading-snug group-hover:text-[#007AFF] transition-colors">
-                          {camp.title}
+                        <p className="creator-label text-white/45">{campaign.businessName}</p>
+                        <h3 className="mt-1 max-w-xl text-2xl font-semibold leading-tight text-white">
+                          {campaign.title}
                         </h3>
-                      </div>
-
-                      <p className="text-xs text-white/80 line-clamp-2 leading-relaxed font-medium">
-                        {camp.description}
-                      </p>
-
-                      {camp.matchingReason && (
-                        <div className="text-[11px] text-[#FF9500] font-semibold bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#FF9500]/25 flex items-center gap-1.5 w-fit">
-                          <Sparkles size={11} className="fill-[#FF9500] animate-pulse" /> {camp.matchingReason}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                        <div className="flex gap-4">
-                          <div>
-                            <span className="text-[9px] uppercase text-white/50 font-semibold block">{t("Budget")}</span>
-                            <span className="text-sm font-bold flex items-center mt-0.5"><DollarSign size={13} />{camp.budget_total.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] uppercase text-white/50 font-semibold block">{t("Deliverables")}</span>
-                            <span className="text-sm font-bold block mt-0.5">
-                              {camp.deliverables.length} {camp.deliverables.length > 1 ? t("formats") : t("format")}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white backdrop-blur-sm group-hover:bg-[#007AFF] group-hover:text-white transition-all">
-                          <ArrowRight size={16} />
-                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/70">{campaign.description}</p>
                       </div>
                     </div>
-                  </motion.div>
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            </section>
+          ) : null}
 
-          {/* Main Campaign Search and Feed Section */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between border-b border-border/10 pb-4">
-              <h2 className="text-xl font-extrabold tracking-tight">{t("Explore Feed")}</h2>
-              <span className="text-xs text-muted-foreground font-semibold">
+          <section className="mt-8 space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-4">
+              <h2 className="text-lg font-semibold text-white">{t("Explore Feed")}</h2>
+              <span className="text-xs font-semibold text-white/45">
                 {t("Showing {count} campaigns").replace("{count}", filteredCampaigns.length.toString())}
               </span>
             </div>
 
-            {/* Search and Filters */}
-            <div className="flex flex-col gap-4">
-              {/* Search bar */}
-              <div className="relative w-full">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-                <input
-                  type="text"
-                  placeholder={t("Search campaigns, deliverables, brands...")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-secondary/30 border border-border/20 text-xs focus:outline-none focus:border-primary/45 transition-all"
-                />
-              </div>
+            <CreatorGlassCard>
+              <div className="flex flex-col gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/35" size={16} />
+                  <input
+                    type="text"
+                    placeholder={t("Search brands, niches, or deliverables...")}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    className="creator-input w-full rounded-xl py-3 pl-10 pr-4 text-sm placeholder:text-white/30"
+                  />
+                </div>
 
-              {/* Filter Pills */}
-              <div className="flex flex-wrap gap-2 items-center">
-                <SlidersHorizontal size={14} className="text-muted-foreground mr-1 hidden sm:block" />
-                
-                {/* Niche scroll wrapper */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 creator-scrollbar">
+                  <SlidersHorizontal size={14} className="hidden shrink-0 text-white/35 sm:block" />
                   {allNiches.map((niche) => (
                     <button
                       key={niche}
                       onClick={() => setSelectedNiche(niche)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-semibold select-none cursor-pointer transition-all border ${
+                      className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${
                         selectedNiche === niche
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : "bg-secondary/40 text-muted-foreground border-border/10 hover:text-foreground hover:bg-secondary"
+                          ? "border-[rgba(77,142,255,0.4)] bg-[var(--creator-primary)] text-white"
+                          : "border-white/10 bg-white/[0.05] text-white/55 hover:text-white"
                       }`}
                     >
                       {t(niche)}
                     </button>
                   ))}
                 </div>
-              </div>
 
-              {/* Secondary Filters Dropdowns */}
-              <div className="flex flex-wrap gap-2">
-                {/* Budget Filter */}
-                <select
-                  value={selectedBudget}
-                  onChange={(e) => setSelectedBudget(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-2xl bg-secondary/30 border border-border/20 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
-                >
-                  <option value="All">{t("All Budgets")}</option>
-                  <option value="low">{t("Under $4,000")}</option>
-                  <option value="mid">{t("$4,000 - $8,000")}</option>
-                  <option value="high">{t("$8,000+")}</option>
-                </select>
-
-                {/* Payout Speed Filter */}
-                <select
-                  value={selectedSpeed}
-                  onChange={(e) => setSelectedSpeed(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-2xl bg-secondary/30 border border-border/20 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
-                >
-                  <option value="All">All Payout Speed</option>
-                  <option value="escrow">Instant Escrow (Stripe Verified)</option>
-                  <option value="standard">Standard Payout</option>
-                </select>
-
-                {/* Content Type Filter (UGC vs Clipping) */}
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-2xl bg-secondary/30 border border-border/20 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
-                >
-                  <option value="All">{t("All Content Types")}</option>
-                  <option value="clipping">{t("Clipping")}</option>
-                  <option value="ugc">{t("UGC")}</option>
-                </select>
-
-                {/* Deliverable Type Filter */}
-                <select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-2xl bg-secondary/30 border border-border/20 text-[11px] font-semibold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
-                >
-                  <option value="All">{t("All Deliverables")}</option>
-                  <option value="reel">{t("Instagram Reel")}</option>
-                  <option value="tiktok">{t("TikTok Video")}</option>
-                  <option value="youtube">{t("YouTube Sponsor")}</option>
-                  <option value="story">{t("Instagram Story")}</option>
-                </select>
-
-                {/* Clear Filters Button */}
-                {(selectedNiche !== "All" || selectedBudget !== "All" || selectedSpeed !== "All" || selectedType !== "All" || selectedCategory !== "All" || searchQuery) && (
-                  <button
-                    onClick={() => {
-                      setSelectedNiche("All");
-                      setSelectedBudget("All");
-                      setSelectedSpeed("All");
-                      setSelectedType("All");
-                      setSelectedCategory("All");
-                      setSearchQuery("");
-                    }}
-                    className="px-3 py-2 text-[10px] font-bold text-destructive hover:bg-destructive/10 rounded-xl flex items-center gap-1 cursor-pointer transition-all"
-                  >
-                    {t("Clear Filters")}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Campaigns Feed List */}
-            {filteredCampaigns.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-16 rounded-3xl bg-card border border-dashed border-border/60 text-center">
-                <Megaphone size={36} className="text-muted-foreground/35 mb-4 animate-pulse" />
-                <h3 className="text-lg font-bold">{t("No campaigns match filters")}</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  {t("Try adjusting your filters or search keywords to explore more live campaigns.")}
-                </p>
-              </div>
-            ) : (
-              <motion.div 
-                layout
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-4"
-              >
-                {filteredCampaigns.map((camp) => {
-                  const isApplied = appliedCampaignIds.has(camp.id);
-                  
-                  return (
-                    <motion.div
-                      key={camp.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      whileHover={{ y: -4 }}
-                      className="apple-card group flex flex-col justify-between"
+                <div className="flex flex-wrap gap-2">
+                  <select value={selectedBudget} onChange={(event) => setSelectedBudget(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
+                    <option value="All">{t("All Budgets")}</option>
+                    <option value="low">{t("Under $4,000")}</option>
+                    <option value="mid">{t("$4,000 - $8,000")}</option>
+                    <option value="high">{t("$8,000+")}</option>
+                  </select>
+                  <select value={selectedSpeed} onChange={(event) => setSelectedSpeed(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
+                    <option value="All">{t("All Payout Speed")}</option>
+                    <option value="escrow">{t("Instant Escrow")}</option>
+                    <option value="standard">{t("Standard Payout")}</option>
+                  </select>
+                  <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
+                    <option value="All">{t("All Content Types")}</option>
+                    <option value="clipping">{t("Clipping")}</option>
+                    <option value="ugc">{t("UGC")}</option>
+                  </select>
+                  <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
+                    <option value="All">{t("All Deliverables")}</option>
+                    <option value="reel">{t("Instagram Reel")}</option>
+                    <option value="tiktok">{t("TikTok Video")}</option>
+                    <option value="youtube">{t("YouTube Sponsor")}</option>
+                    <option value="story">{t("Instagram Story")}</option>
+                  </select>
+                  {filtersActive ? (
+                    <button
+                      onClick={resetFilters}
+                      className="rounded-xl border border-[rgba(248,113,113,0.22)] bg-[rgba(248,113,113,0.08)] px-3 py-2 text-xs font-semibold text-[var(--creator-danger)]"
                     >
-                      <div>
-                        {/* Header Image */}
-                        <div className="w-full h-36 relative overflow-hidden">
-                          <div 
-                            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-                            style={{ backgroundImage: `url(${camp.image_url})` }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/20" />
-                          
-                          <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                            {camp.target_niches.map((n) => (
-                              <span key={n} className="px-2 py-0.5 bg-black/40 backdrop-blur-sm border border-white/10 rounded-full text-[9px] font-bold text-white uppercase tracking-wider">
-                                {t(n)}
-                              </span>
-                            ))}
-                          </div>
+                      {t("Clear Filters")}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </CreatorGlassCard>
 
-                          {camp.matchScore && (
-                            <div className="absolute top-3 right-3">
-                              <span className="px-2.5 py-0.5 bg-[#FF9500] border border-white/10 rounded-full text-[9px] font-bold text-white uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
-                                <Sparkles size={8} className="fill-white" /> {camp.matchScore}% {t("Match")}
+            {filteredCampaigns.length === 0 ? (
+              <CreatorEmptyState
+                icon={Megaphone}
+                title={t("No campaigns match filters")}
+                description={t("Try adjusting search terms, niche filters, or payout mode to discover more pools.")}
+              />
+            ) : (
+              <motion.div layout className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {filteredCampaigns.map((campaign) => {
+                  const isApplied = appliedCampaignIds.has(campaign.id);
+                  const isJoined = joinedIds.has(campaign.id);
+                  const categoryLabel = campaign.campaign_category
+                    ? CAMPAIGN_CATEGORY_LABELS[campaign.campaign_category]
+                    : null;
+
+                  return (
+                    <motion.article
+                      key={campaign.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="creator-glass group flex min-h-[360px] flex-col overflow-hidden rounded-2xl transition-all hover:-translate-y-1 hover:border-white/15"
+                    >
+                      <div className="relative h-28 overflow-hidden border-b border-white/5">
+                        <div
+                          className="absolute inset-0 bg-cover bg-center opacity-50 transition-transform duration-500 group-hover:scale-105"
+                          style={{ backgroundImage: `url(${campaign.image_url})` }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[rgba(7,13,30,0.96)] to-transparent" />
+                        <div className="absolute left-4 top-4 flex size-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-sm font-black text-white">
+                          {campaignLogo(campaign)}
+                        </div>
+                        <div className="absolute bottom-3 left-4 right-4">
+                          <p className="creator-label text-white/35">{campaign.businessName}</p>
+                          <h3 className="truncate text-base font-semibold text-white">{campaign.title}</h3>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-1 flex-col gap-4 p-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {categoryLabel ? (
+                            <CreatorStatusPill tone={campaign.campaign_category === "ugc" ? "warning" : "accent"}>
+                              {campaign.campaign_category === "ugc" ? <FileText size={10} /> : <Scissors size={10} />}
+                              {t(categoryLabel)}
+                            </CreatorStatusPill>
+                          ) : null}
+                          {campaign.target_niches.slice(0, 2).map((niche) => (
+                            <CreatorStatusPill key={niche} tone="neutral">
+                              {t(niche)}
+                            </CreatorStatusPill>
+                          ))}
+                        </div>
+
+                        <p className="line-clamp-3 min-h-16 text-xs leading-5 text-white/60">{campaign.description}</p>
+
+                        <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+                          <p className="creator-label text-white/35">{t("Earnings potential")}</p>
+                          <div className="mt-2 flex items-end justify-between gap-3">
+                            <div>
+                              <span className="text-xs text-white/45">
+                                {campaign.campaign_type === "performance" ? t("CPM") : t("Pool")}
                               </span>
+                              <p className="text-xl font-bold text-[var(--creator-primary)]">
+                                {campaign.campaign_type === "performance"
+                                  ? `$${Number(campaign.cpm_rate ?? 0).toFixed(2)}`
+                                  : `$${campaign.budget_total.toLocaleString()}`}
+                              </p>
                             </div>
-                          )}
-                          
-                          <div className="absolute bottom-3 left-3">
-                            <span className="text-[10px] text-white/80 font-bold uppercase tracking-widest block">
-                              {camp.businessName}
-                            </span>
-                            <h4 className="text-base font-bold text-white truncate max-w-[200px]">
-                              {camp.title}
-                            </h4>
+                            <div className="text-right">
+                              <span className="text-xs text-white/45">{t("Remaining")}</span>
+                              <p className="text-sm font-semibold text-white">{campaign.days_left}d</p>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Content */}
-                        <div className="p-5 space-y-4">
-                          {camp.campaign_category && (
-                            <span
-                              className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
-                                camp.campaign_category === "ugc"
-                                  ? "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20"
-                                  : "bg-primary/10 text-primary border-primary/20"
-                              }`}
+                        <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/5 pt-4">
+                          {isApplied || isJoined ? (
+                            <CreatorStatusPill tone="success" className="px-3 py-2">
+                              <Check size={13} />
+                              {isJoined ? t("Joined") : t("Applied")}
+                            </CreatorStatusPill>
+                          ) : campaign.campaign_type === "performance" ? (
+                            <Button
+                              onClick={() => openApplyModal(campaign)}
+                              disabled={joiningId === campaign.id}
+                              className="creator-gradient-accent h-10 rounded-xl border-0 px-4 text-xs font-semibold text-white hover:brightness-105"
                             >
-                              {camp.campaign_category === "ugc" ? <FileText size={9} /> : <Scissors size={9} />}
-                              {t(CAMPAIGN_CATEGORY_LABELS[camp.campaign_category])}
-                            </span>
-                          )}
-                           <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[36px]">
-                            {camp.description}
-                          </p>
-
-                          {camp.matchingReason && (
-                            <div className="text-[10px] text-[#FF9500] font-bold flex items-center gap-1.5 bg-[#FF9500]/5 px-2.5 py-1.5 rounded-xl border border-[#FF9500]/10 w-fit">
-                              <Sparkles size={9} className="fill-[#FF9500]" /> {camp.matchingReason}
-                            </div>
-                          )}
-
-                          {/* Deliverables details */}
-                          <div className="bg-secondary/40 border border-border/10 rounded-2xl p-3 text-xs space-y-2">
-                            <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block">{t("Deliverables")}</span>
-                            {camp.deliverables.map((d, index) => (
-                              <div key={index} className="flex justify-between items-center text-foreground font-semibold text-[11px]">
-                                <span className="capitalize">{t(d.type.replace("_", " "))}</span>
-                                <span className="px-2 py-0.5 bg-secondary text-[10px] rounded-full">{d.quantity}x</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Escrow payout info */}
-                          <div className="flex items-center justify-between text-xs pt-1">
-                            <div className="flex items-center gap-1.5 text-muted-foreground">
-                              <Zap size={14} className={camp.payout_speed === "Instant Escrow" ? "text-[#34C759]" : "text-muted-foreground"} />
-                              <span className="font-semibold text-[11px]">
-                                {t(camp.payout_speed)}
-                                {camp.campaign_type === "performance" && camp.cpm_rate
-                                  ? ` · $${Number(camp.cpm_rate).toFixed(2)} CPM`
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 text-[#FF9500] font-semibold">
-                              <Clock size={13} />
-                              <span className="text-[10px]">{t("{days}d left").replace("{days}", camp.days_left.toString())}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions Footer */}
-                      <div className="px-5 pb-5 pt-3 border-t border-border/10 flex items-center justify-between gap-3 bg-secondary/10">
-                        <div>
-                          <span className="text-[9px] text-muted-foreground uppercase block font-semibold">{t("Campaign Budget")}</span>
-                          <span className="text-base font-extrabold text-foreground flex items-center mt-0.5">
-                            <DollarSign size={14} />{camp.budget_total.toLocaleString()}
-                          </span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          {isApplied ? (
-                            <div className="px-4 py-2.5 rounded-full bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 text-xs font-bold flex items-center gap-1.5 select-none">
-                              <Check size={13} /> {t("Applied")}
-                            </div>
+                              <Zap size={13} />
+                              {t("Join Campaign")}
+                            </Button>
                           ) : (
-                            <>
-                              {camp.campaign_type === "performance" ? (
-                                <Button
-                                  onClick={() => openApplyModal(camp)}
-                                  size="sm"
-                                  disabled={joiningId === camp.id || joinedIds.has(camp.id)}
-                                  className="rounded-full px-4 text-[11px] font-bold shadow-sm cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0"
-                                >
-                                  {joinedIds.has(camp.id) ? t("Joined") : t("Join Campaign")}
-                                </Button>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => handleExpressInterest(camp)}
-                                    className="px-3.5 py-2.5 rounded-full border border-border/20 hover:border-primary/20 text-muted-foreground hover:text-foreground text-[11px] font-bold cursor-pointer transition-all bg-card/60"
-                                  >
-                                    {t("Express Interest")}
-                                  </button>
-                                  <Button
-                                    onClick={() => openApplyModal(camp)}
-                                    size="sm"
-                                    className="rounded-full px-4 text-[11px] font-bold shadow-sm cursor-pointer"
-                                  >
-                                    {t("Apply")}
-                                  </Button>
-                                </>
-                              )}
-                            </>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleExpressInterest(campaign)}
+                                className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-white/65 transition-all hover:bg-white/[0.08] hover:text-white"
+                              >
+                                {t("Express Interest")}
+                              </button>
+                              <Button
+                                onClick={() => openApplyModal(campaign)}
+                                className="h-10 rounded-xl px-4 text-xs font-semibold"
+                              >
+                                {t("Apply")}
+                              </Button>
+                            </div>
                           )}
+                          <div className="flex items-center gap-1 text-xs font-semibold text-[var(--creator-warning)]">
+                            <Clock size={13} />
+                            {campaign.days_left}d
+                          </div>
                         </div>
                       </div>
-                    </motion.div>
+                    </motion.article>
                   );
                 })}
               </motion.div>
             )}
-          </div>
+          </section>
         </>
       )}
 
-      {/* Application Dialog Modal with AI Pitch Writer */}
       <Dialog open={isApplyModalOpen} onOpenChange={setIsApplyModalOpen}>
-        <DialogContent className="max-w-md w-full rounded-3xl p-6 gap-6 glass-panel border border-border/40 text-foreground">
+        <DialogContent className="creator-portal creator-glass-high max-w-md gap-6 rounded-2xl border-white/10 p-6 text-white">
           <DialogHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-bold text-[#007AFF] uppercase tracking-wider block mb-1">
-                  {t("Sponsorship Application")}
-                </span>
-                <DialogTitle className="text-xl font-bold tracking-tight">
-                  {selectedCampaign?.title}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  {t("Proposed by")} {selectedCampaign?.businessName}
-                </DialogDescription>
-              </div>
-            </div>
+            <span className="creator-label text-[var(--creator-primary)]">{t("Campaign Application")}</span>
+            <DialogTitle className="text-xl font-semibold tracking-tight">{selectedCampaign?.title}</DialogTitle>
+            <DialogDescription className="text-xs text-white/50">
+              {t("Proposed by")} {selectedCampaign?.businessName}
+            </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleApplySubmit} className="space-y-5">
-            {/* Proposed Payout */}
+          <form onSubmit={handleApplySubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
-                {t("Proposed Payout Value")}
-              </label>
+              <label className="creator-label block text-white/45">{t("Proposed payout value")}</label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" size={16} />
                 <input
                   type="number"
                   required
                   value={proposedPayout}
-                  onChange={(e) => setProposedPayout(Number(e.target.value))}
-                  className="w-full pl-9 pr-4 py-3 rounded-2xl bg-secondary/35 border border-border/25 text-xs font-bold focus:outline-none focus:border-primary/45 transition-colors"
+                  onChange={(event) => setProposedPayout(Number(event.target.value))}
+                  className="creator-input w-full rounded-xl py-3 pl-9 pr-4 text-sm font-semibold"
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground font-medium">
-                {t("Standard campaign value is {value} USD.").replace("{value}", selectedCampaign?.budget_total.toLocaleString() || "0")}
-              </p>
             </div>
 
-            {/* Social Handle */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
-                {t("Active Social Handle")}
-              </label>
+              <label className="creator-label block text-white/45">{t("Active social handle")}</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" size={15} />
                 <input
                   type="text"
                   required
                   placeholder="@handle"
                   value={socialHandle}
-                  onChange={(e) => setSocialHandle(e.target.value)}
-                  className="w-full pl-9 pr-4 py-3 rounded-2xl bg-secondary/35 border border-border/25 text-xs font-semibold focus:outline-none focus:border-primary/45 transition-colors"
+                  onChange={(event) => setSocialHandle(event.target.value)}
+                  className="creator-input w-full rounded-xl py-3 pl-9 pr-4 text-sm"
                 />
               </div>
             </div>
 
-            {/* Pitch Message Area */}
-            <div className="space-y-2 relative">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
-                  {t("Pitch Message")}
-                </label>
-                <div className="flex items-center gap-1.5">
-                  {/* Tone Picker */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="creator-label block text-white/45">{t("Pitch message")}</label>
+                <div className="flex items-center gap-2">
                   <select
                     value={pitchTone}
-                    onChange={(e) => setPitchTone(e.target.value as "professional" | "energetic" | "creative")}
-                    className="px-2.5 py-1 rounded-xl bg-secondary/40 border border-border/20 text-[10px] font-bold text-muted-foreground focus:outline-none focus:text-foreground cursor-pointer"
+                    onChange={(event) => setPitchTone(event.target.value as "professional" | "energetic" | "creative")}
+                    className="creator-input rounded-xl px-2 py-1 text-[10px] font-semibold"
                   >
-                    <option value="professional">👔 {t("Professional")}</option>
-                    <option value="energetic">🔥 {t("Energetic")}</option>
-                    <option value="creative">🎨 {t("Creative")}</option>
+                    <option value="professional">{t("Professional")}</option>
+                    <option value="energetic">{t("Energetic")}</option>
+                    <option value="creative">{t("Creative")}</option>
                   </select>
-
-                  {/* AI Write Button */}
                   <button
                     type="button"
                     onClick={handleAIGeneratePitch}
                     disabled={isAILoading}
-                    className="px-3 py-1 bg-[#007AFF]/10 border border-[#007AFF]/25 text-[#007AFF] hover:bg-[#007AFF] hover:text-white rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-[0.97]"
+                    className="rounded-xl border border-[rgba(77,142,255,0.22)] bg-[rgba(77,142,255,0.10)] px-3 py-1 text-[10px] font-semibold text-[var(--creator-primary)]"
                   >
-                    <Sparkles size={11} className={isAILoading ? "animate-spin" : "fill-[#007AFF] hover:fill-white"} />
-                    {t("AI Writer")}
+                    {isAILoading ? t("Writing...") : t("AI Writer")}
                   </button>
                 </div>
               </div>
-
               <textarea
                 required
                 rows={5}
-                placeholder={t("Briefly pitch the brand on why your content style and audience demographics fit their project goals...")}
+                placeholder={t("Briefly pitch why your content style and audience fit this campaign...")}
                 value={pitchText}
-                onChange={(e) => setPitchText(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-secondary/35 border border-border/25 text-xs focus:outline-none focus:border-primary/45 transition-colors resize-none leading-relaxed"
+                onChange={(event) => setPitchText(event.target.value)}
+                className="creator-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6"
               />
             </div>
 
-            {/* Modal Actions */}
-            <DialogFooter className="flex justify-end gap-2.5 border-t border-border/10 pt-4">
+            <DialogFooter className="gap-2 border-t border-white/10 pt-4">
               <button
                 type="button"
                 onClick={() => setIsApplyModalOpen(false)}
-                className="px-4 py-3 rounded-2xl border border-border/20 text-muted-foreground hover:text-foreground text-xs font-semibold cursor-pointer transition-all"
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/65"
               >
                 {t("Cancel")}
               </button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="rounded-2xl text-xs px-5 py-3 cursor-pointer shadow-sm"
-              >
+              <Button type="submit" disabled={isSubmitting} className="rounded-xl px-5 text-xs font-semibold">
                 {isSubmitting ? t("Submitting...") : t("Submit Application")}
               </Button>
             </DialogFooter>
@@ -988,62 +761,53 @@ export default function DiscoverPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Performance Join Modal — creator sets their CPM (≤ the brand's offer) */}
-      <Dialog open={!!joinModalCampaign} onOpenChange={(o) => !o && setJoinModalCampaign(null)}>
-        <DialogContent className="max-w-md w-full rounded-3xl p-6 gap-5 glass-panel border border-border/40 text-foreground">
+      <Dialog open={!!joinModalCampaign} onOpenChange={(open) => !open && setJoinModalCampaign(null)}>
+        <DialogContent className="creator-portal creator-glass-high max-w-md gap-5 rounded-2xl border-white/10 p-6 text-white">
           <DialogHeader>
-            <span className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider block mb-1 flex items-center gap-1">
-              <Zap size={11} /> {t("Join performance campaign")}
-            </span>
-            <DialogTitle className="text-xl font-bold tracking-tight">
-              {joinModalCampaign?.title}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+            <span className="creator-label text-[var(--creator-success)]">{t("Join performance campaign")}</span>
+            <DialogTitle className="text-xl font-semibold tracking-tight">{joinModalCampaign?.title}</DialogTitle>
+            <DialogDescription className="text-xs text-white/50">
               {t("Join to start submitting clips. The brand sets the pay-per-view rate.")}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-muted-foreground uppercase block tracking-wider">
-              {t("Payout rate (set by brand)")}
-            </label>
-            <div className="flex items-baseline gap-2 px-4 py-3 rounded-2xl bg-secondary/35 border border-border/25">
-              <DollarSign className="text-[#34C759]" size={16} />
-              <span className="text-lg font-bold tracking-tight">
-                {Number(joinModalCampaign?.cpm_rate ?? 0).toFixed(2)}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+            <p className="creator-label text-white/40">{t("Payout rate")}</p>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-[var(--creator-success)]">
+                ${Number(joinModalCampaign?.cpm_rate ?? 0).toFixed(2)}
               </span>
-              <span className="text-[11px] text-muted-foreground">{t("CPM · per 1,000 views")}</span>
+              <span className="text-xs text-white/45">{t("CPM per 1,000 views")}</span>
             </div>
           </div>
 
-          {/* Estimated earnings preview at the brand's rate */}
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-[#34C759]/5 border border-[#34C759]/15 text-xs">
-            <span className="text-muted-foreground font-semibold flex items-center gap-1.5">
+          <div className="flex items-center justify-between rounded-2xl border border-[rgba(52,211,153,0.16)] bg-[rgba(52,211,153,0.06)] p-4 text-xs">
+            <span className="flex items-center gap-1.5 text-white/55">
               <Eye size={13} /> {t("Est. per 100k views")}
             </span>
-            <span className="font-extrabold text-[#34C759]">
+            <span className="font-bold text-[var(--creator-success)]">
               ${Math.round(Math.max(Number(joinModalCampaign?.cpm_rate ?? 0), 0) * 100).toLocaleString()}
             </span>
           </div>
 
-          <DialogFooter className="flex justify-end gap-2.5 border-t border-border/10 pt-4">
+          <DialogFooter className="gap-2 border-t border-white/10 pt-4">
             <button
               type="button"
               onClick={() => setJoinModalCampaign(null)}
-              className="px-4 py-3 rounded-2xl border border-border/20 text-muted-foreground hover:text-foreground text-xs font-semibold cursor-pointer transition-all"
+              className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/65"
             >
               {t("Cancel")}
             </button>
             <Button
               onClick={confirmJoin}
               disabled={joiningId === joinModalCampaign?.id}
-              className="rounded-2xl text-xs px-5 py-3 cursor-pointer shadow-sm bg-[#34C759] hover:bg-[#2fb350] text-white border-0"
+              className="creator-gradient-accent rounded-xl border-0 px-5 text-xs font-semibold text-white hover:brightness-105"
             >
               {joiningId === joinModalCampaign?.id ? t("Joining...") : t("Join Campaign")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </CreatorPageShell>
   );
 }
