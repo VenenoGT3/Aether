@@ -1,49 +1,105 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Sparkles, 
-  ArrowRight, 
-  ArrowLeft, 
-  Check, 
-  Plus, 
-  Trash2, 
-  Target, 
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  CircleDollarSign,
+  ClipboardCheck,
+  Eye,
+  FileText,
+  Gauge,
+  Globe2,
   Info,
   Loader2,
   Lock,
-  Zap,
-  Eye,
-  FileText,
+  Plus,
   Scissors,
-  Users
+  Sparkles,
+  Target,
+  Trash2,
+  Users,
+  X,
+  Zap,
+  type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
-import { supabase } from "@/lib/supabase/client";
-import { createCampaignAction } from "@/lib/supabase/campaigns";
-import { fundCampaignPoolAction } from "@/lib/stripe/actions";
+
+import {
+  BusinessActionButton,
+  BusinessGlassCard,
+  BusinessMetricCard,
+  BusinessProgressBar,
+  BusinessSectionHeader,
+  BusinessStatusPill,
+  type BusinessTone,
+} from "@/components/business/business-ui";
 import { PoolPaymentModal } from "@/components/pool-payment-modal";
-import { generateCampaignBriefAction } from "@/lib/actions/ai";
-import { useTranslation } from "@/lib/translations";
 import {
   CAMPAIGN_CATEGORY_DESCRIPTIONS,
   type CampaignCategory,
 } from "@/lib/campaign-category";
 import { validateCategoryMeta } from "@/lib/campaign-category-meta";
 import { feeBreakdown } from "@/lib/campaign-budget";
+import { generateCampaignBriefAction } from "@/lib/actions/ai";
+import { supabase } from "@/lib/supabase/client";
+import { createCampaignAction } from "@/lib/supabase/campaigns";
+import { fundCampaignPoolAction } from "@/lib/stripe/actions";
+import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/translations";
 
-// Standard niches list
 const AVAILABLE_NICHES = [
-  "Tech", "Design", "Minimal", "Lifestyle", "Wellness", 
-  "Fashion", "Beauty", "Fitness", "Food", "Travel", "Gaming"
+  "Tech",
+  "Design",
+  "Minimal",
+  "Lifestyle",
+  "Wellness",
+  "Fashion",
+  "Beauty",
+  "Fitness",
+  "Food",
+  "Travel",
+  "Gaming",
 ];
 
-/** Creator profile row used for the live matchmaking preview. */
+const wizardSteps: Array<{
+  id: number;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { id: 1, label: "Goal", description: "Campaign model and brief", icon: Sparkles },
+  { id: 2, label: "Audience", description: "Creator targeting", icon: Target },
+  { id: 3, label: "Deliverables", description: "Expected formats", icon: ClipboardCheck },
+  { id: 4, label: "Budget", description: "RPM and pool rules", icon: CircleDollarSign },
+  { id: 5, label: "Timeline", description: "Milestones", icon: CalendarDays },
+  { id: 6, label: "Review", description: "Launch readiness", icon: CheckCircle2 },
+];
+
+const platformOptions: Array<{
+  id: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { id: "tiktok", label: "TikTok", description: "Short-form velocity", icon: Zap },
+  { id: "instagram", label: "Instagram", description: "Reels distribution", icon: Eye },
+  { id: "youtube", label: "YouTube", description: "Shorts reach", icon: Globe2 },
+];
+
+type Deliverable = {
+  type: "post" | "video" | "story";
+  quantity: number;
+  details: string;
+};
+
 interface MatchCreator {
   user_id: string;
   full_name: string;
@@ -53,6 +109,132 @@ interface MatchCreator {
   engagement_rate: number | null;
 }
 
+function money(value: number, digits = 0): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function compactNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    notation: value >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 10000 ? 1 : 0,
+  }).format(value);
+}
+
+function positiveNumber(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function payoutViews(amount: number, rpm: number): number {
+  if (amount <= 0 || rpm <= 0) return 0;
+  return Math.ceil((amount / rpm) * 1000);
+}
+
+function FieldLabel({
+  children,
+  hint,
+}: {
+  children: string;
+  hint?: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+        {children}
+      </span>
+      {hint ? <span className="block text-xs leading-5 text-[var(--business-muted)]">{hint}</span> : null}
+    </label>
+  );
+}
+
+function StepTitle({
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--business-primary)]">
+          {eyebrow}
+        </p>
+        <h2 className="text-xl font-semibold tracking-normal text-[var(--business-text)]">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-[var(--business-muted)]">{description}</p>
+      </div>
+      <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(173,198,255,0.20)] bg-[rgba(173,198,255,0.10)] text-[var(--business-primary)]">
+        <Icon size={20} />
+      </span>
+    </div>
+  );
+}
+
+function ChoiceCard({
+  active,
+  title,
+  description,
+  icon: Icon,
+  tone = "accent",
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  tone?: BusinessTone;
+  onClick: () => void;
+}) {
+  const toneClass: Record<BusinessTone, string> = {
+    neutral: "text-[var(--business-muted)]",
+    accent: "text-[var(--business-primary)]",
+    secondary: "text-[var(--business-secondary)]",
+    info: "text-[var(--business-accent)]",
+    success: "text-[var(--business-success)]",
+    warning: "text-[var(--business-warning)]",
+    danger: "text-[var(--business-danger)]",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "min-h-32 rounded-2xl border p-4 text-left transition-colors",
+        active
+          ? "border-[rgba(173,198,255,0.28)] bg-[rgba(173,198,255,0.12)]"
+          : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
+      )}
+    >
+      <span className="mb-4 flex items-start justify-between gap-3">
+        <span
+          className={cn(
+            "inline-flex size-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06]",
+            toneClass[tone]
+          )}
+        >
+          <Icon size={18} />
+        </span>
+        {active ? (
+          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[var(--business-primary)] text-[#07101f]">
+            <Check size={14} strokeWidth={3} />
+          </span>
+        ) : null}
+      </span>
+      <span className="block text-sm font-semibold text-[var(--business-text)]">{title}</span>
+      <span className="mt-2 block text-xs leading-5 text-[var(--business-muted)]">{description}</span>
+    </button>
+  );
+}
+
 export default function NewCampaignWizard() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -60,16 +242,10 @@ export default function NewCampaignWizard() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [showAiModal, setShowAiModal] = useState(false);
-  
-  // Fixed-fee publish confirmation modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paying, setPaying] = useState(false);
-
-  // Live matchmaking preview (real creator profiles matching the chosen niches)
   const [matchedCreators, setMatchedCreators] = useState<MatchCreator[]>([]);
   const [creatorsLoading, setCreatorsLoading] = useState(false);
-
-  // Performance pool funding (real Stripe Elements)
   const [poolPublishing, setPoolPublishing] = useState(false);
   const [poolFunding, setPoolFunding] = useState<{
     clientSecret: string;
@@ -78,7 +254,6 @@ export default function NewCampaignWizard() {
     title: string;
   } | null>(null);
 
-  // Form State
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [niches, setNiches] = useState<string[]>([]);
@@ -86,42 +261,41 @@ export default function NewCampaignWizard() {
   const [ageRange, setAgeRange] = useState("18-34");
   const [gender, setGender] = useState("All");
   const [minFollowers, setMinFollowers] = useState(10000);
-  
-  // AI-generated Brief Details
   const [objectives, setObjectives] = useState<string[]>([]);
   const [guidelines, setGuidelines] = useState<string[]>([]);
   const [kpis, setKpis] = useState<string[]>([]);
-  
-  const [deliverables, setDeliverables] = useState<Array<{ type: "post" | "video" | "story"; quantity: number; details: string }>>([
-    { type: "post", quantity: 1, details: "Premium high-res image grid post" }
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([
+    { type: "video", quantity: 1, details: "Vertical short-form video with captions" },
   ]);
-  
   const [budgetTotal, setBudgetTotal] = useState(2500);
-
-  // Performance-clipping fields (Phase 6)
   const [campaignType, setCampaignType] = useState<"fixed" | "performance">("performance");
   const [cpmRate, setCpmRate] = useState(2.5);
+  const [minPayoutThreshold, setMinPayoutThreshold] = useState(10);
   const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState(0);
   const [platforms, setPlatforms] = useState<string[]>(["tiktok", "instagram"]);
   const [viewHoldbackHours, setViewHoldbackHours] = useState(48);
   const [contentRules, setContentRules] = useState("");
-  const isPerformance = campaignType === "performance";
-
-  // UGC vs Clipping (performance sub-type) + the type-specific brief fields.
   const [campaignCategory, setCampaignCategory] = useState<CampaignCategory>("clipping");
-  const isUgc = campaignCategory === "ugc";
-  // UGC fields
   const [creativeDirection, setCreativeDirection] = useState("");
   const [references, setReferences] = useState("");
   const [dos, setDos] = useState("");
   const [donts, setDonts] = useState("");
-  // Clipping fields
   const [sourceUrl, setSourceUrl] = useState("");
   const [clipMinSec, setClipMinSec] = useState(10);
   const [clipMaxSec, setClipMaxSec] = useState(60);
   const [clipRequirements, setClipRequirements] = useState("");
+  const [startDate, setStartDate] = useState("2026-07-01");
+  const [draftDueDate, setDraftDueDate] = useState("2026-07-10");
+  const [endDate, setEndDate] = useState("2026-07-31");
 
-  // Type-specific brief, persisted to campaigns.category_meta (performance only).
+  const isPerformance = campaignType === "performance";
+  const isUgc = campaignCategory === "ugc";
+  const poolSplit = feeBreakdown(budgetTotal);
+  const progressPct = Math.round((step / wizardSteps.length) * 100);
+  const minThresholdViews = payoutViews(minPayoutThreshold, cpmRate);
+  const maxCapViews = payoutViews(maxPayoutPerCreator, cpmRate);
+  const estimatedPaidViews = cpmRate > 0 ? Math.round((poolSplit.creators / cpmRate) * 1000) : 0;
+
   const buildCategoryMeta = () =>
     isUgc
       ? {
@@ -137,28 +311,54 @@ export default function NewCampaignWizard() {
           requirements: clipRequirements.trim(),
         };
 
-  const togglePlatform = (p: string) =>
-    setPlatforms((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-    );
+  const readinessItems = useMemo(
+    () => [
+      {
+        label: "Brief",
+        ready: title.trim().length > 0 && description.trim().length > 0 && niches.length > 0,
+      },
+      {
+        label: "Audience",
+        ready: location.trim().length > 0 && ageRange.trim().length > 0 && positiveNumber(minFollowers) > 0,
+      },
+      {
+        label: "Deliverables",
+        ready: deliverables.length > 0 && deliverables.every((item) => item.quantity > 0 && item.details.trim()),
+      },
+      {
+        label: "Financials",
+        ready:
+          positiveNumber(budgetTotal) > 0 &&
+          (!isPerformance || (positiveNumber(cpmRate) > 0 && platforms.length > 0)),
+      },
+      {
+        label: "Timeline",
+        ready: Boolean(startDate && draftDueDate && endDate),
+      },
+    ],
+    [
+      ageRange,
+      budgetTotal,
+      cpmRate,
+      deliverables,
+      description,
+      endDate,
+      draftDueDate,
+      isPerformance,
+      location,
+      minFollowers,
+      niches.length,
+      platforms.length,
+      startDate,
+      title,
+    ]
+  );
+  const readinessCount = readinessItems.filter((item) => item.ready).length;
+  const readinessPct = Math.round((readinessCount / readinessItems.length) * 100);
 
-  const [startDate, setStartDate] = useState("2026-06-01");
-  const [endDate, setEndDate] = useState("2026-06-20");
-  const [draftDueDate, setDraftDueDate] = useState("2026-06-10");
-
-  const appleSpring = {
-    type: "spring" as const,
-    stiffness: 300,
-    damping: 30,
-    mass: 0.8
-  };
-
-  // Live matchmaking: pull real creator profiles whose niches overlap the
-  // campaign's target niches. RLS only returns influencer profiles, so this is
-  // a real (possibly empty) preview — never seeded mock data.
   useEffect(() => {
     if (niches.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear preview from current niche selection
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear preview from current niche selection.
       setMatchedCreators([]);
       return;
     }
@@ -180,41 +380,48 @@ export default function NewCampaignWizard() {
     };
   }, [niches]);
 
+  const togglePlatform = (platform: string) => {
+    setPlatforms((prev) =>
+      prev.includes(platform) ? prev.filter((item) => item !== platform) : [...prev, platform]
+    );
+  };
+
   const handleNicheToggle = (niche: string) => {
     if (niches.includes(niche)) {
-      setNiches(niches.filter((n) => n !== niche));
-    } else {
-      if (niches.length < 3) {
-        setNiches([...niches, niche]);
-      } else {
-        toast.warning(t("Niches limit reached"), {
-          description: t("You can select up to 3 niches for targeting precision.")
-        });
-      }
+      setNiches(niches.filter((item) => item !== niche));
+      return;
     }
+    if (niches.length >= 3) {
+      toast.warning(t("Niches limit reached"), {
+        description: t("You can select up to 3 niches for targeting precision."),
+      });
+      return;
+    }
+    setNiches([...niches, niche]);
   };
 
   const addDeliverable = () => {
-    setDeliverables([...deliverables, { type: "post", quantity: 1, details: "" }]);
+    setDeliverables([...deliverables, { type: "video", quantity: 1, details: "" }]);
   };
 
   const removeDeliverable = (index: number) => {
-    setDeliverables(deliverables.filter((_, i) => i !== index));
+    setDeliverables(deliverables.filter((_, itemIndex) => itemIndex !== index));
   };
 
-  const updateDeliverable = (index: number, field: string, value: string | number) => {
-    const updated = [...deliverables];
-    updated[index] = { ...updated[index], [field]: value } as (typeof deliverables)[number];
-    setDeliverables(updated);
+  const updateDeliverable = (index: number, field: keyof Deliverable, value: string | number) => {
+    setDeliverables((current) => {
+      const next = [...current];
+      next[index] = { ...next[index], [field]: value } as Deliverable;
+      return next;
+    });
   };
 
-  // AI Brief Handler
   const handleGenerateAiBrief = async () => {
     if (!aiPrompt.trim()) {
       toast.error(t("Please enter a campaign prompt"));
       return;
     }
-    
+
     setAiGenerating(true);
     try {
       const res = await generateCampaignBriefAction(aiPrompt);
@@ -227,7 +434,7 @@ export default function NewCampaignWizard() {
         setAgeRange(brief.target_audience.ageRange);
         setGender(brief.target_audience.gender);
         setMinFollowers(brief.target_audience.minimumFollowers);
-        setDeliverables(brief.deliverables);
+        setDeliverables(brief.deliverables as Deliverable[]);
         setBudgetTotal(brief.budget_total);
         setStartDate(brief.timeline.startDate);
         setEndDate(brief.timeline.endDate);
@@ -235,20 +442,20 @@ export default function NewCampaignWizard() {
         setObjectives(brief.objectives || []);
         setGuidelines(brief.guidelines || []);
         setKpis(brief.kpis || []);
-        
+
         toast.success(t("AI Brief Generated Successfully!"), {
-          description: t("We've populated all details based on your campaign prompt.")
+          description: t("We've populated all details based on your campaign prompt."),
         });
         setShowAiModal(false);
-        setStep(6); // Skip to review step for editing/verification
+        setStep(6);
       } else {
         toast.error(t("Brief generation failed"), {
-          description: res.error || t("Please try again.")
+          description: res.error || t("Please try again."),
         });
       }
     } catch (err) {
       toast.error(t("Brief generation failed"), {
-        description: err instanceof Error ? err.message : t("An unexpected error occurred.")
+        description: err instanceof Error ? err.message : t("An unexpected error occurred."),
       });
     } finally {
       setAiGenerating(false);
@@ -258,23 +465,41 @@ export default function NewCampaignWizard() {
   const celebrate = () => {
     const end = Date.now() + 2 * 1000;
     const frame = () => {
-      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
-      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ["#ADC6FF", "#34D399", "#FBBF24"] });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ["#ADC6FF", "#34D399", "#FBBF24"] });
       if (Date.now() < end) requestAnimationFrame(frame);
     };
     frame();
   };
 
-  // Publish / Payment Handler
-  const handlePublishClick = () => {
-    // Validate fields before showing payment modal
+  const validateFirstStep = () => {
     if (!title.trim() || !description.trim() || niches.length === 0) {
       toast.error(t("Incomplete Goal Information"), {
-        description: t("Please fill out title, description, and niches.")
+        description: t("Please fill out title, description, and niches."),
       });
       setStep(1);
+      return false;
+    }
+    return true;
+  };
+
+  const handleContinue = () => {
+    if (step === 1 && !validateFirstStep()) return;
+    if (step === 3 && deliverables.some((item) => item.quantity <= 0 || !item.details.trim())) {
+      toast.error(t("Complete the deliverables"), {
+        description: t("Every deliverable needs a quantity and a short detail."),
+      });
       return;
     }
+    if (step === 4 && isPerformance && platforms.length === 0) {
+      toast.error(t("Choose at least one platform"));
+      return;
+    }
+    setStep(Math.min(step + 1, wizardSteps.length));
+  };
+
+  const handlePublishClick = () => {
+    if (!validateFirstStep()) return;
     if (isPerformance) {
       void startPerformancePublish();
       return;
@@ -282,17 +507,20 @@ export default function NewCampaignWizard() {
     setShowPaymentModal(true);
   };
 
-  /**
-   * Performance publish: create the campaign as a DRAFT, then fund its pool.
-   * Opens a Stripe Elements form; the webhook flips the campaign to 'open' once
-   * the pool-funding PaymentIntent succeeds.
-   */
   const startPerformancePublish = async () => {
     setPoolPublishing(true);
     try {
       const metaCheck = validateCategoryMeta(campaignCategory, buildCategoryMeta());
       if (!metaCheck.ok) {
         toast.error(t("Complete the campaign brief"), { description: metaCheck.error });
+        setStep(4);
+        setPoolPublishing(false);
+        return;
+      }
+
+      if (platforms.length === 0) {
+        toast.error(t("Choose at least one platform"));
+        setStep(4);
         setPoolPublishing(false);
         return;
       }
@@ -309,10 +537,10 @@ export default function NewCampaignWizard() {
         campaign_type: "performance",
         campaign_category: metaCheck.category,
         category_meta: metaCheck.meta,
-        // Brand-set CPM is the single source of truth (cpm_rate kept in sync).
         brand_cpm_rate: cpmRate,
         cpm_rate: cpmRate,
         budget_pool: budgetTotal,
+        min_payout_threshold: minPayoutThreshold,
         max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
         platforms,
         view_holdback_hours: viewHoldbackHours,
@@ -339,7 +567,6 @@ export default function NewCampaignWizard() {
         return;
       }
 
-      // Real: hand off to the Stripe Elements form; webhook activates on success.
       setPoolFunding({
         clientSecret: fund.clientSecret,
         amount: fund.amount ?? budgetTotal,
@@ -354,9 +581,6 @@ export default function NewCampaignWizard() {
     }
   };
 
-  // Fixed-fee publish: create the campaign as 'open' so creators can apply.
-  // There is no upfront charge — escrow is funded per creator (fundEscrowAction)
-  // when the brand approves an applicant from the campaign workspace.
   const handleConfirmPayment = async () => {
     setPaying(true);
     try {
@@ -373,1132 +597,1066 @@ export default function NewCampaignWizard() {
       });
 
       if (res.success && res.campaign) {
-        // Celebration confetti
-        const end = Date.now() + 2 * 1000;
-        const frame = () => {
-          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
-          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ["#007AFF", "#34C759", "#FF9500"] });
-          if (Date.now() < end) requestAnimationFrame(frame);
-        };
-        frame();
-
+        celebrate();
         toast.success(t("Campaign Published!"), {
-          description: t("Your campaign is live. Approve applicants and fund escrow per creator from the campaign workspace.")
+          description: t("Your campaign is live. Approve applicants and fund escrow per creator from the campaign workspace."),
         });
-
         setShowPaymentModal(false);
         router.push("/business/dashboard");
       } else {
         toast.error(t("Failed to create campaign"), {
-          description: res.error || t("Unknown database error.")
+          description: res.error || t("Unknown database error."),
         });
       }
     } catch (err) {
       toast.error(t("Could not publish campaign"), {
-        description: err instanceof Error ? err.message : t("An unexpected error occurred.")
+        description: err instanceof Error ? err.message : t("An unexpected error occurred."),
       });
     } finally {
       setPaying(false);
     }
   };
 
-  // Platform fee split (performance pools): brand pays budgetTotal; creators earn 90%.
-  const poolSplit = feeBreakdown(budgetTotal);
+  const renderStep = () => {
+    switch (step) {
+      case 1:
+        return (
+          <motion.div key="goal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 1")}
+              title={t("Campaign goal")}
+              description={t("Set the marketplace model, content type, core brief, and target niches.")}
+              icon={Sparkles}
+            />
 
-  return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden">
-      {/* Background Decorative Glows */}
-      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-gradient-to-tr from-[#007AFF]/5 to-transparent blur-[90px] pointer-events-none rounded-full" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <ChoiceCard
+                active={isPerformance}
+                title={t("Performance campaign")}
+                description={t("Creators earn from a funded pool based on verified views and your RPM.")}
+                icon={Zap}
+                onClick={() => setCampaignType("performance")}
+              />
+              <ChoiceCard
+                active={!isPerformance}
+                title={t("Fixed-fee campaign")}
+                description={t("Creators apply, you approve, and escrow is funded per creator contract.")}
+                icon={Lock}
+                tone="success"
+                onClick={() => setCampaignType("fixed")}
+              />
+            </div>
 
-      {/* Back Button */}
-      <div className="mb-8">
-        <Link href="/business/dashboard" className="text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-          <ArrowLeft size={12} /> {t("Back to dashboard")}
-        </Link>
-      </div>
+            {isPerformance ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ChoiceCard
+                  active={!isUgc}
+                  title={t("Content clipping")}
+                  description={t(CAMPAIGN_CATEGORY_DESCRIPTIONS.clipping)}
+                  icon={Scissors}
+                  onClick={() => setCampaignCategory("clipping")}
+                />
+                <ChoiceCard
+                  active={isUgc}
+                  title={t("UGC")}
+                  description={t(CAMPAIGN_CATEGORY_DESCRIPTIONS.ugc)}
+                  icon={FileText}
+                  tone="warning"
+                  onClick={() => setCampaignCategory("ugc")}
+                />
+              </div>
+            ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start relative z-10">
-        {/* Wizard Main Flow */}
-        <div className="lg:col-span-2 space-y-8">
-          <div>
-            <span className="text-xs font-semibold text-[#007AFF] uppercase tracking-wider block mb-1.5">
-              {t("Step {step} of 6").replace("{step}", step.toString())}
-            </span>
-            <h1 className="text-3xl font-bold tracking-tight font-heading">{t("Create New Campaign")}</h1>
-          </div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <FieldLabel hint={t("Keep it short enough for the campaign marketplace and dashboard cards.")}>
+                  {t("Campaign title")}
+                </FieldLabel>
+                <input
+                  type="text"
+                  placeholder={t("e.g. Summer tech capsule launch")}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
+                />
+              </div>
 
-          {/* Steps Nav */}
-          <div className="flex gap-2 border-b border-border/10 pb-4 overflow-x-auto no-scrollbar">
-            {["Goal", "Audience", "Deliverables", "Budget", "Timeline", "Review"].map((label, idx) => {
-              const currentStep = idx + 1;
-              return (
-                <button
-                  key={label}
-                  onClick={() => step > currentStep && setStep(currentStep)}
-                  className={`text-xs font-semibold px-4 py-2 rounded-full transition-all shrink-0 select-none ${
-                    step === currentStep 
-                      ? "bg-primary/10 text-primary border border-primary/20" 
-                      : step > currentStep
-                      ? "text-[#34C759] cursor-pointer hover:bg-secondary/40"
-                      : "text-muted-foreground/45 cursor-not-allowed"
-                  }`}
-                  disabled={step < currentStep}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {step > currentStep ? <Check size={11} className="stroke-[3]" /> : <span>{currentStep}.</span>}
-                    {t(label)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+              <div className="space-y-2">
+                <FieldLabel hint={t("Include the product, creator instructions, brand safety rules, and success outcome.")}>
+                  {t("Core brief")}
+                </FieldLabel>
+                <textarea
+                  placeholder={t("Detail your product highlights, brand aesthetics, guidelines, and instructions for creators...")}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={5}
+                  className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
+                />
+              </div>
 
-          {/* Form Card */}
-          <div className="p-8 apple-card">
-            <AnimatePresence mode="wait">
-              {/* STEP 1: GOAL */}
-              {step === 1 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/10 pb-4">
-                    <div>
-                      <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Campaign Goals")}</h3>
-                      <p className="text-xs text-muted-foreground">{t("Define what your campaign represents.")}</p>
-                    </div>
-                    <Button 
-                       type="button"
-                       onClick={() => setShowAiModal(true)}
-                       className="rounded-full px-4 py-5 text-xs font-bold bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] hover:opacity-90 transition-opacity text-white border-0 gap-1.5 cursor-pointer shadow-md h-auto"
-                    >
-                      <Sparkles size={13} /> {t("Generate with AI Brief")}
-                    </Button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Campaign Type")}</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-3">
+                <FieldLabel hint={t("Select up to three so creator matching stays precise.")}>
+                  {t("Target niches")}
+                </FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  {AVAILABLE_NICHES.map((niche) => {
+                    const active = niches.includes(niche);
+                    return (
                       <button
+                        key={niche}
                         type="button"
-                        onClick={() => setCampaignType("performance")}
-                        className={`text-left p-4 rounded-2xl border transition-all ${
-                          isPerformance
-                            ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
-                            : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
-                        }`}
+                        onClick={() => handleNicheToggle(niche)}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                          active
+                            ? "border-[rgba(173,198,255,0.25)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
+                            : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
+                        )}
                       >
-                        <span className="flex items-center gap-2 text-sm font-bold text-foreground">
-                          <Zap size={14} className="text-primary" /> {t("Performance (Pay per view)")}
-                        </span>
-                        <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
-                          {t("Open join. Creators clip your content and earn from a shared budget pool based on views (CPM).")}
-                        </span>
+                        {t(niche)}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setCampaignType("fixed")}
-                        className={`text-left p-4 rounded-2xl border transition-all ${
-                          !isPerformance
-                            ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
-                            : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 text-sm font-bold text-foreground">
-                          <Lock size={14} className="text-[#34C759]" /> {t("Fixed fee (Escrow)")}
-                        </span>
-                        <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
-                          {t("Apply & approve a creator for a set fee, held in escrow and released on approval.")}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        );
+      case 2:
+        return (
+          <motion.div key="audience" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 2")}
+              title={t("Creator targeting")}
+              description={t("Define who should see the brief and which creator profiles should surface first.")}
+              icon={Target}
+            />
 
-                  {/* UGC vs Clipping sub-type (performance campaigns only). */}
-                  {isPerformance && (
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Content Type")}</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setCampaignCategory("clipping")}
-                          className={`text-left p-4 rounded-2xl border transition-all ${
-                            !isUgc
-                              ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
-                              : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2 text-sm font-bold text-foreground">
-                            <Scissors size={14} className="text-primary" /> {t("Clipping")}
-                          </span>
-                          <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
-                            {t(CAMPAIGN_CATEGORY_DESCRIPTIONS.clipping)}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCampaignCategory("ugc")}
-                          className={`text-left p-4 rounded-2xl border transition-all ${
-                            isUgc
-                              ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
-                              : "bg-secondary/30 border-border/20 hover:bg-secondary/50"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2 text-sm font-bold text-foreground">
-                            <FileText size={14} className="text-[#FF9500]" /> {t("UGC")}
-                          </span>
-                          <span className="block text-[11px] text-muted-foreground mt-1 leading-normal">
-                            {t(CAMPAIGN_CATEGORY_DESCRIPTIONS.ugc)}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <FieldLabel>{t("Audience location")}</FieldLabel>
+                <select value={location} onChange={(event) => setLocation(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                  <option>{t("United States")}</option>
+                  <option>{t("Europe")}</option>
+                  <option>{t("Japan & Asia")}</option>
+                  <option>{t("Global")}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <FieldLabel>{t("Age range")}</FieldLabel>
+                <select value={ageRange} onChange={(event) => setAgeRange(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                  <option>18-24</option>
+                  <option>18-34</option>
+                  <option>25-45</option>
+                  <option>{t("All Ages")}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <FieldLabel>{t("Gender distribution")}</FieldLabel>
+                <select value={gender} onChange={(event) => setGender(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                  <option>{t("All")}</option>
+                  <option>{t("Female")}</option>
+                  <option>{t("Male")}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <FieldLabel hint={t("Used by the matching preview and creator discovery filters.")}>
+                  {t("Minimum follower count")}
+                </FieldLabel>
+                <input
+                  type="number"
+                  min="0"
+                  value={minFollowers}
+                  onChange={(event) => setMinFollowers(Number(event.target.value))}
+                  className="business-input h-12 w-full rounded-xl px-4 text-sm"
+                />
+              </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Campaign Title")}</label>
-                    <input
-                      type="text"
-                      placeholder={t("e.g. Summer Tech Capsule Launch")}
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/45"
-                    />
-                  </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="flex items-start gap-3">
+                <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(173,198,255,0.20)] bg-[rgba(173,198,255,0.10)] text-[var(--business-primary)]">
+                  <Users size={18} />
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--business-text)]">{t("Live matching preview")}</h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--business-muted)]">
+                    {t("The sidebar updates from real creator profiles whose niches overlap this campaign.")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        );
+      case 3:
+        return (
+          <motion.div key="deliverables" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 3")}
+              title={t("Deliverables")}
+              description={t("List the formats creators should submit and any format-specific notes.")}
+              icon={ClipboardCheck}
+            />
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Core Brief & Instructions")}</label>
-                    <textarea
-                      placeholder={t("Detail your product highlights, brand aesthetics, guidelines, and instructions for content creators...")}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      rows={5}
-                      className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Target Niches (Select up to 3)")}</label>
-                    <div className="flex flex-wrap gap-2">
-                      {AVAILABLE_NICHES.map((niche) => {
-                        const isSelected = niches.includes(niche);
-                        return (
-                          <button
-                            key={niche}
-                            type="button"
-                            onClick={() => handleNicheToggle(niche)}
-                            className={`text-xs px-3.5 py-2 rounded-full font-semibold transition-all border ${
-                              isSelected 
-                                ? "bg-primary text-white border-primary shadow-sm" 
-                                : "bg-secondary/40 text-muted-foreground border-transparent hover:bg-secondary/70 hover:text-foreground"
-                            }`}
-                          >
-                            {t(niche)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP 2: AUDIENCE */}
-              {step === 2 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Target Audience")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("Specify creator demographic match parameters.")}</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              {deliverables.map((item, index) => (
+                <div key={`${item.type}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[160px_120px_1fr_auto] md:items-end">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Audience Location")}</label>
+                      <FieldLabel>{t("Format")}</FieldLabel>
                       <select
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all cursor-pointer appearance-none bg-no-repeat bg-[right_1rem_center]"
+                        value={item.type}
+                        onChange={(event) => updateDeliverable(index, "type", event.target.value)}
+                        className="business-input h-11 w-full rounded-xl px-3 text-sm"
                       >
-                        <option className="bg-popover">{t("United States")}</option>
-                        <option className="bg-popover">{t("Europe")}</option>
-                        <option className="bg-popover">{t("Japan & Asia")}</option>
-                        <option className="bg-popover">{t("Global")}</option>
+                        <option value="post">{t("Grid Post")}</option>
+                        <option value="video">{t("Short Video")}</option>
+                        <option value="story">{t("Social Story")}</option>
                       </select>
                     </div>
-
                     <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Age Range")}</label>
-                      <select
-                        value={ageRange}
-                        onChange={(e) => setAgeRange(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all cursor-pointer appearance-none"
-                      >
-                        <option className="bg-popover">18-24</option>
-                        <option className="bg-popover">18-34</option>
-                        <option className="bg-popover">25-45</option>
-                        <option className="bg-popover">{t("All Ages")}</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Gender Distribution")}</label>
-                      <select
-                        value={gender}
-                        onChange={(e) => setGender(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all cursor-pointer appearance-none"
-                      >
-                        <option className="bg-popover">{t("All")}</option>
-                        <option className="bg-popover">{t("Female")}</option>
-                        <option className="bg-popover">{t("Male")}</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Minimum Follower Count")}</label>
+                      <FieldLabel>{t("Quantity")}</FieldLabel>
                       <input
                         type="number"
-                        placeholder="10000"
-                        value={minFollowers}
-                        onChange={(e) => setMinFollowers(Number(e.target.value))}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(event) => updateDeliverable(index, "quantity", Number(event.target.value))}
+                        className="business-input h-11 w-full rounded-xl px-3 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <FieldLabel>{t("Details")}</FieldLabel>
+                      <input
+                        type="text"
+                        placeholder={t("e.g. Hook in first 2 seconds, captions included")}
+                        value={item.details}
+                        onChange={(event) => updateDeliverable(index, "details", event.target.value)}
+                        className="business-input h-11 w-full rounded-xl px-3 text-sm placeholder:text-[var(--business-muted)]"
+                      />
+                    </div>
+                    {deliverables.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeDeliverable(index)}
+                        className="inline-flex size-10 items-center justify-center rounded-xl border border-[rgba(248,113,113,0.25)] bg-[rgba(248,113,113,0.10)] text-[var(--business-danger)] transition-colors hover:bg-[rgba(248,113,113,0.15)]"
+                        aria-label={t("Remove deliverable")}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <BusinessActionButton type="button" variant="secondary" icon={Plus} onClick={addDeliverable}>
+              {t("Add deliverable")}
+            </BusinessActionButton>
+          </motion.div>
+        );
+      case 4:
+        return (
+          <motion.div key="budget" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 4")}
+              title={isPerformance ? t("Budget pool and reward rules") : t("Fixed-fee budget")}
+              description={
+                isPerformance
+                  ? t("Configure the funded pool, RPM, payout threshold, creator cap, platforms, and content requirements.")
+                  : t("Set the total campaign budget shown to applicants. Escrow is funded per approved creator.")
+              }
+              icon={CircleDollarSign}
+            />
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
+              <div className="space-y-2">
+                <FieldLabel hint={isPerformance ? t("Brand pays this amount when the campaign is funded.") : t("Budget shown to creators for this campaign.")}>
+                  {isPerformance ? t("Total budget pool") : t("Total campaign budget")}
+                </FieldLabel>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">$</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={budgetTotal}
+                    onChange={(event) => setBudgetTotal(Number(event.target.value))}
+                    className="business-input h-14 w-full rounded-xl pl-8 pr-4 text-xl font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+                  {t("Budget split")}
+                </p>
+                <div className="mt-3 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--business-muted)]">{t("You pay")}</span>
+                    <span className="font-semibold text-[var(--business-text)]">{money(poolSplit.total)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--business-muted)]">{t("Platform fee")}</span>
+                    <span className="font-semibold text-[var(--business-warning)]">{money(poolSplit.fee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="text-[var(--business-muted)]">{t("Creators earn")}</span>
+                    <span className="font-semibold text-[var(--business-success)]">{money(poolSplit.creators)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {isPerformance ? (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <FieldLabel hint={t("Dollar amount paid per 1,000 verified views.")}>
+                      {t("Reward rate / RPM")}
+                    </FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={cpmRate}
+                        onChange={(event) => setCpmRate(Number(event.target.value))}
+                        className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
                       />
                     </div>
                   </div>
-                </motion.div>
-              )}
-
-              {/* STEP 3: DELIVERABLES */}
-              {step === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div className="flex justify-between items-center border-b border-border/10 pb-4">
-                    <div>
-                      <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Deliverables Specification")}</h3>
-                      <p className="text-xs text-muted-foreground">{t("Outline expected content formats.")}</p>
+                  <div className="space-y-2">
+                    <FieldLabel hint={t("A clip must earn this amount before creator submission is worth reviewing.")}>
+                      {t("Minimum payout threshold")}
+                    </FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={minPayoutThreshold}
+                        onChange={(event) => setMinPayoutThreshold(Number(event.target.value))}
+                        className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
+                      />
                     </div>
-                    <Button 
-                      type="button" 
-                      onClick={addDeliverable} 
-                      variant="outline"
-                      className="rounded-full px-4 py-4 text-xs font-semibold gap-1.5 cursor-pointer border-border hover:bg-secondary/40 text-foreground h-auto"
-                    >
-                      <Plus size={13} /> {t("Add Item")}
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 no-scrollbar">
-                    {deliverables.map((item, idx) => (
-                      <div key={idx} className="p-5 rounded-2xl bg-secondary/20 border border-border/10 flex gap-4 items-start relative">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-muted-foreground uppercase">{t("Format")}</label>
-                            <select
-                              value={item.type}
-                              onChange={(e) => updateDeliverable(idx, "type", e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-border/20 bg-background focus:outline-none focus:border-primary/60 cursor-pointer"
-                            >
-                              <option value="post">{t("Grid Post")}</option>
-                              <option value="video">{t("Short Video")}</option>
-                              <option value="story">{t("Social Story")}</option>
-                            </select>
-                          </div>
-                          
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-muted-foreground uppercase">{t("Quantity")}</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateDeliverable(idx, "quantity", Number(e.target.value))}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-border/20 bg-background focus:outline-none focus:border-primary/60"
-                            />
-                          </div>
-
-                          <div className="space-y-1 md:col-span-2">
-                            <label className="text-[10px] font-bold text-muted-foreground uppercase">{t("Details")}</label>
-                            <input
-                              type="text"
-                              placeholder={t("e.g. keyboard sound clip, workspace layout zoom...")}
-                              value={item.details}
-                              onChange={(e) => updateDeliverable(idx, "details", e.target.value)}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-border/20 bg-background focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/35"
-                            />
-                          </div>
-                        </div>
-
-                        {deliverables.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeDeliverable(idx)}
-                            className="p-2 rounded-xl text-destructive hover:bg-destructive/10 transition-colors mt-4 self-center"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP 4: BUDGET */}
-              {step === 4 && (
-                <motion.div
-                  key="step4"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight text-foreground">
-                      {isPerformance ? t("Budget Pool & Payout Rate") : t("Budget & Escrow Allocation")}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {isPerformance
-                        ? t("Fund a shared pool. Creators earn from it based on the views their clips generate.")
-                        : t("Specify funding committed to this campaign escrow hold.")}
+                    <p className="text-xs text-[var(--business-muted)]">
+                      {minThresholdViews > 0 ? `${compactNumber(minThresholdViews)} ${t("views needed before eligibility")}` : t("No threshold")}
                     </p>
                   </div>
-
-                  <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="p-2 rounded-xl bg-primary/10 text-primary">
-                        {isPerformance ? <Zap size={15} /> : <Lock size={15} />}
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-bold text-foreground">
-                          {isPerformance ? t("Performance budget pool") : t("Secure Stripe Escrow Holding")}
-                        </h4>
-                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
-                          {isPerformance
-                            ? t("The pool is funded on publish. Earnings accrue as views come in and become withdrawable after the holdback window.")
-                            : t("Budget is safely locked upon publishing and only routed to the creator's payout balance after content draft approval.")}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                      {isPerformance ? t("Total Budget Pool ($)") : t("Total Campaign Escrow Budget ($)")}
-                    </label>
-                    <div className="relative rounded-xl shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <span className="text-muted-foreground font-bold text-sm">$</span>
-                      </div>
+                    <FieldLabel hint={t("Set 0 for uncapped earnings per creator.")}>
+                      {t("Maximum payout cap")}
+                    </FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">$</span>
                       <input
                         type="number"
-                        placeholder="2500"
-                        value={budgetTotal}
-                        onChange={(e) => setBudgetTotal(Number(e.target.value))}
-                        className="w-full pl-8 pr-4 py-4 text-xl font-bold rounded-xl border border-border bg-secondary/20 focus:outline-none focus:border-primary/85 focus:ring-1 focus:ring-primary/40 transition-all"
+                        min="0"
+                        value={maxPayoutPerCreator}
+                        onChange={(event) => setMaxPayoutPerCreator(Number(event.target.value))}
+                        className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
                       />
                     </div>
+                    <p className="text-xs text-[var(--business-muted)]">
+                      {maxCapViews > 0 ? `${compactNumber(maxCapViews)} ${t("paid views per creator")}` : t("Uncapped")}
+                    </p>
                   </div>
+                  <div className="space-y-2">
+                    <FieldLabel hint={t("Approved earnings stay pending until the holdback clears.")}>
+                      {t("View holdback")}
+                    </FieldLabel>
+                    <input
+                      type="number"
+                      min="0"
+                      value={viewHoldbackHours}
+                      onChange={(event) => setViewHoldbackHours(Number(event.target.value))}
+                      className="business-input h-12 w-full rounded-xl px-4 text-sm"
+                    />
+                  </div>
+                </div>
 
-                  {isPerformance ? (
-                    <div className="space-y-6">
-                      {/* Platform fee transparency: what the brand pays vs creators earn. */}
-                      <div className="p-4 rounded-2xl bg-secondary/20 border border-border/10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-3">
-                          {t("Budget split")}
-                        </span>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div>
-                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("You pay")}</span>
-                            <span className="text-sm font-extrabold text-foreground">${budgetTotal.toLocaleString()}</span>
-                          </div>
-                          <div className="border-x border-border/10">
-                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("Platform fee (10%)")}</span>
-                            <span className="text-sm font-extrabold text-[#FF9500]">${poolSplit.fee.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="block text-[9px] text-muted-foreground uppercase font-bold mb-0.5">{t("Creators earn")}</span>
-                            <span className="text-sm font-extrabold text-[#34C759]">${poolSplit.creators.toLocaleString()}</span>
-                          </div>
-                        </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <FieldLabel hint={t("Creators can submit clips from the selected social networks.")}>
+                    {t("Eligible platforms")}
+                  </FieldLabel>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {platformOptions.map((platform) => {
+                      const active = platforms.includes(platform.id);
+                      const Icon = platform.icon;
+                      return (
+                        <button
+                          key={platform.id}
+                          type="button"
+                          onClick={() => togglePlatform(platform.id)}
+                          className={cn(
+                            "rounded-xl border p-3 text-left transition-colors",
+                            active
+                              ? "border-[rgba(173,198,255,0.25)] bg-[rgba(173,198,255,0.12)]"
+                              : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"
+                          )}
+                        >
+                          <span className="flex items-center justify-between gap-3">
+                            <Icon size={16} className={active ? "text-[var(--business-primary)]" : "text-[var(--business-muted)]"} />
+                            {active ? <Check size={15} className="text-[var(--business-primary)]" /> : null}
+                          </span>
+                          <span className="mt-3 block text-sm font-semibold text-[var(--business-text)]">{platform.label}</span>
+                          <span className="mt-1 block text-[11px] text-[var(--business-muted)]">{platform.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <FieldLabel hint={t("Rules are stored with the campaign and visible in moderation context.")}>
+                    {t("Content rules / asset kit")}
+                  </FieldLabel>
+                  <textarea
+                    rows={3}
+                    placeholder={t("e.g. Hook in first 2s, tag @brand, no competing products, vertical only. Link your footage or asset folder.")}
+                    value={contentRules}
+                    onChange={(event) => setContentRules(event.target.value)}
+                    className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="mb-4 flex items-center gap-2">
+                    {isUgc ? <FileText size={16} className="text-[var(--business-warning)]" /> : <Scissors size={16} className="text-[var(--business-primary)]" />}
+                    <h3 className="text-sm font-semibold text-[var(--business-text)]">
+                      {isUgc ? t("UGC brief") : t("Clipping spec")}
+                    </h3>
+                  </div>
+                  {isUgc ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <FieldLabel>{t("Creative direction")}</FieldLabel>
+                        <textarea
+                          rows={3}
+                          placeholder={t("Concept, mood, framing, what the content should feel like...")}
+                          value={creativeDirection}
+                          onChange={(event) => setCreativeDirection(event.target.value)}
+                          className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
+                        />
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <FieldLabel>{t("References")}</FieldLabel>
+                        <input
+                          type="text"
+                          placeholder={t("Links to example posts or a moodboard")}
+                          value={references}
+                          onChange={(event) => setReferences(event.target.value)}
+                          className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("CPM you set — $ per 1,000 views (creators are paid this rate)")}</label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground font-bold text-sm">$</span>
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={cpmRate}
-                              onChange={(e) => setCpmRate(Number(e.target.value))}
-                              className="w-full pl-8 pr-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Max payout per creator ($, 0 = uncapped)")}</label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground font-bold text-sm">$</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={maxPayoutPerCreator}
-                              onChange={(e) => setMaxPayoutPerCreator(Number(e.target.value))}
-                              className="w-full pl-8 pr-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("View holdback (hours)")}</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={viewHoldbackHours}
-                            onChange={(e) => setViewHoldbackHours(Number(e.target.value))}
-                            className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
+                          <FieldLabel>{t("Do's")}</FieldLabel>
+                          <textarea
+                            rows={3}
+                            placeholder={t("Show the product in use, natural lighting...")}
+                            value={dos}
+                            onChange={(event) => setDos(event.target.value)}
+                            className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Eligible platforms")}</label>
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {["tiktok", "instagram", "youtube"].map((p) => {
-                              const active = platforms.includes(p);
-                              return (
-                                <button
-                                  key={p}
-                                  type="button"
-                                  onClick={() => togglePlatform(p)}
-                                  className={`text-xs px-3.5 py-2 rounded-full font-semibold capitalize transition-all border ${
-                                    active
-                                      ? "bg-primary text-white border-primary shadow-sm"
-                                      : "bg-secondary/40 text-muted-foreground border-transparent hover:bg-secondary/70 hover:text-foreground"
-                                  }`}
-                                >
-                                  {p}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <FieldLabel>{t("Don'ts")}</FieldLabel>
+                          <textarea
+                            rows={3}
+                            placeholder={t("No competing brands, no profanity...")}
+                            value={donts}
+                            onChange={(event) => setDonts(event.target.value)}
+                            className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
+                          />
                         </div>
                       </div>
-
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Content rules / asset kit")}</label>
-                        <textarea
-                          rows={3}
-                          placeholder={t("e.g. Hook in first 2s, tag @brand, no competing products, vertical only. Link your footage / asset folder.")}
-                          value={contentRules}
-                          onChange={(e) => setContentRules(e.target.value)}
-                          className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
+                        <FieldLabel>{t("Source video / footage link")}</FieldLabel>
+                        <input
+                          type="text"
+                          placeholder={t("https://drive.google.com/... or a YouTube/stream link to clip from")}
+                          value={sourceUrl}
+                          onChange={(event) => setSourceUrl(event.target.value)}
+                          className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
                         />
                       </div>
-
-                      {/* Type-specific requirements: Clipping vs UGC */}
-                      <div className="rounded-2xl border border-border/15 bg-secondary/[0.04] p-5 space-y-4">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                          {isUgc ? <FileText size={13} className="text-[#FF9500]" /> : <Scissors size={13} className="text-primary" />}
-                          {isUgc ? t("UGC brief") : t("Clipping spec")}
-                        </span>
-
-                        {isUgc ? (
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Creative direction")}</label>
-                              <textarea
-                                rows={2}
-                                placeholder={t("Concept, mood, framing, what the content should feel like...")}
-                                value={creativeDirection}
-                                onChange={(e) => setCreativeDirection(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("References (links)")}</label>
-                              <input
-                                type="text"
-                                placeholder={t("Links to example posts / a moodboard")}
-                                value={references}
-                                onChange={(e) => setReferences(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/45"
-                              />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-[#34C759] uppercase tracking-wider block">{t("Do's")}</label>
-                                <textarea
-                                  rows={2}
-                                  placeholder={t("Show the product in use, natural lighting...")}
-                                  value={dos}
-                                  onChange={(e) => setDos(e.target.value)}
-                                  className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-destructive uppercase tracking-wider block">{t("Don'ts")}</label>
-                                <textarea
-                                  rows={2}
-                                  placeholder={t("No competing brands, no profanity...")}
-                                  value={donts}
-                                  onChange={(e) => setDonts(e.target.value)}
-                                  className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Source video / footage link")}</label>
-                              <input
-                                type="text"
-                                placeholder={t("https://drive.google.com/... or a YouTube/stream link to clip from")}
-                                value={sourceUrl}
-                                onChange={(e) => setSourceUrl(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/45"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Min clip length (sec)")}</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={clipMinSec}
-                                  onChange={(e) => setClipMinSec(Number(e.target.value))}
-                                  className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Max clip length (sec)")}</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={clipMaxSec}
-                                  onChange={(e) => setClipMaxSec(Number(e.target.value))}
-                                  className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Clip requirements")}</label>
-                              <textarea
-                                rows={2}
-                                placeholder={t("Which moments to clip, captions/subtitles, aspect ratio...")}
-                                value={clipRequirements}
-                                onChange={(e) => setClipRequirements(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none placeholder:text-muted-foreground/45"
-                              />
-                            </div>
-                          </div>
-                        )}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <FieldLabel>{t("Min clip length")}</FieldLabel>
+                          <input
+                            type="number"
+                            min="1"
+                            value={clipMinSec}
+                            onChange={(event) => setClipMinSec(Number(event.target.value))}
+                            className="business-input h-12 w-full rounded-xl px-4 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <FieldLabel>{t("Max clip length")}</FieldLabel>
+                          <input
+                            type="number"
+                            min="1"
+                            value={clipMaxSec}
+                            onChange={(event) => setClipMaxSec(Number(event.target.value))}
+                            className="business-input h-12 w-full rounded-xl px-4 text-sm"
+                          />
+                        </div>
                       </div>
-
-                      <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
-                        <Eye size={14} className="shrink-0 text-primary" />
-                        <span>
-                          {t("Est. reach:")}{" "}
-                          <span className="font-bold text-foreground">
-                            {cpmRate > 0 ? Math.round((poolSplit.creators / cpmRate) * 1000).toLocaleString() : "—"}
-                          </span>{" "}
-                          {t("paid views before the creator pool is exhausted.")}
-                        </span>
+                      <div className="space-y-2">
+                        <FieldLabel>{t("Clip requirements")}</FieldLabel>
+                        <textarea
+                          rows={3}
+                          placeholder={t("Which moments to clip, captions/subtitles, aspect ratio...")}
+                          value={clipRequirements}
+                          onChange={(event) => setClipRequirements(event.target.value)}
+                          className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
+                        />
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 items-center text-xs text-muted-foreground bg-secondary/20 p-4 rounded-xl border border-border/10">
-                      <Info size={14} className="shrink-0 text-primary" />
-                      <span>{t("Based on targeted niches, matching micro-creators generally expect $1,200 - $3,500.")}</span>
                     </div>
                   )}
-                </motion.div>
-              )}
+                </div>
 
-              {/* STEP 5: TIMELINE */}
-              {step === 5 && (
-                <motion.div
-                  key="step5"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Timeline & Milestones")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("Schedule key deliverable milestones for creators.")}</p>
+                <div className="rounded-2xl border border-[rgba(173,198,255,0.18)] bg-[rgba(173,198,255,0.08)] p-4">
+                  <div className="flex items-start gap-3 text-sm text-[var(--business-muted)]">
+                    <Eye size={17} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
+                    <span>
+                      {t("Estimated creator pool capacity:")}{" "}
+                      <strong className="font-semibold text-[var(--business-text)]">
+                        {estimatedPaidViews > 0 ? compactNumber(estimatedPaidViews) : "0"}
+                      </strong>{" "}
+                      {t("paid views before the available creator pool is exhausted.")}
+                    </span>
                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="flex items-start gap-3 text-sm text-[var(--business-muted)]">
+                  <Info size={17} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
+                  <span>{t("Fixed-fee campaigns open for applications immediately. You fund Stripe escrow only when approving an applicant.")}</span>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        );
+      case 5:
+        return (
+          <motion.div key="timeline" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 5")}
+              title={t("Timeline")}
+              description={t("Set launch, review, and close dates for the campaign workspace.")}
+              icon={CalendarDays}
+            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <FieldLabel>{t("Start date")}</FieldLabel>
+                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel>{t("Draft submission due")}</FieldLabel>
+                <input type="date" value={draftDueDate} onChange={(event) => setDraftDueDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel>{t("End date")}</FieldLabel>
+                <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+              </div>
+            </div>
+          </motion.div>
+        );
+      default:
+        return (
+          <motion.div key="review" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <StepTitle
+              eyebrow={t("Step 6")}
+              title={t("Review and launch")}
+              description={t("Verify the campaign before creating the workspace and funding path.")}
+              icon={CheckCircle2}
+            />
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Start Date")}</label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 transition-all text-foreground"
-                      />
-                    </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("Campaign")}</p>
+                <h3 className="mt-2 text-lg font-semibold text-[var(--business-text)]">{title || t("Untitled Campaign")}</h3>
+                <p className="mt-2 line-clamp-4 text-sm leading-6 text-[var(--business-muted)]">{description || t("No brief description yet.")}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <BusinessStatusPill tone={isPerformance ? "accent" : "success"}>
+                    {isPerformance ? t("Performance") : t("Fixed fee")}
+                  </BusinessStatusPill>
+                  {isPerformance ? (
+                    <BusinessStatusPill tone="info">{isUgc ? t("UGC") : t("Clipping")}</BusinessStatusPill>
+                  ) : null}
+                </div>
+              </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Draft Submission Due")}</label>
-                      <input
-                        type="date"
-                        value={draftDueDate}
-                        onChange={(e) => setDraftDueDate(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 transition-all text-foreground"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("End Date (Close)")}</label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full px-4 py-3 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 transition-all text-foreground"
-                      />
-                    </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("Financial controls")}</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--business-muted)]">{t("Budget")}</span>
+                    <span className="font-semibold text-[var(--business-text)]">{money(budgetTotal)}</span>
                   </div>
-                </motion.div>
-              )}
-
-              {/* STEP 6: REVIEW */}
-              {step === 6 && (
-                <motion.div
-                  key="step6"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={appleSpring}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h3 className="text-lg font-bold tracking-tight text-foreground">{t("Campaign Summary Review")}</h3>
-                    <p className="text-xs text-muted-foreground">{t("Verify details before committing campaign budget lock.")}</p>
-                  </div>
-
-                  <div className="space-y-6 divide-y divide-border/10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
-                      <div>
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Title")}</span>
-                        <p className="text-sm font-bold text-foreground mt-0.5">{title || t("Untitled Campaign")}</p>
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border ${isPerformance ? "bg-primary/10 text-primary border-primary/20" : "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20"}`}>
-                            {isPerformance ? t("Performance") : t("Fixed fee")}
-                          </span>
-                          {isPerformance && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border bg-secondary text-muted-foreground border-border/30 flex items-center gap-1">
-                              {isUgc ? <FileText size={9} /> : <Scissors size={9} />}
-                              {isUgc ? t("UGC") : t("Clipping")}
-                            </span>
-                          )}
-                        </div>
+                  {isPerformance ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[var(--business-muted)]">{t("Reward rate")}</span>
+                        <span className="font-semibold text-[var(--business-primary)]">{money(cpmRate, 2)} RPM</span>
                       </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Target Niches")}</span>
-                        <div className="flex gap-1.5 mt-1">
-                          {niches.map((n) => (
-                            <span key={n} className="text-[9px] font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full uppercase border border-primary/20">
-                              {t(n)}
-                            </span>
-                          ))}
-                        </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[var(--business-muted)]">{t("Minimum payout")}</span>
+                        <span className="font-semibold text-[var(--business-text)]">{money(minPayoutThreshold)}</span>
                       </div>
-                    </div>
-
-                    <div className="pt-4 pb-4">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Brief Description")}</span>
-                      <p className="text-xs text-muted-foreground leading-relaxed mt-1 whitespace-pre-wrap">{description}</p>
-                    </div>
-
-                    {objectives.length > 0 && (
-                      <div className="pt-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("AI Generated Objectives")}</span>
-                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-2 space-y-1">
-                            {objectives.map((o, idx) => (
-                              <li key={idx} className="leading-relaxed">{o}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("AI Brand Guidelines")}</span>
-                          <ul className="list-disc list-inside text-xs text-muted-foreground mt-2 space-y-1">
-                            {guidelines.map((g, idx) => (
-                              <li key={idx} className="leading-relaxed">{g}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-
-                    {kpis.length > 0 && (
-                      <div className="pt-4 pb-4">
-                        <span className="text-[10px] font-bold text-[#FF9500] uppercase tracking-wider flex items-center gap-1.5">
-                          <Sparkles size={11} className="fill-[#FF9500]" /> {t("Target Success KPIs")}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[var(--business-muted)]">{t("Max payout")}</span>
+                        <span className="font-semibold text-[var(--business-text)]">
+                          {maxPayoutPerCreator > 0 ? money(maxPayoutPerCreator) : t("Uncapped")}
                         </span>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2.5">
-                          {kpis.map((k, idx) => (
-                            <div key={idx} className="p-3.5 bg-secondary/25 border border-border/10 rounded-2xl text-[11px] font-semibold text-foreground">
-                              {k}
-                            </div>
-                          ))}
-                        </div>
                       </div>
-                    )}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 pb-4">
-                      <div>
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Required Follower Reach")}</span>
-                        <p className="text-xs font-semibold text-foreground mt-1">{minFollowers.toLocaleString()}+ {t("followers")}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Creator Region")}</span>
-                        <p className="text-xs font-semibold text-foreground mt-1">{t(location)}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Committed Escrow")}</span>
-                        <p className="text-sm font-extrabold text-[#34C759] mt-0.5">${budgetTotal.toLocaleString()}</p>
-                      </div>
-                    </div>
-
-                    <div className="pt-4">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("Milestone Schedule")}</span>
-                      <div className="flex justify-between bg-secondary/20 p-4 rounded-xl border border-border/10 text-xs mt-2.5">
-                        <div>
-                          <span className="block text-[9px] font-bold text-muted-foreground uppercase">{t("Start")}</span>
-                          <span className="font-semibold text-foreground">{startDate}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] font-bold text-muted-foreground uppercase">{t("Draft Due")}</span>
-                          <span className="font-semibold text-foreground">{draftDueDate}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] font-bold text-muted-foreground uppercase">{t("Campaign Close")}</span>
-                          <span className="font-semibold text-foreground">{endDate}</span>
-                        </div>
-                      </div>
-                    </div>
+            {objectives.length > 0 || guidelines.length > 0 || kpis.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {objectives.length > 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("Objectives")}</p>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-[var(--business-muted)]">
+                      {objectives.map((objective) => <li key={objective}>{objective}</li>)}
+                    </ul>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                ) : null}
+                {guidelines.length > 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("Guidelines")}</p>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-[var(--business-muted)]">
+                      {guidelines.map((guideline) => <li key={guideline}>{guideline}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+                {kpis.length > 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("KPIs")}</p>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-[var(--business-muted)]">
+                      {kpis.map((kpi) => <li key={kpi}>{kpi}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
-            {/* Navigation buttons */}
-            <div className="flex justify-between items-center mt-12 pt-6 border-t border-border/10">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">{t("Timeline and targeting")}</p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  ["Start", startDate],
+                  ["Draft due", draftDueDate],
+                  ["Close", endDate],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">{t(label)}</p>
+                    <p className="mt-2 text-sm font-semibold text-[var(--business-text)]">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {niches.length > 0 ? niches.map((niche) => (
+                  <BusinessStatusPill key={niche} tone="accent">{t(niche)}</BusinessStatusPill>
+                )) : <BusinessStatusPill>{t("No niches")}</BusinessStatusPill>}
+              </div>
+            </div>
+          </motion.div>
+        );
+    }
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+      <div className="flex">
+        <Link
+          href="/business/campaigns"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--business-muted)] transition-colors hover:text-[var(--business-text)]"
+        >
+          <ArrowLeft size={16} /> {t("Back to campaigns")}
+        </Link>
+      </div>
+
+      <BusinessSectionHeader
+        eyebrow={t("Campaign Builder")}
+        title={t("Create campaign workspace")}
+        description={t("Launch a production campaign with real budget rules, creator targeting, clipping or UGC requirements, and Stripe funding.")}
+        action={
+          <BusinessActionButton type="button" variant="secondary" icon={Sparkles} onClick={() => setShowAiModal(true)}>
+            {t("Generate with AI")}
+          </BusinessActionButton>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <div className="space-y-5">
+          <BusinessGlassCard variant="elevated" className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--business-primary)]">
+                  {t("Step {step} of 6").replace("{step}", String(step))}
+                </p>
+                <h2 className="mt-1 text-lg font-semibold tracking-normal text-[var(--business-text)]">
+                  {t(wizardSteps[step - 1]?.label ?? "Campaign")}
+                </h2>
+              </div>
+              <span className="text-sm font-semibold text-[var(--business-muted)]">{progressPct}%</span>
+            </div>
+            <BusinessProgressBar value={step} max={wizardSteps.length} />
+            <div className="business-scrollbar-none flex gap-2 overflow-x-auto pb-1">
+              {wizardSteps.map((item) => {
+                const Icon = item.icon;
+                const complete = step > item.id;
+                const active = step === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => complete && setStep(item.id)}
+                    disabled={!complete && !active}
+                    className={cn(
+                      "flex min-w-36 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
+                      active
+                        ? "border-[rgba(173,198,255,0.25)] bg-[rgba(173,198,255,0.12)]"
+                        : complete
+                          ? "border-[rgba(52,211,153,0.18)] bg-[rgba(52,211,153,0.08)] hover:bg-[rgba(52,211,153,0.12)]"
+                          : "border-white/10 bg-white/[0.03] opacity-55"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border",
+                        active
+                          ? "border-[rgba(173,198,255,0.25)] text-[var(--business-primary)]"
+                          : complete
+                            ? "border-[rgba(52,211,153,0.20)] text-[var(--business-success)]"
+                            : "border-white/10 text-[var(--business-muted)]"
+                      )}
+                    >
+                      {complete ? <Check size={15} /> : <Icon size={15} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-[var(--business-text)]">{t(item.label)}</span>
+                      <span className="block truncate text-[10px] text-[var(--business-muted)]">{t(item.description)}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </BusinessGlassCard>
+
+          <BusinessGlassCard variant="elevated" className="p-5 sm:p-6">
+            <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
+
+            <div className="mt-8 flex items-center justify-between border-t border-white/10 pt-5">
               {step > 1 ? (
-                <Button
-                  onClick={() => setStep(step - 1)}
-                  variant="ghost"
-                  className="rounded-full px-5 py-4 font-semibold text-xs gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary/40 h-auto"
-                >
-                  <ArrowLeft size={14} /> {t("Back")}
-                </Button>
+                <BusinessActionButton type="button" variant="ghost" icon={ArrowLeft} onClick={() => setStep(step - 1)}>
+                  {t("Back")}
+                </BusinessActionButton>
               ) : (
-                <div />
+                <span />
               )}
-
-              {step < 6 ? (
-                <Button
-                  onClick={() => {
-                    if (step === 1 && (!title.trim() || !description.trim() || niches.length === 0)) {
-                      toast.error(t("Please fill all fields before proceeding."));
-                      return;
-                    }
-                    setStep(step + 1);
-                  }}
-                  className="rounded-full px-6 py-5 font-bold text-xs gap-1.5 cursor-pointer bg-primary text-white border-0 shadow-md hover:scale-[1.01] active:scale-[0.99] transition-transform h-auto"
-                >
-                  {t("Continue")} <ArrowRight size={14} />
-                </Button>
+              {step < wizardSteps.length ? (
+                <BusinessActionButton type="button" trailingIcon={ArrowRight} onClick={handleContinue}>
+                  {t("Continue")}
+                </BusinessActionButton>
               ) : (
-                <Button
-                  onClick={handlePublishClick}
+                <BusinessActionButton
+                  type="button"
+                  icon={poolPublishing ? Loader2 : isPerformance ? Zap : Lock}
                   disabled={poolPublishing}
-                  className="rounded-full px-6 py-5 font-bold text-xs gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 shadow-md h-auto"
+                  onClick={handlePublishClick}
+                  className={poolPublishing ? "[&_svg]:animate-spin" : undefined}
                 >
-                  {poolPublishing ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : isPerformance ? (
-                    <Zap size={13} />
-                  ) : (
-                    <Lock size={13} />
-                  )}{" "}
-                  {isPerformance ? t("Publish & Fund Pool") : t("Publish & Fund Escrow")}
-                </Button>
+                  {isPerformance ? t("Publish & fund pool") : t("Publish campaign")}
+                </BusinessActionButton>
               )}
             </div>
-          </div>
+          </BusinessGlassCard>
         </div>
 
-        {/* Sidebar: Matchmaking & AI Assistant */}
-        <div className="space-y-6">
-          {/* Smart Matchmaking Preview Card */}
-          <div className="p-6 rounded-3xl bg-card border border-border/30 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-[120px] h-[60px] bg-gradient-to-l from-primary/8 to-transparent blur-[35px] pointer-events-none" />
-            
-            <div className="flex justify-between items-start mb-6">
+        <aside className="space-y-4 lg:sticky lg:top-6">
+          <BusinessMetricCard
+            label={t("Launch readiness")}
+            value={`${readinessPct}%`}
+            detail={`${readinessCount}/${readinessItems.length} ${t("sections complete")}`}
+            icon={Gauge}
+            tone={readinessPct === 100 ? "success" : "accent"}
+          />
+
+          <BusinessGlassCard variant="elevated" className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">{t("Matching Preview")}</span>
-                <h3 className="text-sm font-bold text-foreground">{t("Creators in your niches")}</h3>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+                  {t("Campaign model")}
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-[var(--business-text)]">
+                  {isPerformance ? t("Performance marketplace") : t("Fixed-fee marketplace")}
+                </h3>
               </div>
-              <span className="p-2 rounded-xl bg-primary/10 text-primary">
-                <Target size={14} />
-              </span>
+              <BusinessStatusPill tone={isPerformance ? "accent" : "success"}>
+                {isPerformance ? t("RPM") : t("Escrow")}
+              </BusinessStatusPill>
             </div>
-
-            <div className="space-y-4">
-              <div className="text-center p-4 bg-secondary/20 rounded-2xl border border-border/10">
-                <span className="text-2xl font-extrabold text-foreground block">
-                  {creatorsLoading ? "—" : matchedCreators.length}
-                </span>
-                <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">
-                  {t("Matching creators found")}
-                </span>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--business-muted)]">{t("Budget")}</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--business-text)]">{money(budgetTotal)}</p>
               </div>
-
-              <div className="space-y-2.5">
-                {niches.length === 0 ? (
-                  <div className="py-6 text-center text-[11px] text-muted-foreground leading-relaxed">
-                    {t("Pick target niches to preview creators who match.")}
-                  </div>
-                ) : creatorsLoading ? (
-                  <div className="space-y-2.5">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl border border-border/5">
-                        <div className="w-8 h-8 rounded-full bg-secondary/60 animate-pulse shrink-0" />
-                        <div className="flex-1 space-y-1.5">
-                          <div className="h-2.5 w-24 bg-secondary/60 rounded animate-pulse" />
-                          <div className="h-2 w-16 bg-secondary/60 rounded animate-pulse" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : matchedCreators.length === 0 ? (
-                  <div className="py-6 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-border/40 rounded-2xl bg-secondary/10">
-                    <Users size={20} className="text-muted-foreground/50" />
-                    <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[200px]">
-                      {t("No creators match these niches yet — they'll appear here as creators join Aether.")}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Top matches in target niches")}</span>
-                    {matchedCreators.map((creator) => (
-                      <div key={creator.user_id} className="flex items-center gap-3 p-2.5 bg-secondary/15 hover:bg-secondary/25 rounded-xl transition-colors border border-border/5">
-                        <span className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-border/10 shrink-0 flex items-center justify-center text-xs font-bold uppercase">
-                          {(creator.full_name || "?").charAt(0)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-xs font-bold text-foreground block truncate leading-tight">{creator.full_name || t("Creator")}</span>
-                          <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
-                            {(creator.follower_count ?? 0).toLocaleString()} {t("followers")}
-                          </span>
-                        </div>
-                        {creator.engagement_rate ? (
-                          <span className="text-[10px] font-bold bg-[#34C759]/10 text-[#34C759] px-2 py-0.5 rounded-full shrink-0">
-                            {Number(creator.engagement_rate).toFixed(1)}% ER
-                          </span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Assistant Info */}
-          <div className="p-6 rounded-3xl bg-secondary/20 border border-border/15 space-y-3">
-            <div className="flex gap-2.5 items-start">
-              <Info size={15} className="text-primary shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h4 className="text-xs font-bold text-foreground">{t("Need help creating your campaign brief?")}</h4>
-                <p className="text-[11px] text-muted-foreground leading-normal">
-                  {t("Use the **AI Brief Generator** button in the Goal step. Paste a simple raw idea and our system will draft a professional structure automatically.")}
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--business-muted)]">
+                  {isPerformance ? t("Reward") : t("Status")}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--business-text)]">
+                  {isPerformance ? `${money(cpmRate, 2)} RPM` : t("Open")}
                 </p>
               </div>
             </div>
-          </div>
-        </div>
+            {isPerformance ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs text-[var(--business-muted)]">
+                <div className="flex justify-between">
+                  <span>{t("Creators can earn")}</span>
+                  <span className="font-semibold text-[var(--business-success)]">{money(poolSplit.creators)}</span>
+                </div>
+                <div className="mt-2 flex justify-between">
+                  <span>{t("Estimated paid views")}</span>
+                  <span className="font-semibold text-[var(--business-text)]">
+                    {estimatedPaidViews > 0 ? compactNumber(estimatedPaidViews) : "0"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </BusinessGlassCard>
+
+          <BusinessGlassCard variant="elevated" className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+                  {t("Matching preview")}
+                </p>
+                <h3 className="mt-1 text-base font-semibold text-[var(--business-text)]">{t("Creators in your niches")}</h3>
+              </div>
+              <span className="inline-flex size-10 items-center justify-center rounded-xl border border-[rgba(173,198,255,0.20)] bg-[rgba(173,198,255,0.10)] text-[var(--business-primary)]">
+                <Users size={18} />
+              </span>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-center">
+              <p className="text-2xl font-semibold text-[var(--business-text)]">
+                {creatorsLoading ? "..." : matchedCreators.length}
+              </p>
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
+                {t("Matching creators found")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {niches.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-4 text-center text-xs leading-5 text-[var(--business-muted)]">
+                  {t("Pick target niches to preview matching creators.")}
+                </p>
+              ) : creatorsLoading ? (
+                [0, 1, 2].map((item) => (
+                  <div key={item} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <span className="apple-skeleton size-8 rounded-full" />
+                    <span className="min-w-0 flex-1 space-y-2">
+                      <span className="apple-skeleton block h-3 w-24 rounded-full" />
+                      <span className="apple-skeleton block h-2 w-16 rounded-full" />
+                    </span>
+                  </div>
+                ))
+              ) : matchedCreators.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-4 text-center text-xs leading-5 text-[var(--business-muted)]">
+                  {t("No creators match these niches yet.")}
+                </p>
+              ) : (
+                matchedCreators.slice(0, 4).map((creator) => (
+                  <div key={creator.user_id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-xs font-semibold uppercase text-[var(--business-primary)]">
+                      {(creator.full_name || "?").charAt(0)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold text-[var(--business-text)]">{creator.full_name || t("Creator")}</span>
+                      <span className="mt-0.5 block truncate text-[10px] text-[var(--business-muted)]">
+                        {(creator.follower_count ?? 0).toLocaleString()} {t("followers")}
+                      </span>
+                    </span>
+                    {creator.engagement_rate ? (
+                      <span className="rounded-full bg-[rgba(52,211,153,0.10)] px-2 py-0.5 text-[10px] font-semibold text-[var(--business-success)]">
+                        {Number(creator.engagement_rate).toFixed(1)}%
+                      </span>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </BusinessGlassCard>
+
+          <BusinessGlassCard variant="default" className="space-y-3">
+            <div className="flex items-start gap-3">
+              <Info size={16} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--business-text)]">{t("AI brief assistant")}</h3>
+                <p className="mt-1 text-xs leading-5 text-[var(--business-muted)]">
+                  {t("Paste a raw product idea and Aether will draft title, audience, deliverables, milestones, and KPIs.")}
+                </p>
+              </div>
+            </div>
+          </BusinessGlassCard>
+        </aside>
       </div>
 
-      {/* MODAL: AI Brief generator */}
       <AnimatePresence>
-        {showAiModal && (
+        {showAiModal ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => !aiGenerating && setShowAiModal(false)}
-              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-[#050914]/80 backdrop-blur-sm"
             />
-
-            {/* Modal Body */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={appleSpring}
-              className="w-full max-w-lg bg-card border border-border/40 rounded-3xl shadow-2xl p-8 overflow-hidden relative z-10"
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="business-glass-elevated relative z-10 w-full max-w-lg rounded-2xl p-6"
             >
-              {aiGenerating && (
-                <div className="absolute inset-0 bg-popover/95 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-4 text-center p-6">
-                  <div className="relative">
-                    <Loader2 size={36} className="animate-spin text-primary" />
-                    <Sparkles size={16} className="absolute -top-1 -right-1 text-purple-500 animate-pulse" />
-                  </div>
+              {aiGenerating ? (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 rounded-2xl bg-[#07101f]/95 p-6 text-center backdrop-blur-md">
+                  <Loader2 size={34} className="animate-spin text-[var(--business-primary)]" />
                   <div>
-                    <h4 className="text-sm font-bold text-foreground">{t("Aether AI is crafting your brief...")}</h4>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-[280px] leading-relaxed">{t("Generating titles, audience demographics, target niches, milestones, and deliverable targets.")}</p>
+                    <h4 className="text-sm font-semibold text-[var(--business-text)]">{t("Aether AI is crafting your brief")}</h4>
+                    <p className="mt-1 max-w-xs text-xs leading-5 text-[var(--business-muted)]">
+                      {t("Generating title, audience, niches, milestones, and deliverable targets.")}
+                    </p>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              <div className="flex items-center gap-2 mb-4">
-                <span className="p-2 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/25">
-                  <Sparkles size={16} />
-                </span>
-                <h3 className="text-lg font-bold tracking-tight text-foreground">{t("AI Brief Assistant")}</h3>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(208,188,255,0.20)] bg-[rgba(208,188,255,0.10)] text-[var(--business-secondary)]">
+                    <Sparkles size={18} />
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-semibold text-[var(--business-text)]">{t("AI Brief Assistant")}</h3>
+                    <p className="mt-1 text-sm leading-6 text-[var(--business-muted)]">
+                      {t("Paste your raw idea, product details, or campaign goals.")}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAiModal(false)}
+                  disabled={aiGenerating}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[var(--business-muted)] transition-colors hover:text-[var(--business-text)]"
+                  aria-label={t("Close")}
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
-                {t("Paste your raw product idea, brand pillars, or campaign goals. Aether will auto-populate and configure the multi-step wizard parameters.")}
-              </p>
-
               <textarea
-                placeholder={t("e.g. Launching a new aluminum desk stand for Apple Studio Display. Focus on productivity tech influencers with organic visual desks. Budget around $3000...")}
+                placeholder={t("e.g. Launching a new aluminum desk stand for Apple Studio Display. Focus on productivity tech creators with organic desk setup visuals. Budget around $3000...")}
                 value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 rounded-xl border border-border bg-secondary/30 text-sm focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all resize-none mb-6 text-foreground placeholder:text-muted-foreground/35"
+                onChange={(event) => setAiPrompt(event.target.value)}
+                rows={5}
+                className="business-input mt-5 w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
               />
 
-              <div className="flex justify-end gap-3 border-t border-border/10 pt-4">
-                <Button 
-                  onClick={() => setShowAiModal(false)} 
-                  variant="ghost" 
-                  disabled={aiGenerating}
-                  className="rounded-full px-5 py-3 text-xs font-semibold cursor-pointer text-muted-foreground hover:text-foreground h-auto"
-                >
+              <div className="mt-5 flex justify-end gap-3 border-t border-white/10 pt-4">
+                <BusinessActionButton type="button" variant="ghost" disabled={aiGenerating} onClick={() => setShowAiModal(false)}>
                   {t("Cancel")}
-                </Button>
-                <Button
-                  onClick={handleGenerateAiBrief}
-                  disabled={aiGenerating || !aiPrompt.trim()}
-                  className="rounded-full px-5 py-3 text-xs font-bold bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] hover:opacity-90 transition-opacity text-white border-0 cursor-pointer shadow-md h-auto"
-                >
+                </BusinessActionButton>
+                <BusinessActionButton type="button" icon={Sparkles} disabled={aiGenerating || !aiPrompt.trim()} onClick={handleGenerateAiBrief}>
                   {t("Generate Brief")}
-                </Button>
+                </BusinessActionButton>
               </div>
             </motion.div>
           </div>
-        )}
+        ) : null}
       </AnimatePresence>
 
-      {/* MODAL: Fixed-fee publish confirmation */}
       <AnimatePresence>
-        {showPaymentModal && (
+        {showPaymentModal ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => !paying && setShowPaymentModal(false)}
-              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-[#050914]/80 backdrop-blur-sm"
             />
-
-            {/* Modal Body */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={appleSpring}
-              className="w-full max-w-md bg-card border border-border/40 rounded-3xl shadow-2xl p-8 overflow-hidden relative z-10"
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="business-glass-elevated relative z-10 w-full max-w-md rounded-2xl p-6"
             >
-              {paying && (
-                <div className="absolute inset-0 bg-popover/95 backdrop-blur-md z-20 flex flex-col items-center justify-center gap-3 text-center">
-                  <Loader2 size={32} className="animate-spin text-primary" />
+              {paying ? (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-2xl bg-[#07101f]/95 p-6 text-center backdrop-blur-md">
+                  <Loader2 size={32} className="animate-spin text-[var(--business-primary)]" />
                   <div>
-                    <h4 className="text-sm font-bold text-foreground">{t("Publishing campaign...")}</h4>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("Creating your campaign and opening it for applications.")}</p>
+                    <h4 className="text-sm font-semibold text-[var(--business-text)]">{t("Publishing campaign")}</h4>
+                    <p className="mt-1 text-xs leading-5 text-[var(--business-muted)]">{t("Creating your campaign and opening it for applications.")}</p>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              <div className="flex justify-between items-start mb-6">
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary block mb-0.5">{t("Review & Publish")}</span>
-                  <h3 className="text-lg font-bold text-foreground">{t("Publish Fixed-Fee Campaign")}</h3>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-primary)]">{t("Review & Publish")}</p>
+                  <h3 className="mt-1 text-lg font-semibold text-[var(--business-text)]">{t("Publish fixed-fee campaign")}</h3>
                 </div>
-                <span className="p-2 rounded-xl bg-primary/10 border border-primary/25 text-primary">
-                  <Check size={16} />
+                <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(52,211,153,0.20)] bg-[rgba(52,211,153,0.10)] text-[var(--business-success)]">
+                  <Check size={18} />
                 </span>
               </div>
 
-              <div className="mb-6 p-4 rounded-2xl bg-secondary/30 border border-border/10 text-xs space-y-1">
-                <div className="flex justify-between font-semibold text-muted-foreground">
-                  <span>{t("Campaign:")}</span>
-                  <span className="text-foreground text-right truncate max-w-[200px]">{title || t("New Campaign")}</span>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+                <div className="flex justify-between gap-4 text-[var(--business-muted)]">
+                  <span>{t("Campaign")}</span>
+                  <span className="max-w-48 truncate text-right font-semibold text-[var(--business-text)]">{title || t("New Campaign")}</span>
                 </div>
-                <div className="flex justify-between font-semibold text-muted-foreground pt-1">
-                  <span>{t("Target niches:")}</span>
-                  <span className="text-foreground text-right truncate max-w-[200px]">{niches.length > 0 ? niches.join(", ") : "—"}</span>
+                <div className="mt-2 flex justify-between gap-4 text-[var(--business-muted)]">
+                  <span>{t("Target niches")}</span>
+                  <span className="max-w-48 truncate text-right font-semibold text-[var(--business-text)]">
+                    {niches.length > 0 ? niches.join(", ") : "—"}
+                  </span>
                 </div>
-                <div className="flex justify-between font-bold text-sm border-t border-border/10 pt-2.5 mt-2.5">
-                  <span>{t("Campaign Budget:")}</span>
-                  <span className="text-foreground">${budgetTotal.toLocaleString()}</span>
+                <div className="mt-3 flex justify-between gap-4 border-t border-white/10 pt-3 font-semibold">
+                  <span className="text-[var(--business-muted)]">{t("Campaign budget")}</span>
+                  <span className="text-[var(--business-text)]">{money(budgetTotal)}</span>
                 </div>
               </div>
 
-              <div className="flex gap-2 items-start text-[11px] text-muted-foreground leading-relaxed mb-8 bg-secondary/10 p-3 rounded-xl border border-border/5">
-                <Lock size={13} className="text-primary shrink-0 mt-0.5" />
-                <span>{t("No charge now. Your campaign opens for applications immediately — you fund Stripe escrow per creator when you approve them from the campaign workspace.")}</span>
+              <div className="mt-4 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-[var(--business-muted)]">
+                <Lock size={15} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
+                <span>{t("No charge now. Your campaign opens for applications immediately; you fund Stripe escrow per creator when you approve them.")}</span>
               </div>
 
-              <div className="flex gap-3 border-t border-border/10 pt-4">
-                <Button 
-                  onClick={() => setShowPaymentModal(false)} 
-                  variant="ghost" 
-                  disabled={paying}
-                  className="w-1/2 rounded-full py-3 text-xs font-semibold cursor-pointer text-muted-foreground hover:text-foreground h-auto"
-                >
+              <div className="mt-5 flex justify-end gap-3 border-t border-white/10 pt-4">
+                <BusinessActionButton type="button" variant="ghost" disabled={paying} onClick={() => setShowPaymentModal(false)}>
                   {t("Cancel")}
-                </Button>
-                <Button
-                  onClick={handleConfirmPayment}
-                  disabled={paying}
-                  className="w-1/2 rounded-full py-3 text-xs font-bold bg-primary hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-transform text-primary-foreground border-0 cursor-pointer shadow-md h-auto"
-                >
+                </BusinessActionButton>
+                <BusinessActionButton type="button" disabled={paying} onClick={handleConfirmPayment}>
                   {t("Publish Campaign")}
-                </Button>
+                </BusinessActionButton>
               </div>
             </motion.div>
           </div>
-        )}
+        ) : null}
       </AnimatePresence>
 
-      {/* Performance pool funding — real Stripe Elements */}
       <PoolPaymentModal
         open={!!poolFunding}
         clientSecret={poolFunding?.clientSecret ?? null}
