@@ -1088,7 +1088,7 @@ export default function BusinessPaymentsPage() {
                 <DollarSign size={18} className="text-[var(--business-primary)]" />
               </div>
               <p className="mt-3 text-sm leading-6 text-[var(--business-muted)]">
-                {treasury.fixedFeeCampaigns.length} {t("fixed-fee campaigns")} - {money(balances.pending, 2)} {t("pending escrow")}
+                {treasury.fixedFeeCampaigns.length} {t("fixed-fee campaigns")} - {money(balances.pending, 2)} {t("pending fixed-fee escrow")}
               </p>
             </BusinessGlassCard>
 

@@ -567,7 +567,7 @@ export default function BusinessDashboard() {
               </span>
               <div>
                 <p className="text-sm font-semibold text-[var(--business-text)]">
-                  {t("Payment wallet connection required")}
+                  {t("Stripe funding connection required")}
                 </p>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--business-muted)]">
                   {t("Connect Stripe to fund campaign budget pools and pay approved creator earnings.")}

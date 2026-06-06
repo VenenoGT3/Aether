@@ -637,7 +637,7 @@ export function BusinessCampaignInsights({
             <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
-                  {t("Influencer management")}
+                  {t("Creator management")}
                 </p>
                 <h2 className="mt-2 text-lg font-semibold tracking-normal text-[var(--business-text)]">
                   {t("Creator performance")}

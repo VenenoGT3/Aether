@@ -599,7 +599,7 @@ export default function NewCampaignWizard() {
       if (res.success && res.campaign) {
         celebrate();
         toast.success(t("Campaign Published!"), {
-          description: t("Your campaign is live. Approve applicants and fund escrow per creator from the campaign workspace."),
+          description: t("Your fixed-fee campaign is live. Approve applicants and fund legacy Stripe escrow per creator from the campaign workspace."),
         });
         setShowPaymentModal(false);
         router.push("/business/dashboard");
@@ -640,7 +640,7 @@ export default function NewCampaignWizard() {
               <ChoiceCard
                 active={!isPerformance}
                 title={t("Fixed-fee campaign")}
-                description={t("Creators apply, you approve, and escrow is funded per creator contract.")}
+                description={t("Creators apply, you approve, and legacy Stripe escrow is funded per creator.")}
                 icon={Lock}
                 tone="success"
                 onClick={() => setCampaignType("fixed")}
@@ -863,7 +863,7 @@ export default function NewCampaignWizard() {
               description={
                 isPerformance
                   ? t("Configure the funded pool, RPM, payout threshold, creator cap, platforms, and content requirements.")
-                  : t("Set the total campaign budget shown to applicants. Escrow is funded per approved creator.")
+                  : t("Set the fixed-fee budget shown to applicants. Legacy Stripe escrow is funded per approved creator.")
               }
               icon={CircleDollarSign}
             />
@@ -1137,7 +1137,7 @@ export default function NewCampaignWizard() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <div className="flex items-start gap-3 text-sm text-[var(--business-muted)]">
                   <Info size={17} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
-                  <span>{t("Fixed-fee campaigns open for applications immediately. You fund Stripe escrow only when approving an applicant.")}</span>
+                  <span>{t("Fixed-fee campaigns open for applications immediately. You fund legacy Stripe escrow only when approving an applicant.")}</span>
                 </div>
               </div>
             )}
@@ -1405,7 +1405,7 @@ export default function NewCampaignWizard() {
                 </h3>
               </div>
               <BusinessStatusPill tone={isPerformance ? "accent" : "success"}>
-                {isPerformance ? t("RPM") : t("Escrow")}
+                {isPerformance ? t("RPM") : t("Fixed-fee")}
               </BusinessStatusPill>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1641,7 +1641,7 @@ export default function NewCampaignWizard() {
 
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-[var(--business-muted)]">
                 <Lock size={15} className="mt-0.5 shrink-0 text-[var(--business-primary)]" />
-                <span>{t("No charge now. Your campaign opens for applications immediately; you fund Stripe escrow per creator when you approve them.")}</span>
+                <span>{t("No charge now. Your fixed-fee campaign opens for applications immediately; you fund legacy Stripe escrow per creator when you approve them.")}</span>
               </div>
 
               <div className="mt-5 flex justify-end gap-3 border-t border-white/10 pt-4">
