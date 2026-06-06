@@ -61,8 +61,9 @@ export function NavBar() {
 
   const isAuthPage = pathname?.startsWith("/auth");
   const isBusinessRoute = pathname?.startsWith("/business");
+  const isCreatorRoute = pathname?.startsWith("/creator");
 
-  if (isAuthPage || isBusinessRoute) return null;
+  if (isAuthPage || isBusinessRoute || isCreatorRoute) return null;
 
   return (
     <header className="sticky top-0 z-50 w-full glass-nav">
