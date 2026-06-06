@@ -494,6 +494,7 @@ export default function BrandModerationPage() {
                   type="search"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
+                  aria-label={t("Search creator or campaign")}
                   placeholder={t("Search creator or campaign")}
                   className="business-input h-10 w-full rounded-xl pl-10 pr-4 text-sm placeholder:text-[var(--business-muted)]"
                 />
@@ -506,6 +507,7 @@ export default function BrandModerationPage() {
                   key={filter}
                   type="button"
                   onClick={() => setActiveFilter(filter)}
+                  aria-pressed={activeFilter === filter}
                   className={cn(
                     "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
                     activeFilter === filter
@@ -759,6 +761,7 @@ export default function BrandModerationPage() {
                       rows={4}
                       placeholder={t("Feedback for the creator — required to request changes, optional when rejecting.")}
                       value={notes[selectedClip.id] ?? ""}
+                      aria-label={t("Creator feedback")}
                       onChange={(event) =>
                         setNotes((current) => ({ ...current, [selectedClip.id]: event.target.value }))
                       }
@@ -774,6 +777,7 @@ export default function BrandModerationPage() {
                         onChange={(event) =>
                           setScores((current) => ({ ...current, [selectedClip.id]: Number(event.target.value) }))
                         }
+                        aria-label={t("Quality score")}
                         className="business-input h-9 rounded-xl px-3 text-xs"
                       >
                         <option value="">{t("—")}</option>

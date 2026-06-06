@@ -473,7 +473,7 @@ function CampaignRowItem({
 
   return (
     <BusinessGlassCard variant="elevated" className="p-4 transition-colors hover:bg-white/[0.08]">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_170px_150px_180px] lg:items-center">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(140px,170px)_minmax(120px,150px)_minmax(140px,180px)] lg:items-center">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <BusinessStatusPill tone={statusTone(campaign.status)}>
@@ -766,6 +766,7 @@ export default function CampaignsPage() {
               placeholder={t("Search campaigns, briefs, or niches")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label={t("Search campaigns, briefs, or niches")}
               className="business-input h-11 w-full rounded-xl pl-10 pr-4 text-sm placeholder:text-[var(--business-muted)]"
             />
           </div>
@@ -779,6 +780,7 @@ export default function CampaignsPage() {
                 type="button"
                 onClick={() => setViewMode("cards")}
                 aria-label={t("Card view")}
+                aria-pressed={viewMode === "cards"}
                 className={cn(
                   "inline-flex size-8 items-center justify-center rounded-lg transition-colors",
                   viewMode === "cards"
@@ -792,6 +794,7 @@ export default function CampaignsPage() {
                 type="button"
                 onClick={() => setViewMode("rows")}
                 aria-label={t("Row view")}
+                aria-pressed={viewMode === "rows"}
                 className={cn(
                   "inline-flex size-8 items-center justify-center rounded-lg transition-colors",
                   viewMode === "rows"
@@ -811,6 +814,7 @@ export default function CampaignsPage() {
               key={filter}
               type="button"
               onClick={() => setActiveFilter(filter)}
+              aria-pressed={activeFilter === filter}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
                 activeFilter === filter
@@ -831,6 +835,7 @@ export default function CampaignsPage() {
             <button
               type="button"
               onClick={() => setSelectedNiche("all")}
+              aria-pressed={selectedNiche === "all"}
               className={cn(
                 "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                 selectedNiche === "all"
@@ -845,6 +850,7 @@ export default function CampaignsPage() {
                 key={niche}
                 type="button"
                 onClick={() => setSelectedNiche(niche)}
+                aria-pressed={selectedNiche === niche}
                 className={cn(
                   "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                   selectedNiche === niche

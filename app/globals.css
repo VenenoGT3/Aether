@@ -304,6 +304,14 @@
   background: var(--business-bg);
   color: var(--business-text);
   font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: clip;
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
+}
+
+@supports not (overflow: clip) {
+  .business-portal {
+    overflow-x: hidden;
+  }
 }
 
 .business-portal .business-font-display {
@@ -397,4 +405,20 @@
 
 body:has(.business-route-shell) > main {
   padding-bottom: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .business-portal *,
+  .business-portal *::before,
+  .business-portal *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .business-portal .business-accent-button:hover,
+  .business-portal .business-accent-button:active {
+    transform: none;
+  }
 }

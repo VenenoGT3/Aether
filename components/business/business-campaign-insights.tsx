@@ -495,7 +495,7 @@ export function BusinessCampaignInsights({
                   </BusinessStatusPill>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:min-w-[780px]">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:w-full xl:max-w-[780px]">
                 <DetailCell label={t("RPM")} value={data.campaign.cpmRate ? `${money(data.campaign.cpmRate, 2)} / 1k` : t("Not set")} />
                 <DetailCell label={t("Minimum")} value={data.campaign.minPayoutThreshold ? money(data.campaign.minPayoutThreshold, 2) : t("None")} />
                 <DetailCell label={t("Creator cap")} value={data.campaign.maxPayoutPerCreator ? money(data.campaign.maxPayoutPerCreator, 2) : t("No cap")} />
@@ -649,6 +649,7 @@ export function BusinessCampaignInsights({
                     key={filter.id}
                     type="button"
                     onClick={() => setActiveCreatorFilter(filter.id)}
+                    aria-pressed={activeCreatorFilter === filter.id}
                     className={cn(
                       "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
                       activeCreatorFilter === filter.id
@@ -773,7 +774,7 @@ export function BusinessCampaignInsights({
             />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-white/10">
-              <div className="hidden grid-cols-[1.2fr_0.8fr_120px_120px_120px] gap-4 border-b border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)] md:grid">
+              <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(90px,120px)_minmax(90px,120px)_minmax(90px,120px)] gap-4 border-b border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)] md:grid">
                 <span>{t("Clip")}</span>
                 <span>{t("Creator")}</span>
                 <span className="text-right">{t("Views")}</span>
@@ -787,7 +788,7 @@ export function BusinessCampaignInsights({
                     href={clip.postUrl || undefined}
                     target={clip.postUrl ? "_blank" : undefined}
                     rel="noreferrer"
-                    className="grid gap-3 px-4 py-4 transition-colors hover:bg-white/[0.04] md:grid-cols-[1.2fr_0.8fr_120px_120px_120px] md:items-center"
+                    className="grid gap-3 px-4 py-4 transition-colors hover:bg-white/[0.04] md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(90px,120px)_minmax(90px,120px)_minmax(90px,120px)] md:items-center"
                   >
                     <div className="min-w-0">
                       <div className="mb-1 flex flex-wrap items-center gap-2">

@@ -115,7 +115,7 @@ function BusinessNavLink({
       href={href}
       className={cn(
         "relative inline-flex items-center justify-center gap-2 rounded-lg border border-transparent text-sm font-semibold tracking-normal transition-all",
-        compact ? "min-w-16 flex-1 flex-col gap-1 px-2 py-2 text-[10px]" : "px-3 py-2",
+        compact ? "min-w-0 flex-1 flex-col gap-1 px-1 py-2 text-[9px] leading-none" : "px-3 py-2",
         active
           ? "text-[var(--business-text)]"
           : "text-[var(--business-muted)] hover:bg-white/[0.06] hover:text-[var(--business-text)]"
@@ -172,7 +172,10 @@ function BusinessProfileMenu({ user }: { user: Profile | null }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(173,198,255,0.60)]">
+      <DropdownMenuTrigger
+        aria-label={t("Open business profile menu")}
+        className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(173,198,255,0.60)]"
+      >
         <BusinessAvatar user={user} />
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -257,7 +260,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
   const businessName = user?.company_name || user?.full_name || "Business";
 
   return (
-    <div className="business-route-shell business-portal min-h-[100svh] bg-[linear-gradient(180deg,#0c1324_0%,#10131d_58%,#0b0f18_100%)] text-[var(--business-text)]">
+    <div className="business-route-shell business-portal min-h-[100svh] overflow-x-clip bg-[linear-gradient(180deg,#0c1324_0%,#10131d_58%,#0b0f18_100%)] text-[var(--business-text)]">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[rgba(12,19,36,0.86)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6">
@@ -312,10 +315,10 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
         <span className="truncate">{profileLoaded ? businessName : "Loading workspace"}</span>
       </div>
 
-      <div className="relative z-10 pb-24 md:pb-0">{children}</div>
+      <div className="relative z-10 pb-[calc(env(safe-area-inset-bottom)+6rem)] md:pb-0">{children}</div>
 
       <nav
-        className="fixed bottom-3 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-lg border border-white/10 bg-[rgba(12,19,36,0.92)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-lg border border-white/10 bg-[rgba(12,19,36,0.92)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
         aria-label="Business mobile navigation"
       >
         <div className="flex items-center justify-between gap-1">

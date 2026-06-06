@@ -993,6 +993,7 @@ export default function BusinessPaymentsPage() {
                     key={filter.id}
                     type="button"
                     onClick={() => setActiveLedgerFilter(filter.id)}
+                    aria-pressed={activeLedgerFilter === filter.id}
                     className={cn(
                       "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
                       activeLedgerFilter === filter.id
@@ -1015,7 +1016,7 @@ export default function BusinessPaymentsPage() {
               />
             ) : (
               <div className="overflow-hidden rounded-2xl border border-white/10">
-                <div className="hidden grid-cols-[1.25fr_1fr_120px_128px] gap-4 border-b border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)] md:grid">
+                <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(90px,120px)_minmax(96px,128px)] gap-4 border-b border-white/10 bg-white/[0.04] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)] md:grid">
                   <span>{t("Movement")}</span>
                   <span>{t("Status")}</span>
                   <span className="text-right">{t("Amount")}</span>
@@ -1026,7 +1027,7 @@ export default function BusinessPaymentsPage() {
                     <Link
                       key={row.id}
                       href={row.href ?? "/business/payments"}
-                      className="grid gap-3 px-4 py-4 transition-colors hover:bg-white/[0.04] md:grid-cols-[1.25fr_1fr_120px_128px] md:items-center"
+                      className="grid gap-3 px-4 py-4 transition-colors hover:bg-white/[0.04] md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(90px,120px)_minmax(96px,128px)] md:items-center"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--business-primary)]">

@@ -207,6 +207,7 @@ function ChoiceCard({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "min-h-32 rounded-2xl border p-4 text-left transition-colors",
         active
@@ -677,6 +678,7 @@ export default function NewCampaignWizard() {
                   placeholder={t("e.g. Summer tech capsule launch")}
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
+                  aria-label={t("Campaign title")}
                   className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
                 />
               </div>
@@ -689,6 +691,7 @@ export default function NewCampaignWizard() {
                   placeholder={t("Detail your product highlights, brand aesthetics, guidelines, and instructions for creators...")}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
+                  aria-label={t("Core brief")}
                   rows={5}
                   className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                 />
@@ -706,6 +709,7 @@ export default function NewCampaignWizard() {
                         key={niche}
                         type="button"
                         onClick={() => handleNicheToggle(niche)}
+                        aria-pressed={active}
                         className={cn(
                           "rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
                           active
@@ -735,7 +739,7 @@ export default function NewCampaignWizard() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <FieldLabel>{t("Audience location")}</FieldLabel>
-                <select value={location} onChange={(event) => setLocation(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                <select value={location} onChange={(event) => setLocation(event.target.value)} aria-label={t("Audience location")} className="business-input h-12 w-full rounded-xl px-4 text-sm">
                   <option>{t("United States")}</option>
                   <option>{t("Europe")}</option>
                   <option>{t("Japan & Asia")}</option>
@@ -744,7 +748,7 @@ export default function NewCampaignWizard() {
               </div>
               <div className="space-y-2">
                 <FieldLabel>{t("Age range")}</FieldLabel>
-                <select value={ageRange} onChange={(event) => setAgeRange(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                <select value={ageRange} onChange={(event) => setAgeRange(event.target.value)} aria-label={t("Age range")} className="business-input h-12 w-full rounded-xl px-4 text-sm">
                   <option>18-24</option>
                   <option>18-34</option>
                   <option>25-45</option>
@@ -753,7 +757,7 @@ export default function NewCampaignWizard() {
               </div>
               <div className="space-y-2">
                 <FieldLabel>{t("Gender distribution")}</FieldLabel>
-                <select value={gender} onChange={(event) => setGender(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm">
+                <select value={gender} onChange={(event) => setGender(event.target.value)} aria-label={t("Gender distribution")} className="business-input h-12 w-full rounded-xl px-4 text-sm">
                   <option>{t("All")}</option>
                   <option>{t("Female")}</option>
                   <option>{t("Male")}</option>
@@ -768,6 +772,7 @@ export default function NewCampaignWizard() {
                   min="0"
                   value={minFollowers}
                   onChange={(event) => setMinFollowers(Number(event.target.value))}
+                  aria-label={t("Minimum follower count")}
                   className="business-input h-12 w-full rounded-xl px-4 text-sm"
                 />
               </div>
@@ -807,6 +812,7 @@ export default function NewCampaignWizard() {
                       <select
                         value={item.type}
                         onChange={(event) => updateDeliverable(index, "type", event.target.value)}
+                        aria-label={`${t("Format")} ${index + 1}`}
                         className="business-input h-11 w-full rounded-xl px-3 text-sm"
                       >
                         <option value="post">{t("Grid Post")}</option>
@@ -821,6 +827,7 @@ export default function NewCampaignWizard() {
                         min="1"
                         value={item.quantity}
                         onChange={(event) => updateDeliverable(index, "quantity", Number(event.target.value))}
+                        aria-label={`${t("Quantity")} ${index + 1}`}
                         className="business-input h-11 w-full rounded-xl px-3 text-sm"
                       />
                     </div>
@@ -831,6 +838,7 @@ export default function NewCampaignWizard() {
                         placeholder={t("e.g. Hook in first 2 seconds, captions included")}
                         value={item.details}
                         onChange={(event) => updateDeliverable(index, "details", event.target.value)}
+                        aria-label={`${t("Details")} ${index + 1}`}
                         className="business-input h-11 w-full rounded-xl px-3 text-sm placeholder:text-[var(--business-muted)]"
                       />
                     </div>
@@ -880,6 +888,7 @@ export default function NewCampaignWizard() {
                     min="1"
                     value={budgetTotal}
                     onChange={(event) => setBudgetTotal(Number(event.target.value))}
+                    aria-label={isPerformance ? t("Total budget pool") : t("Total campaign budget")}
                     className="business-input h-14 w-full rounded-xl pl-8 pr-4 text-xl font-semibold"
                   />
                 </div>
@@ -921,6 +930,7 @@ export default function NewCampaignWizard() {
                         step="0.1"
                         value={cpmRate}
                         onChange={(event) => setCpmRate(Number(event.target.value))}
+                        aria-label={t("Reward rate / RPM")}
                         className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
                       />
                     </div>
@@ -936,6 +946,7 @@ export default function NewCampaignWizard() {
                         min="0"
                         value={minPayoutThreshold}
                         onChange={(event) => setMinPayoutThreshold(Number(event.target.value))}
+                        aria-label={t("Minimum payout threshold")}
                         className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
                       />
                     </div>
@@ -954,6 +965,7 @@ export default function NewCampaignWizard() {
                         min="0"
                         value={maxPayoutPerCreator}
                         onChange={(event) => setMaxPayoutPerCreator(Number(event.target.value))}
+                        aria-label={t("Maximum payout cap")}
                         className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
                       />
                     </div>
@@ -970,6 +982,7 @@ export default function NewCampaignWizard() {
                       min="0"
                       value={viewHoldbackHours}
                       onChange={(event) => setViewHoldbackHours(Number(event.target.value))}
+                      aria-label={t("View holdback")}
                       className="business-input h-12 w-full rounded-xl px-4 text-sm"
                     />
                   </div>
@@ -988,6 +1001,7 @@ export default function NewCampaignWizard() {
                           key={platform.id}
                           type="button"
                           onClick={() => togglePlatform(platform.id)}
+                          aria-pressed={active}
                           className={cn(
                             "rounded-xl border p-3 text-left transition-colors",
                             active
@@ -1016,6 +1030,7 @@ export default function NewCampaignWizard() {
                     placeholder={t("e.g. Hook in first 2s, tag @brand, no competing products, vertical only. Link your footage or asset folder.")}
                     value={contentRules}
                     onChange={(event) => setContentRules(event.target.value)}
+                    aria-label={t("Content rules / asset kit")}
                     className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                   />
                 </div>
@@ -1036,6 +1051,7 @@ export default function NewCampaignWizard() {
                           placeholder={t("Concept, mood, framing, what the content should feel like...")}
                           value={creativeDirection}
                           onChange={(event) => setCreativeDirection(event.target.value)}
+                          aria-label={t("Creative direction")}
                           className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                         />
                       </div>
@@ -1046,6 +1062,7 @@ export default function NewCampaignWizard() {
                           placeholder={t("Links to example posts or a moodboard")}
                           value={references}
                           onChange={(event) => setReferences(event.target.value)}
+                          aria-label={t("References")}
                           className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
                         />
                       </div>
@@ -1057,6 +1074,7 @@ export default function NewCampaignWizard() {
                             placeholder={t("Show the product in use, natural lighting...")}
                             value={dos}
                             onChange={(event) => setDos(event.target.value)}
+                            aria-label={t("Do's")}
                             className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                           />
                         </div>
@@ -1067,6 +1085,7 @@ export default function NewCampaignWizard() {
                             placeholder={t("No competing brands, no profanity...")}
                             value={donts}
                             onChange={(event) => setDonts(event.target.value)}
+                            aria-label={t("Don'ts")}
                             className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                           />
                         </div>
@@ -1081,6 +1100,7 @@ export default function NewCampaignWizard() {
                           placeholder={t("https://drive.google.com/... or a YouTube/stream link to clip from")}
                           value={sourceUrl}
                           onChange={(event) => setSourceUrl(event.target.value)}
+                          aria-label={t("Source video / footage link")}
                           className="business-input h-12 w-full rounded-xl px-4 text-sm placeholder:text-[var(--business-muted)]"
                         />
                       </div>
@@ -1092,6 +1112,7 @@ export default function NewCampaignWizard() {
                             min="1"
                             value={clipMinSec}
                             onChange={(event) => setClipMinSec(Number(event.target.value))}
+                            aria-label={t("Min clip length")}
                             className="business-input h-12 w-full rounded-xl px-4 text-sm"
                           />
                         </div>
@@ -1102,6 +1123,7 @@ export default function NewCampaignWizard() {
                             min="1"
                             value={clipMaxSec}
                             onChange={(event) => setClipMaxSec(Number(event.target.value))}
+                            aria-label={t("Max clip length")}
                             className="business-input h-12 w-full rounded-xl px-4 text-sm"
                           />
                         </div>
@@ -1113,6 +1135,7 @@ export default function NewCampaignWizard() {
                           placeholder={t("Which moments to clip, captions/subtitles, aspect ratio...")}
                           value={clipRequirements}
                           onChange={(event) => setClipRequirements(event.target.value)}
+                          aria-label={t("Clip requirements")}
                           className="business-input w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
                         />
                       </div>
@@ -1155,15 +1178,15 @@ export default function NewCampaignWizard() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <FieldLabel>{t("Start date")}</FieldLabel>
-                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} aria-label={t("Start date")} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
               </div>
               <div className="space-y-2">
                 <FieldLabel>{t("Draft submission due")}</FieldLabel>
-                <input type="date" value={draftDueDate} onChange={(event) => setDraftDueDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+                <input type="date" value={draftDueDate} onChange={(event) => setDraftDueDate(event.target.value)} aria-label={t("Draft submission due")} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
               </div>
               <div className="space-y-2">
                 <FieldLabel>{t("End date")}</FieldLabel>
-                <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
+                <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} aria-label={t("End date")} className="business-input h-12 w-full rounded-xl px-4 text-sm" />
               </div>
             </div>
           </motion.div>
@@ -1528,7 +1551,10 @@ export default function NewCampaignWizard() {
               initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              className="business-glass-elevated relative z-10 w-full max-w-lg rounded-2xl p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="business-ai-brief-title"
+              className="business-glass-elevated relative z-10 max-h-[calc(100svh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl p-6"
             >
               {aiGenerating ? (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 rounded-2xl bg-[#07101f]/95 p-6 text-center backdrop-blur-md">
@@ -1548,7 +1574,7 @@ export default function NewCampaignWizard() {
                     <Sparkles size={18} />
                   </span>
                   <div>
-                    <h3 className="text-lg font-semibold text-[var(--business-text)]">{t("AI Brief Assistant")}</h3>
+                    <h3 id="business-ai-brief-title" className="text-lg font-semibold text-[var(--business-text)]">{t("AI Brief Assistant")}</h3>
                     <p className="mt-1 text-sm leading-6 text-[var(--business-muted)]">
                       {t("Paste your raw idea, product details, or campaign goals.")}
                     </p>
@@ -1569,6 +1595,7 @@ export default function NewCampaignWizard() {
                 placeholder={t("e.g. Launching a new aluminum desk stand for Apple Studio Display. Focus on productivity tech creators with organic desk setup visuals. Budget around $3000...")}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
+                aria-label={t("AI brief assistant")}
                 rows={5}
                 className="business-input mt-5 w-full resize-none rounded-xl px-4 py-3 text-sm leading-6 placeholder:text-[var(--business-muted)]"
               />
@@ -1600,7 +1627,10 @@ export default function NewCampaignWizard() {
               initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              className="business-glass-elevated relative z-10 w-full max-w-md rounded-2xl p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="business-fixed-publish-title"
+              className="business-glass-elevated relative z-10 max-h-[calc(100svh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6"
             >
               {paying ? (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-2xl bg-[#07101f]/95 p-6 text-center backdrop-blur-md">
@@ -1615,7 +1645,7 @@ export default function NewCampaignWizard() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-primary)]">{t("Review & Publish")}</p>
-                  <h3 className="mt-1 text-lg font-semibold text-[var(--business-text)]">{t("Publish fixed-fee campaign")}</h3>
+                  <h3 id="business-fixed-publish-title" className="mt-1 text-lg font-semibold text-[var(--business-text)]">{t("Publish fixed-fee campaign")}</h3>
                 </div>
                 <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(52,211,153,0.20)] bg-[rgba(52,211,153,0.10)] text-[var(--business-success)]">
                   <Check size={18} />
@@ -1625,11 +1655,11 @@ export default function NewCampaignWizard() {
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
                 <div className="flex justify-between gap-4 text-[var(--business-muted)]">
                   <span>{t("Campaign")}</span>
-                  <span className="max-w-48 truncate text-right font-semibold text-[var(--business-text)]">{title || t("New Campaign")}</span>
+                  <span className="max-w-36 truncate text-right font-semibold text-[var(--business-text)] sm:max-w-48">{title || t("New Campaign")}</span>
                 </div>
                 <div className="mt-2 flex justify-between gap-4 text-[var(--business-muted)]">
                   <span>{t("Target niches")}</span>
-                  <span className="max-w-48 truncate text-right font-semibold text-[var(--business-text)]">
+                  <span className="max-w-36 truncate text-right font-semibold text-[var(--business-text)] sm:max-w-48">
                     {niches.length > 0 ? niches.join(", ") : "—"}
                   </span>
                 </div>

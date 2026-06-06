@@ -59,7 +59,7 @@ export function BusinessPortalShell({
   return (
     <main
       className={cn(
-        "business-portal min-h-screen overflow-hidden",
+        "business-portal min-h-screen overflow-x-clip",
         "bg-[linear-gradient(180deg,#0c1324_0%,#10131d_52%,#0b0f18_100%)]",
         className
       )}
@@ -166,7 +166,7 @@ export function BusinessMetricCard({
 }: BusinessMetricCardProps) {
   return (
     <div
-      className={cn("business-glass rounded-2xl p-4 sm:p-5", className)}
+      className={cn("business-glass min-w-0 rounded-2xl p-4 sm:p-5", className)}
       aria-label={`${label}: ${value}`}
       {...props}
     >
@@ -175,7 +175,7 @@ export function BusinessMetricCard({
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
             {label}
           </p>
-          <p className="mt-3 text-2xl font-semibold tracking-normal text-[var(--business-text)]">
+          <p className="mt-3 break-words text-2xl font-semibold tracking-normal text-[var(--business-text)]">
             {value}
           </p>
         </div>
@@ -214,7 +214,7 @@ export function BusinessStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
+        "inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 whitespace-normal rounded-full border px-2.5 py-1 text-center text-[10px] font-semibold uppercase leading-4 tracking-[0.14em]",
         toneChip[tone],
         className
       )}
@@ -254,7 +254,7 @@ export function BusinessProgressBar({
       <div
         className="business-progress-track h-2 rounded-full"
         role="progressbar"
-        aria-label={label}
+        aria-label={label ?? "Progress"}
         aria-valuenow={Math.round(percentage)}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -288,7 +288,7 @@ export function BusinessActionButton({
   ...props
 }: BusinessActionButtonProps) {
   const classes = cn(
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border text-sm font-semibold tracking-normal transition-all",
+    "inline-flex min-w-0 shrink-0 items-center justify-center gap-2 whitespace-normal rounded-xl border text-center text-sm font-semibold leading-5 tracking-normal transition-all",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(173,198,255,0.60)] disabled:pointer-events-none disabled:opacity-50",
     size === "sm" && "h-8 px-3 text-xs",
     size === "md" && "h-10 px-4",

@@ -919,7 +919,8 @@ export const dictionary: Record<string, string> = {
   "Legacy fixed-fee": "Tariffa fissa legacy",
   "Legacy pending": "Legacy in attesa",
   "Legacy escrow funded": "Escrow legacy finanziato",
-  "Legacy escrow released": "Escrow legacy rilasciato"
+  "Legacy escrow released": "Escrow legacy rilasciato",
+  "Open business profile menu": "Apri menu profilo business"
 };
 
 // Helper function to read cookie value
