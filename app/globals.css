@@ -394,3 +394,7 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+body:has(.business-route-shell) > main {
+  padding-bottom: 0 !important;
+}
