@@ -38,6 +38,11 @@ import {
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
 import { apiPost } from "@/lib/api/client";
+import {
+  BusinessCampaignInsights,
+  type BusinessCampaignInsightData,
+  type BusinessCampaignInsightMoney,
+} from "@/components/business/business-campaign-insights";
 
 import {
   ResponsiveContainer,
@@ -220,9 +225,48 @@ interface ParticipationRow {
   status: string;
   proposed_payout: number | null;
   actual_payout: number | null;
+  total_views?: number | null;
+  total_earned?: number | null;
+  total_paid?: number | null;
+  creator_cpm_rate?: number | null;
   influencer_id: string;
   applied_at: string;
   posts: PostRow[] | null;
+}
+
+/** Performance clip row used for business campaign insights. */
+interface CampaignClipRow {
+  id: string;
+  campaign_id: string;
+  creator_id: string;
+  participation_id: string;
+  platform: string | null;
+  post_url: string | null;
+  status: string;
+  current_views: number | string | null;
+  counted_views: number | string | null;
+  quality_status: string | null;
+  quality_score: number | string | null;
+  fraud_flagged: boolean | null;
+  fraud_score: number | string | null;
+  submitted_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Performance earning row used for business campaign insights. */
+interface CampaignEarningRow {
+  id: string;
+  clip_id: string;
+  participation_id: string;
+  campaign_id: string;
+  creator_id: string;
+  billable_views: number | string | null;
+  effective_cpm: number | string | null;
+  amount: number | string | null;
+  status: "accrued" | "approved" | "paid" | "reversed" | string;
+  payout_id: string | null;
+  accrued_at: string | null;
 }
 
 /** A raw messages row (before display fields are derived). */
@@ -248,6 +292,26 @@ function mapCampaignStatus(status: string): CampaignDetailState["status"] {
   if (status === "completed") return "released";
   if (status === "in_progress") return "escrowed";
   return "open";
+}
+
+function numberValue(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function emptyInsightMoney(): BusinessCampaignInsightMoney {
+  return { accrued: 0, approved: 0, paid: 0, reversed: 0 };
+}
+
+function addInsightMoney(
+  target: BusinessCampaignInsightMoney,
+  row: { amount: number | string | null; status: string }
+) {
+  const amount = numberValue(row.amount);
+  if (row.status === "accrued") target.accrued += amount;
+  else if (row.status === "approved") target.approved += amount;
+  else if (row.status === "paid") target.paid += amount;
+  else if (row.status === "reversed") target.reversed += amount;
 }
 
 /** Map the campaign's stored deliverables JSON into the workspace shape. */
@@ -283,10 +347,10 @@ function mapDeliverables(raw: unknown): CampaignDetailState["deliverables"] {
 /** Derive timeline milestones from the campaign's real dates + status. */
 function buildTimeline(c: {
   status: string;
-  created_at?: string;
+  created_at?: string | null;
   timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
 }): CampaignDetailState["timeline"] {
-  const fmt = (d?: string) =>
+  const fmt = (d?: string | null) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
   const tl = c.timeline || {};
   const live = c.status !== "draft";
@@ -360,6 +424,8 @@ export default function CampaignDetailPage() {
 
   // Core Campaign detail state
   const [campaign, setCampaign] = useState<CampaignDetailState | null>(null);
+  const [businessInsight, setBusinessInsight] = useState<BusinessCampaignInsightData | null>(null);
+  const [businessInsightRefreshing, setBusinessInsightRefreshing] = useState(false);
   const [activeParticipantId, setActiveParticipantId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"Brief" | "Deliverables" | "Timeline" | "Budget">("Brief");
   
@@ -662,6 +728,7 @@ export default function CampaignDetailPage() {
     setUser(activeUser);
     if (!activeUser || !campaignId) {
       setCampaign(null);
+      setBusinessInsight(null);
       setLoading(false);
       return;
     }
@@ -669,34 +736,81 @@ export default function CampaignDetailPage() {
     const campRes = await getCampaignByIdAction(campaignId);
     if (!campRes.success || !campRes.campaign) {
       setCampaign(null);
+      setBusinessInsight(null);
       setLoading(false);
       return;
     }
     const c = campRes.campaign as {
       id: string;
       title: string;
-      budget_total: number;
+      budget_total: number | string | null;
+      budget_pool?: number | string | null;
+      available_pool?: number | string | null;
+      budget_reserved?: number | string | null;
+      budget_paid?: number | string | null;
+      brand_cpm_rate?: number | string | null;
+      cpm_rate?: number | string | null;
+      min_payout_threshold?: number | string | null;
+      max_payout_per_creator?: number | string | null;
+      campaign_type?: "fixed" | "performance" | null;
+      campaign_category?: "ugc" | "clipping" | null;
+      target_niches?: string[] | null;
+      platforms?: string[] | null;
       status: string;
       description?: string | null;
       deliverables?: unknown;
       timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
       content_rules?: { notes?: string } | null;
-      created_at?: string;
+      funded_at?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
     };
 
     // Participations on this campaign, with each creator's submitted posts.
     const { data: parts } = await supabase
       .from("participations")
       .select(
-        "id, status, proposed_payout, actual_payout, influencer_id, applied_at, posts ( id, post_url, platform, views, likes, comments, shares, engagement_rate, submitted_at )"
+        "id, status, proposed_payout, actual_payout, total_views, total_earned, total_paid, creator_cpm_rate, influencer_id, applied_at, posts ( id, post_url, platform, views, likes, comments, shares, engagement_rate, submitted_at )"
       )
       .eq("campaign_id", campaignId)
       .order("applied_at", { ascending: true });
 
     const rows = (parts as ParticipationRow[] | null) ?? [];
 
+    const [clipResult, earningResult] = await Promise.all([
+      supabase
+        .from("clips")
+        .select(
+          "id, campaign_id, creator_id, participation_id, platform, post_url, status, current_views, counted_views, quality_status, quality_score, fraud_flagged, fraud_score, submitted_at, created_at, updated_at"
+        )
+        .eq("campaign_id", campaignId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("earnings")
+        .select(
+          "id, clip_id, participation_id, campaign_id, creator_id, billable_views, effective_cpm, amount, status, payout_id, accrued_at"
+        )
+        .eq("campaign_id", campaignId)
+        .order("accrued_at", { ascending: false }),
+    ]);
+
+    if (clipResult.error) {
+      console.error("Failed to load campaign clips:", clipResult.error);
+    }
+    if (earningResult.error) {
+      console.error("Failed to load campaign earnings:", earningResult.error);
+    }
+
+    const clipRows = ((clipResult.data ?? []) as CampaignClipRow[]);
+    const earningRows = ((earningResult.data ?? []) as CampaignEarningRow[]);
+
     // Resolve creator display info (RLS exposes applicant profiles to the brand).
-    const influencerIds = [...new Set(rows.map((r) => r.influencer_id))];
+    const influencerIds = [
+      ...new Set([
+        ...rows.map((r) => r.influencer_id),
+        ...clipRows.map((clip) => clip.creator_id),
+      ].filter(Boolean)),
+    ];
     const profilesById: Record<string, ProfileLite> = {};
     if (influencerIds.length > 0) {
       const { data: profs } = await supabase
@@ -742,10 +856,124 @@ export default function CampaignDetailPage() {
       };
     });
 
+    const earningsByClip = new Map<string, CampaignEarningRow[]>();
+    const earningsByCreator = new Map<string, CampaignEarningRow[]>();
+    for (const earning of earningRows) {
+      earningsByClip.set(earning.clip_id, [...(earningsByClip.get(earning.clip_id) ?? []), earning]);
+      earningsByCreator.set(earning.creator_id, [...(earningsByCreator.get(earning.creator_id) ?? []), earning]);
+    }
+
+    const clipsByCreator = new Map<string, CampaignClipRow[]>();
+    for (const clip of clipRows) {
+      clipsByCreator.set(clip.creator_id, [...(clipsByCreator.get(clip.creator_id) ?? []), clip]);
+    }
+
+    const participationByCreator = new Map(rows.map((row) => [row.influencer_id, row]));
+    const insightCreatorIds = [
+      ...new Set([
+        ...rows.map((row) => row.influencer_id),
+        ...clipRows.map((clip) => clip.creator_id),
+        ...earningRows.map((earning) => earning.creator_id),
+      ].filter(Boolean)),
+    ];
+
+    const insightCreators = insightCreatorIds.map((creatorId) => {
+      const prof = profilesById[creatorId];
+      const handles = (prof?.social_handles ?? {}) as Record<string, string>;
+      const rawHandle = handles.instagram || handles.tiktok || handles.youtube || "";
+      const creatorClips = clipsByCreator.get(creatorId) ?? [];
+      const creatorEarnings = earningsByCreator.get(creatorId) ?? [];
+      const earnings = emptyInsightMoney();
+      creatorEarnings.forEach((earning) => addInsightMoney(earnings, earning));
+      const participation = participationByCreator.get(creatorId);
+      const lastActivity = creatorClips
+        .map((clip) => clip.updated_at ?? clip.created_at ?? clip.submitted_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(String(b)).getTime() - new Date(String(a)).getTime())[0] ?? participation?.applied_at ?? null;
+
+      return {
+        creatorId,
+        participationId: participation?.id ?? null,
+        name: prof?.full_name || "Creator",
+        handle: rawHandle ? `@${rawHandle.replace(/^@/, "")}` : "",
+        avatarUrl: prof?.avatar_url ?? null,
+        status: participation?.status ?? "active",
+        clips: creatorClips.length,
+        pendingClips: creatorClips.filter((clip) => clip.status === "pending").length,
+        trackingClips: creatorClips.filter((clip) => clip.status === "tracking").length,
+        views: creatorClips.reduce(
+          (sum, clip) => sum + numberValue(clip.current_views ?? clip.counted_views),
+          0
+        ),
+        earnings,
+        lastActivity,
+      };
+    });
+
+    const insightEarnings = emptyInsightMoney();
+    earningRows.forEach((earning) => addInsightMoney(insightEarnings, earning));
+
+    const insightClips = clipRows.map((clip) => {
+      const prof = profilesById[clip.creator_id];
+      const clipEarnings = earningsByClip.get(clip.id) ?? [];
+      const estimatedEarnings = clipEarnings.reduce((sum, earning) => sum + numberValue(earning.amount), 0);
+
+      return {
+        id: clip.id,
+        creatorId: clip.creator_id,
+        creatorName: prof?.full_name || "Creator",
+        creatorAvatarUrl: prof?.avatar_url ?? null,
+        platform: clip.platform ?? "social",
+        postUrl: clip.post_url ?? "",
+        status: clip.status,
+        currentViews: numberValue(clip.current_views ?? clip.counted_views),
+        estimatedEarnings,
+        qualityStatus: clip.quality_status,
+        qualityScore: clip.quality_score == null ? null : numberValue(clip.quality_score),
+        fraudFlagged: clip.fraud_flagged === true,
+        fraudScore: clip.fraud_score == null ? null : numberValue(clip.fraud_score),
+        submittedAt: clip.submitted_at ?? clip.created_at,
+        updatedAt: clip.updated_at,
+      };
+    });
+
+    setBusinessInsight(
+      activeUser.role === "business"
+        ? {
+            campaign: {
+              id: c.id,
+              title: c.title,
+              description: c.description || "",
+              status: c.status,
+              campaignType: c.campaign_type ?? "fixed",
+              campaignCategory: c.campaign_category ?? null,
+              targetNiches: c.target_niches ?? [],
+              platforms: c.platforms ?? [],
+              createdAt: c.created_at ?? null,
+              updatedAt: c.updated_at ?? null,
+              fundedAt: c.funded_at ?? null,
+              cpmRate: numberValue(c.brand_cpm_rate ?? c.cpm_rate) || null,
+              budgetTotal: numberValue(c.budget_total),
+              budgetPool: numberValue(c.budget_pool ?? c.budget_total),
+              availablePool: c.available_pool == null ? null : numberValue(c.available_pool),
+              budgetReserved: numberValue(c.budget_reserved),
+              budgetPaid: numberValue(c.budget_paid),
+              minPayoutThreshold:
+                c.min_payout_threshold == null ? null : numberValue(c.min_payout_threshold),
+              maxPayoutPerCreator:
+                c.max_payout_per_creator == null ? null : numberValue(c.max_payout_per_creator),
+            },
+            creators: insightCreators,
+            clips: insightClips,
+            earnings: insightEarnings,
+          }
+        : null
+    );
+
     const mapped: CampaignDetailState = {
       id: c.id,
       title: c.title,
-      budget: Number(c.budget_total) || 0,
+      budget: numberValue(c.budget_total),
       status: mapCampaignStatus(c.status),
       brief: {
         objectives: [],
@@ -816,6 +1044,26 @@ export default function CampaignDetailPage() {
   }
 
   const isBusiness = user.role === "business";
+  const handleBusinessInsightRefresh = async () => {
+    setBusinessInsightRefreshing(true);
+    try {
+      await loadCampaign();
+    } finally {
+      setBusinessInsightRefreshing(false);
+    }
+  };
+
+  if (isBusiness && businessInsight) {
+    return (
+      <BusinessCampaignInsights
+        data={businessInsight}
+        onBack={() => router.push("/business/campaigns")}
+        onRefresh={handleBusinessInsightRefresh}
+        refreshing={businessInsightRefreshing}
+      />
+    );
+  }
+
   const selectedParticipant = campaign.participants.find(p => p.id === activeParticipantId);
 
   // Extract versions for version dropdown

@@ -266,7 +266,7 @@ export function NotificationCenter() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.97 }}
             transition={appleSpring}
-            className="absolute right-0 mt-3.5 w-[360px] md:w-[400px] bg-popover/90 backdrop-blur-lg border border-border/40 rounded-3xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] overflow-hidden z-50 flex flex-col max-h-[580px]"
+            className="absolute right-0 mt-3.5 w-[calc(100vw-2rem)] max-w-[360px] md:w-[400px] md:max-w-[400px] bg-popover/90 backdrop-blur-lg border border-border/40 rounded-3xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] overflow-hidden z-50 flex flex-col max-h-[580px]"
           >
             {/* Header */}
             <div className="px-6 py-4.5 border-b border-border/10 flex items-center justify-between">

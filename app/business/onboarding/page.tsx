@@ -117,7 +117,7 @@ export default function BusinessOnboarding() {
             {t("Setup your Workspace")}
           </h1>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            {t("Establish your brand profile and link payouts to start matching with curated micro-influencers.")}
+            {t("Establish your brand profile and connect Stripe to launch campaigns with curated creators.")}
           </p>
         </div>
 
@@ -297,7 +297,7 @@ export default function BusinessOnboarding() {
                   <CreditCard size={18} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold tracking-tight text-foreground">{t("Payment & Escrow Setup")}</h2>
+                  <h2 className="text-lg font-bold tracking-tight text-foreground">{t("Payment & Funding Setup")}</h2>
                   <p className="text-xs text-muted-foreground">{t("Link a Stripe account to fund active marketing campaigns.")}</p>
                 </div>
               </div>
@@ -307,9 +307,9 @@ export default function BusinessOnboarding() {
                   <span className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#635BFF] to-[#8E2DE2] shadow-sm flex items-center justify-center mb-4 text-white font-extrabold text-base select-none">
                     S
                   </span>
-                  <h3 className="text-sm font-bold text-foreground">{t("Connect Stripe Wallet")}</h3>
+                  <h3 className="text-sm font-bold text-foreground">{t("Connect Stripe Funding")}</h3>
                   <p className="text-[11px] text-muted-foreground mt-2 max-w-sm leading-relaxed">
-                    {t("Aether partners with Stripe to secure transactions. Funding is locked in escrow during campaigns and disbursed only after your content review.")}
+                    {t("Aether uses Stripe to fund campaign budget pools and route approved creator payouts after review.")}
                   </p>
                   <Button
                     onClick={handleConnectStripe}

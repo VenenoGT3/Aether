@@ -43,11 +43,10 @@ export function GdprConsentBanner() {
           role="dialog"
           aria-label={t("Cookie consent")}
           aria-live="polite"
-          // Above the mobile tab bar on small screens; bottom-left on desktop.
-          className="fixed inset-x-4 bottom-24 md:inset-x-auto md:left-6 md:bottom-6 z-[60] md:max-w-md"
+          className="fixed inset-x-4 bottom-4 md:inset-x-auto md:left-6 md:bottom-6 z-[60] md:max-w-md"
         >
-          <div className="apple-card p-5 shadow-2xl">
-            <div className="flex items-start gap-3 mb-4">
+          <div className="apple-card p-4 sm:p-5 shadow-2xl">
+            <div className="flex items-start gap-3 mb-3 sm:mb-4">
               <span className="p-2 rounded-2xl bg-[#007AFF]/10 text-[#007AFF] shrink-0">
                 <Cookie size={18} />
               </span>
@@ -61,7 +60,7 @@ export function GdprConsentBanner() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 onClick={() => decide(true)}
                 className="flex-1 rounded-xl font-bold text-xs text-white border-0 bg-[#007AFF] hover:opacity-95"

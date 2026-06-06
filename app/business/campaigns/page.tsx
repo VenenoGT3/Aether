@@ -1,497 +1,964 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Grid, 
-  List, 
-  DollarSign, 
-  ArrowRight, 
-  HelpCircle,
-  Check
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  CircleDollarSign,
+  ClipboardCheck,
+  Eye,
+  Filter,
+  Grid2X2,
+  List,
+  Loader2,
+  Megaphone,
+  Plus,
+  Search,
+  Sparkles,
+  Zap,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { 
-  getCampaignsAction, 
-  updateCampaignStatusAction, 
-  subscribeToCampaignChanges 
+
+import {
+  BusinessActionButton,
+  BusinessEmptyState,
+  BusinessGlassCard,
+  BusinessMetricCard,
+  BusinessProgressBar,
+  BusinessSectionHeader,
+  BusinessStatusPill,
+  type BusinessTone,
+} from "@/components/business/business-ui";
+import {
+  getCampaignsAction,
+  subscribeToCampaignChanges,
+  updateCampaignStatusAction,
 } from "@/lib/supabase/campaigns";
-import { CampaignStatus, DbCampaign } from "@/types/database";
+import { supabase } from "@/lib/supabase/client";
+import { campaignCategoryLabel } from "@/lib/campaign-category";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/translations";
+import type { CampaignStatus, DbCampaign } from "@/types/database";
 
-const STATUS_COLUMNS: Array<{ id: CampaignStatus; label: string; color: string; bg: string; border: string }> = [
-  { id: "draft", label: "Drafts", color: "text-muted-foreground", bg: "bg-secondary/15", border: "border-border/5" },
-  { id: "open", label: "Open Escrows", color: "text-[#FF9500]", bg: "bg-[#FF9500]/5", border: "border-[#FF9500]/10" },
-  { id: "in_progress", label: "In Progress", color: "text-[#007AFF]", bg: "bg-[#007AFF]/5", border: "border-[#007AFF]/10" },
-  { id: "completed", label: "Completed", color: "text-[#34C759]", bg: "bg-[#34C759]/5", border: "border-[#34C759]/10" }
-];
+type CampaignRow = Omit<DbCampaign, "status"> & {
+  status: CampaignStatus | "exhausted" | string;
+  brand_cpm_rate?: number | null;
+};
 
-export default function CampaignsPage() {
-  const router = useRouter();
-  const { t } = useTranslation();
-  const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [campaigns, setCampaigns] = useState<DbCampaign[]>([]);
-  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
-  
-  // Search & Filter State
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedNiche, setSelectedNiche] = useState<string>("All");
+type HubFilter = "all" | "performance" | "open" | "review" | "draft" | "completed" | "legacy";
+type ViewMode = "cards" | "rows";
 
-  const appleSpring = {
-    type: "spring" as const,
-    stiffness: 300,
-    damping: 30,
-    mass: 0.8
-  };
+interface ClipSummary {
+  total: number;
+  pending: number;
+  approved: number;
+  tracking: number;
+  rejected: number;
+  disqualified: number;
+  verifiedViews: number;
+  creators: number;
+}
 
-  async function loadCampaigns() {
-    try {
-      setLoading(true);
-      const res = await getCampaignsAction();
-      if (res.success && res.campaigns) {
-        setCampaigns(res.campaigns);
-      }
-    } catch (err) {
-      console.error("Failed to load campaigns:", err);
-    } finally {
-      setLoading(false);
+interface ParticipationSummary {
+  total: number;
+  applied: number;
+  active: number;
+  completed: number;
+  creators: number;
+  totalViews: number;
+  totalEarned: number;
+}
+
+interface ClipRow {
+  campaign_id: string;
+  status: string;
+  current_views: number | null;
+  counted_views: number | null;
+  creator_id: string | null;
+}
+
+interface ParticipationRow {
+  campaign_id: string;
+  status: string;
+  influencer_id: string | null;
+  total_views: number | null;
+  total_earned: number | null;
+}
+
+const EMPTY_CLIP_SUMMARY: ClipSummary = {
+  total: 0,
+  pending: 0,
+  approved: 0,
+  tracking: 0,
+  rejected: 0,
+  disqualified: 0,
+  verifiedViews: 0,
+  creators: 0,
+};
+
+const EMPTY_PARTICIPATION_SUMMARY: ParticipationSummary = {
+  total: 0,
+  applied: 0,
+  active: 0,
+  completed: 0,
+  creators: 0,
+  totalViews: 0,
+  totalEarned: 0,
+};
+
+const filterOrder: HubFilter[] = ["all", "performance", "open", "review", "draft", "completed", "legacy"];
+
+function numberValue(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function money(value: number, digits = 0): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function compactNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    notation: value >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 10000 ? 1 : 0,
+  }).format(value);
+}
+
+function statusLabel(status: string): string {
+  if (status === "in_progress") return "Tracking";
+  if (status === "open") return "Marketplace open";
+  if (status === "exhausted") return "Budget exhausted";
+  return status.replace(/_/g, " ");
+}
+
+function statusTone(status: string): BusinessTone {
+  if (status === "completed") return "success";
+  if (status === "open" || status === "in_progress") return "accent";
+  if (status === "draft") return "warning";
+  if (status === "cancelled" || status === "exhausted") return "danger";
+  return "neutral";
+}
+
+function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return "Recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function campaignPool(campaign: CampaignRow): number {
+  return numberValue(campaign.available_pool ?? campaign.budget_pool ?? campaign.budget_total);
+}
+
+function campaignFunded(campaign: CampaignRow): number {
+  return numberValue(campaign.budget_pool ?? campaign.budget_total);
+}
+
+function campaignUsed(campaign: CampaignRow): number {
+  return numberValue(campaign.budget_reserved) + numberValue(campaign.budget_paid);
+}
+
+function campaignRemaining(campaign: CampaignRow): number {
+  return Math.max(campaignPool(campaign) - campaignUsed(campaign), 0);
+}
+
+function rewardRate(campaign: CampaignRow): number {
+  return numberValue(campaign.brand_cpm_rate ?? campaign.cpm_rate);
+}
+
+function isPerformanceCampaign(campaign: CampaignRow): boolean {
+  return campaign.campaign_type === "performance";
+}
+
+function detailHref(campaign: CampaignRow): string {
+  return campaign.status === "draft" ? "/business/campaigns/new" : `/campaigns/${campaign.id}`;
+}
+
+function createClipSummary(): ClipSummary {
+  return { ...EMPTY_CLIP_SUMMARY };
+}
+
+function createParticipationSummary(): ParticipationSummary {
+  return { ...EMPTY_PARTICIPATION_SUMMARY };
+}
+
+async function loadCampaignHubSummaries(campaignIds: string[]) {
+  const clipSummaries = new Map<string, ClipSummary>();
+  const participationSummaries = new Map<string, ParticipationSummary>();
+
+  if (campaignIds.length === 0) {
+    return { clipSummaries, participationSummaries };
+  }
+
+  const [{ data: clips, error: clipsError }, { data: participations, error: participationsError }] =
+    await Promise.all([
+      supabase
+        .from("clips")
+        .select("campaign_id, status, current_views, counted_views, creator_id")
+        .in("campaign_id", campaignIds),
+      supabase
+        .from("participations")
+        .select("campaign_id, status, influencer_id, total_views, total_earned")
+        .in("campaign_id", campaignIds),
+    ]);
+
+  if (clipsError) throw clipsError;
+  if (participationsError) throw participationsError;
+
+  for (const clip of (clips ?? []) as ClipRow[]) {
+    const summary = clipSummaries.get(clip.campaign_id) ?? createClipSummary();
+    summary.total++;
+    if (clip.status === "pending") summary.pending++;
+    if (clip.status === "approved") summary.approved++;
+    if (clip.status === "tracking") summary.tracking++;
+    if (clip.status === "rejected") summary.rejected++;
+    if (clip.status === "disqualified") summary.disqualified++;
+    if (clip.status === "approved" || clip.status === "tracking") {
+      summary.verifiedViews += numberValue(clip.current_views ?? clip.counted_views);
+    }
+    clipSummaries.set(clip.campaign_id, summary);
+  }
+
+  const clipCreatorsByCampaign = new Map<string, Set<string>>();
+  for (const clip of (clips ?? []) as ClipRow[]) {
+    if (!clip.creator_id) continue;
+    const creators = clipCreatorsByCampaign.get(clip.campaign_id) ?? new Set<string>();
+    creators.add(clip.creator_id);
+    clipCreatorsByCampaign.set(clip.campaign_id, creators);
+  }
+  for (const [campaignId, creators] of clipCreatorsByCampaign) {
+    const summary = clipSummaries.get(campaignId) ?? createClipSummary();
+    summary.creators = creators.size;
+    clipSummaries.set(campaignId, summary);
+  }
+
+  const participationCreatorsByCampaign = new Map<string, Set<string>>();
+  for (const participation of (participations ?? []) as ParticipationRow[]) {
+    const summary = participationSummaries.get(participation.campaign_id) ?? createParticipationSummary();
+    summary.total++;
+    if (participation.status === "applied") summary.applied++;
+    if (participation.status === "active" || participation.status === "accepted") summary.active++;
+    if (participation.status === "completed") summary.completed++;
+    summary.totalViews += numberValue(participation.total_views);
+    summary.totalEarned += numberValue(participation.total_earned);
+    participationSummaries.set(participation.campaign_id, summary);
+
+    if (participation.influencer_id) {
+      const creators = participationCreatorsByCampaign.get(participation.campaign_id) ?? new Set<string>();
+      creators.add(participation.influencer_id);
+      participationCreatorsByCampaign.set(participation.campaign_id, creators);
     }
   }
 
+  for (const [campaignId, creators] of participationCreatorsByCampaign) {
+    const summary = participationSummaries.get(campaignId) ?? createParticipationSummary();
+    summary.creators = creators.size;
+    participationSummaries.set(campaignId, summary);
+  }
+
+  return { clipSummaries, participationSummaries };
+}
+
+function filterLabel(filter: HubFilter): string {
+  switch (filter) {
+    case "all":
+      return "All";
+    case "performance":
+      return "Performance";
+    case "open":
+      return "Live";
+    case "review":
+      return "Needs review";
+    case "draft":
+      return "Drafts";
+    case "completed":
+      return "Completed";
+    case "legacy":
+      return "Fixed fee";
+  }
+}
+
+function CampaignCard({
+  campaign,
+  clipSummary,
+  participationSummary,
+  actionLoadingId,
+  onStatusUpdate,
+}: {
+  campaign: CampaignRow;
+  clipSummary: ClipSummary;
+  participationSummary: ParticipationSummary;
+  actionLoadingId: string | null;
+  onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
+}) {
+  const isPerformance = isPerformanceCampaign(campaign);
+  const category = campaignCategoryLabel(campaign.campaign_category);
+  const rate = rewardRate(campaign);
+  const pool = campaignPool(campaign);
+  const used = campaignUsed(campaign);
+  const remaining = campaignRemaining(campaign);
+  const funded = campaignFunded(campaign);
+  const isFunded = !!campaign.funded_at;
+  const actionId = `${campaign.id}-${campaign.status}`;
+  const loading = actionLoadingId === actionId;
+
+  return (
+    <BusinessGlassCard
+      variant="elevated"
+      className="group flex h-full flex-col gap-4 transition-colors hover:bg-white/[0.08]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <BusinessStatusPill tone={statusTone(campaign.status)}>
+              {statusLabel(campaign.status)}
+            </BusinessStatusPill>
+            <BusinessStatusPill tone={isPerformance ? "accent" : "neutral"}>
+              {isPerformance ? "Performance" : "Fixed fee"}
+            </BusinessStatusPill>
+            {category ? <BusinessStatusPill tone="info">{category}</BusinessStatusPill> : null}
+          </div>
+          <Link href={detailHref(campaign)}>
+            <h2 className="line-clamp-2 text-lg font-semibold tracking-normal text-[var(--business-text)] transition-colors group-hover:text-[var(--business-primary)]">
+              {campaign.title}
+            </h2>
+          </Link>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--business-muted)]">
+            {campaign.description || "No brief description yet."}
+          </p>
+        </div>
+        <Link
+          href={detailHref(campaign)}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--business-muted)] transition-colors hover:text-[var(--business-primary)]"
+          aria-label={`Open ${campaign.title}`}
+        >
+          <ArrowRight size={16} />
+        </Link>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(campaign.target_niches ?? []).slice(0, 4).map((niche) => (
+          <span
+            key={niche}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--business-muted)]"
+          >
+            {niche}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
+            Budget pool
+          </p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool)}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
+            Reward rate
+          </p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
+            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : "Fixed"}
+          </p>
+        </div>
+      </div>
+
+      {isPerformance ? (
+        <div className="space-y-2">
+          <BusinessProgressBar
+            value={used}
+            max={pool || 100}
+            label={`${money(remaining)} remaining`}
+            tone={campaign.status === "exhausted" ? "danger" : used / Math.max(pool, 1) >= 0.9 ? "warning" : "accent"}
+          />
+          {funded > pool ? (
+            <p className="text-[10px] text-[var(--business-muted)]">
+              {money(funded)} funded · creators earn from {money(pool)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        <div>
+          <p className="font-semibold text-[var(--business-text)]">{compactNumber(clipSummary.verifiedViews || participationSummary.totalViews)}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">verified views</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[var(--business-text)]">{clipSummary.pending}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">pending clips</p>
+        </div>
+        <div>
+          <p className="font-semibold text-[var(--business-text)]">{clipSummary.creators || participationSummary.creators}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">creators</p>
+        </div>
+      </div>
+
+      <div className="mt-auto flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[10px] text-[var(--business-muted)]">
+          Updated {formatDate(campaign.updated_at || campaign.created_at)}
+        </p>
+        {campaign.status === "draft" ? (
+          isPerformance && !isFunded ? (
+            <BusinessActionButton href="/business/campaigns/new" size="sm" variant="secondary">
+              Finish funding
+            </BusinessActionButton>
+          ) : (
+            <BusinessActionButton
+              size="sm"
+              variant="secondary"
+              onClick={() => onStatusUpdate(campaign, "open")}
+              disabled={loading}
+              icon={loading ? Loader2 : Sparkles}
+              className={loading ? "[&_svg]:animate-spin" : undefined}
+            >
+              Open marketplace
+            </BusinessActionButton>
+          )
+        ) : clipSummary.pending > 0 ? (
+          <BusinessActionButton href="/business/moderation" size="sm" variant="secondary" icon={ClipboardCheck}>
+            Review submissions
+          </BusinessActionButton>
+        ) : campaign.status === "open" ? (
+          <BusinessActionButton
+            size="sm"
+            variant="secondary"
+            onClick={() => onStatusUpdate(campaign, "in_progress")}
+            disabled={loading}
+            icon={loading ? Loader2 : Zap}
+            className={loading ? "[&_svg]:animate-spin" : undefined}
+          >
+            Start tracking
+          </BusinessActionButton>
+        ) : (
+          <BusinessActionButton href={detailHref(campaign)} size="sm" variant="ghost" trailingIcon={ArrowRight}>
+            View insights
+          </BusinessActionButton>
+        )}
+      </div>
+    </BusinessGlassCard>
+  );
+}
+
+function CampaignRowItem({
+  campaign,
+  clipSummary,
+  participationSummary,
+  actionLoadingId,
+  onStatusUpdate,
+}: {
+  campaign: CampaignRow;
+  clipSummary: ClipSummary;
+  participationSummary: ParticipationSummary;
+  actionLoadingId: string | null;
+  onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
+}) {
+  const isPerformance = isPerformanceCampaign(campaign);
+  const pool = campaignPool(campaign);
+  const used = campaignUsed(campaign);
+  const rate = rewardRate(campaign);
+  const actionId = `${campaign.id}-${campaign.status}`;
+  const loading = actionLoadingId === actionId;
+
+  return (
+    <BusinessGlassCard variant="elevated" className="p-4 transition-colors hover:bg-white/[0.08]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(140px,170px)_minmax(120px,150px)_minmax(140px,180px)] lg:items-center">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <BusinessStatusPill tone={statusTone(campaign.status)}>
+              {statusLabel(campaign.status)}
+            </BusinessStatusPill>
+            <BusinessStatusPill tone={isPerformance ? "accent" : "neutral"}>
+              {isPerformance ? "Performance" : "Fixed fee"}
+            </BusinessStatusPill>
+          </div>
+          <Link href={detailHref(campaign)}>
+            <h2 className="truncate text-base font-semibold text-[var(--business-text)] hover:text-[var(--business-primary)]">
+              {campaign.title}
+            </h2>
+          </Link>
+          <p className="mt-1 line-clamp-1 text-sm text-[var(--business-muted)]">
+            {campaign.description || "No brief description yet."}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
+            Budget pool
+          </p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool)}</p>
+          {isPerformance ? <BusinessProgressBar value={used} max={pool || 100} className="mt-2" /> : null}
+        </div>
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
+            Performance
+          </p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
+            {compactNumber(clipSummary.verifiedViews || participationSummary.totalViews)}
+          </p>
+          <p className="text-[10px] text-[var(--business-muted)]">
+            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : `${clipSummary.total} clips`}
+          </p>
+        </div>
+
+        <div className="flex gap-2 lg:justify-end">
+          {clipSummary.pending > 0 ? (
+            <BusinessActionButton href="/business/moderation" size="sm" variant="secondary" icon={ClipboardCheck}>
+              Review
+            </BusinessActionButton>
+          ) : campaign.status === "open" ? (
+            <BusinessActionButton
+              size="sm"
+              variant="secondary"
+              onClick={() => onStatusUpdate(campaign, "in_progress")}
+              disabled={loading}
+              icon={loading ? Loader2 : Zap}
+              className={loading ? "[&_svg]:animate-spin" : undefined}
+            >
+              Track
+            </BusinessActionButton>
+          ) : null}
+          <BusinessActionButton href={detailHref(campaign)} size="sm" variant="ghost" trailingIcon={ArrowRight}>
+            Open
+          </BusinessActionButton>
+        </div>
+      </div>
+    </BusinessGlassCard>
+  );
+}
+
+export default function CampaignsPage() {
+  const { t } = useTranslation();
+  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [clipSummaries, setClipSummaries] = useState<Map<string, ClipSummary>>(new Map());
+  const [participationSummaries, setParticipationSummaries] = useState<Map<string, ParticipationSummary>>(new Map());
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [activeFilter, setActiveFilter] = useState<HubFilter>("all");
+  const [selectedNiche, setSelectedNiche] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const loadCampaigns = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await getCampaignsAction();
+      if (!result.success || !result.campaigns) {
+        setCampaigns([]);
+        setClipSummaries(new Map());
+        setParticipationSummaries(new Map());
+        return;
+      }
+
+      const campaignRows = result.campaigns as CampaignRow[];
+      const summaries = await loadCampaignHubSummaries(campaignRows.map((campaign) => campaign.id));
+      setCampaigns(campaignRows);
+      setClipSummaries(summaries.clipSummaries);
+      setParticipationSummaries(summaries.participationSummaries);
+    } catch (error) {
+      console.error("Failed to load campaigns:", error);
+      toast.error(t("Failed to load campaigns"), {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard + fetch-on-mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client mount guard + initial fetch.
     setMounted(true);
     loadCampaigns();
 
-    // Subscribe to realtime database/storage changes
-    const unsubscribe = subscribeToCampaignChanges(() => {
-      getCampaignsAction().then((res) => {
-        if (res.success && res.campaigns) {
-          setCampaigns(res.campaigns);
-        }
-      });
+    const unsubscribeCampaigns = subscribeToCampaignChanges(() => {
+      loadCampaigns();
     });
+    const clipsChannel = supabase
+      .channel("business-campaign-hub-clips")
+      .on("postgres_changes", { event: "*", schema: "public", table: "clips" }, () => {
+        loadCampaigns();
+      })
+      .subscribe();
+    const participationsChannel = supabase
+      .channel("business-campaign-hub-participations")
+      .on("postgres_changes", { event: "*", schema: "public", table: "participations" }, () => {
+        loadCampaigns();
+      })
+      .subscribe();
 
     return () => {
-      unsubscribe();
+      unsubscribeCampaigns();
+      supabase.removeChannel(clipsChannel);
+      supabase.removeChannel(participationsChannel);
     };
-  }, []);
+  }, [loadCampaigns]);
 
-  // Update Status directly on Kanban interaction
-  const handleUpdateStatus = async (campaignId: string, newStatus: CampaignStatus) => {
+  const getClipSummary = useCallback(
+    (campaignId: string) => clipSummaries.get(campaignId) ?? EMPTY_CLIP_SUMMARY,
+    [clipSummaries]
+  );
+  const getParticipationSummary = useCallback(
+    (campaignId: string) => participationSummaries.get(campaignId) ?? EMPTY_PARTICIPATION_SUMMARY,
+    [participationSummaries]
+  );
+
+  const filteredCampaigns = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return campaigns.filter((campaign) => {
+      const clipSummary = getClipSummary(campaign.id);
+      const matchesSearch =
+        query.length === 0 ||
+        campaign.title.toLowerCase().includes(query) ||
+        (campaign.description ?? "").toLowerCase().includes(query) ||
+        (campaign.target_niches ?? []).some((niche) => niche.toLowerCase().includes(query));
+      const matchesNiche =
+        selectedNiche === "all" || (campaign.target_niches ?? []).includes(selectedNiche);
+      const matchesFilter =
+        activeFilter === "all" ||
+        (activeFilter === "performance" && isPerformanceCampaign(campaign)) ||
+        (activeFilter === "open" && (campaign.status === "open" || campaign.status === "in_progress")) ||
+        (activeFilter === "review" && clipSummary.pending > 0) ||
+        (activeFilter === "draft" && campaign.status === "draft") ||
+        (activeFilter === "completed" && (campaign.status === "completed" || campaign.status === "exhausted")) ||
+        (activeFilter === "legacy" && !isPerformanceCampaign(campaign));
+
+      return matchesSearch && matchesNiche && matchesFilter;
+    });
+  }, [activeFilter, campaigns, getClipSummary, searchQuery, selectedNiche]);
+
+  const hubStats = useMemo(() => {
+    const performanceCampaigns = campaigns.filter(isPerformanceCampaign);
+    const activeCampaigns = campaigns.filter((campaign) => campaign.status === "open" || campaign.status === "in_progress");
+    const allClipSummaries = campaigns.map((campaign) => getClipSummary(campaign.id));
+    const allParticipationSummaries = campaigns.map((campaign) => getParticipationSummary(campaign.id));
+    const pendingReviews = allClipSummaries.reduce((sum, summary) => sum + summary.pending, 0);
+    const verifiedViews = allClipSummaries.reduce((sum, summary) => sum + summary.verifiedViews, 0);
+    const campaignsWithCreators = new Set<string>();
+
+    for (const campaign of campaigns) {
+      const clipSummary = getClipSummary(campaign.id);
+      const participationSummary = getParticipationSummary(campaign.id);
+      if (clipSummary.creators > 0 || participationSummary.creators > 0) {
+        campaignsWithCreators.add(campaign.id);
+      }
+    }
+
+    const remainingPool = performanceCampaigns.reduce((sum, campaign) => sum + campaignRemaining(campaign), 0);
+    const totalEarned = allParticipationSummaries.reduce((sum, summary) => sum + summary.totalEarned, 0);
+
+    return {
+      activeCampaigns: activeCampaigns.length,
+      campaignsWithCreators: campaignsWithCreators.size,
+      pendingReviews,
+      performanceCampaigns: performanceCampaigns.length,
+      remainingPool,
+      totalEarned,
+      verifiedViews,
+    };
+  }, [campaigns, getClipSummary, getParticipationSummary]);
+
+  const filterCounts = useMemo(() => {
+    const counts: Record<HubFilter, number> = {
+      all: campaigns.length,
+      performance: campaigns.filter(isPerformanceCampaign).length,
+      open: campaigns.filter((campaign) => campaign.status === "open" || campaign.status === "in_progress").length,
+      review: campaigns.filter((campaign) => getClipSummary(campaign.id).pending > 0).length,
+      draft: campaigns.filter((campaign) => campaign.status === "draft").length,
+      completed: campaigns.filter((campaign) => campaign.status === "completed" || campaign.status === "exhausted").length,
+      legacy: campaigns.filter((campaign) => !isPerformanceCampaign(campaign)).length,
+    };
+    return counts;
+  }, [campaigns, getClipSummary]);
+
+  const niches = useMemo(() => {
+    return Array.from(new Set(campaigns.flatMap((campaign) => campaign.target_niches ?? []))).sort();
+  }, [campaigns]);
+
+  const handleUpdateStatus = async (campaign: CampaignRow, newStatus: CampaignStatus) => {
+    const actionId = `${campaign.id}-${campaign.status}`;
+    setActionLoadingId(actionId);
     try {
-      const res = await updateCampaignStatusAction(campaignId, newStatus);
-      if (res.success) {
-        toast.success(`${t("Campaign updated to")} ${newStatus}`, {
-          description: t("Status sync complete across Supabase ledger.")
+      const result = await updateCampaignStatusAction(campaign.id, newStatus);
+      if (result.success) {
+        toast.success(t("Campaign status updated"), {
+          description: `${campaign.title} · ${t(statusLabel(newStatus))}`,
         });
-        
-        // Local state update for immediate visual response
-        setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: newStatus } : c));
+        await loadCampaigns();
       } else {
         toast.error(t("Failed to update campaign"), {
-          description: res.error || t("Please try again.")
+          description: result.error || t("Please try again."),
         });
       }
-    } catch (err) {
+    } catch (error) {
       toast.error(t("An unexpected error occurred"), {
-        description: err instanceof Error ? err.message : undefined
+        description: error instanceof Error ? error.message : undefined,
       });
+    } finally {
+      setActionLoadingId(null);
     }
   };
-
-  // Filter Logic
-  const filteredCampaigns = campaigns.filter(camp => {
-    const matchesSearch = camp.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (camp.description && camp.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesNiche = selectedNiche === "All" || (camp.target_niches && camp.target_niches.includes(selectedNiche));
-    return matchesSearch && matchesNiche;
-  });
-
-  // Extract all unique niches present in campaigns for dynamic filters
-  const allNiches = ["All", ...Array.from(new Set(campaigns.flatMap(c => c.target_niches || [])))];
 
   if (!mounted) return null;
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 12 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: "spring" as const,
-        stiffness: 300,
-        damping: 25
-      }
-    }
-  };
-
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative overflow-hidden bg-black">
-      {/* Background Glow */}
-      <div className="absolute top-10 left-10 w-[300px] h-[300px] bg-gradient-to-br from-primary/5 to-transparent blur-[85px] pointer-events-none rounded-full" />
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+      <BusinessSectionHeader
+        eyebrow={t("Campaign Hub")}
+        title={t("Campaign workspaces")}
+        description={t("Search, monitor, and manage performance campaigns by lifecycle, budget pool, verified views, and moderation status.")}
+        action={
+          <BusinessActionButton href="/business/campaigns/new" icon={Plus}>
+            {t("New Campaign")}
+          </BusinessActionButton>
+        }
+      />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-12 relative z-10">
-        <div>
-          <span className="text-xs font-semibold text-[#007AFF] uppercase tracking-wider block mb-1.5">
-            {t("Campaign Hub")}
-          </span>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight font-heading">{t("Workspace Pipelines")}</h1>
-        </div>
-        
-        <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
-          {/* View Toggle */}
-          <div className="flex rounded-full bg-secondary/40 p-1 border border-border/10">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`p-2.5 rounded-full transition-all cursor-pointer ${
-                viewMode === "kanban" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Grid size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2.5 rounded-full transition-all cursor-pointer ${
-                viewMode === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <List size={14} />
-            </button>
-          </div>
-
-          <Link href="/business/campaigns/new" className="shrink-0">
-            <Button className="rounded-full px-5 py-5 font-semibold text-xs shadow-md bg-primary hover:scale-[1.02] active:scale-[0.98] transition-transform text-white border-0 gap-1.5 cursor-pointer h-auto">
-              <Plus size={14} /> {t("New Campaign")}
-            </Button>
-          </Link>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <BusinessMetricCard
+          label={t("Live campaigns")}
+          value={hubStats.activeCampaigns.toLocaleString()}
+          detail={`${hubStats.performanceCampaigns} ${t("performance")}`}
+          icon={Megaphone}
+          tone="accent"
+        />
+        <BusinessMetricCard
+          label={t("Needs review")}
+          value={hubStats.pendingReviews.toLocaleString()}
+          detail={t("pending submissions")}
+          icon={ClipboardCheck}
+          tone={hubStats.pendingReviews > 0 ? "warning" : "success"}
+        />
+        <BusinessMetricCard
+          label={t("Verified views")}
+          value={compactNumber(hubStats.verifiedViews)}
+          detail={`${hubStats.campaignsWithCreators} ${t("campaigns with creators")}`}
+          icon={Eye}
+          tone="info"
+        />
+        <BusinessMetricCard
+          label={t("Remaining pool")}
+          value={money(hubStats.remainingPool)}
+          detail={hubStats.totalEarned > 0 ? `${money(hubStats.totalEarned)} ${t("earned")}` : t("available budget")}
+          icon={CircleDollarSign}
+          tone="success"
+        />
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8 bg-card/65 backdrop-blur-md border border-border/30 p-4 rounded-2xl shadow-sm relative z-10">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            placeholder={t("Search campaigns...")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-border/30 bg-background/50 focus:outline-none focus:border-primary/80 focus:ring-1 focus:ring-primary/40 transition-all placeholder:text-muted-foreground/35"
-          />
-          <Search size={13} className="absolute left-3.5 top-3.5 text-muted-foreground/50" />
+      <BusinessGlassCard variant="elevated" className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--business-muted)]" />
+            <input
+              type="search"
+              placeholder={t("Search campaigns, briefs, or niches")}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label={t("Search campaigns, briefs, or niches")}
+              className="business-input h-11 w-full rounded-xl pl-10 pr-4 text-sm placeholder:text-[var(--business-muted)]"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)] sm:flex">
+              <Filter size={13} /> {t("View")}
+            </div>
+            <div className="flex rounded-xl border border-white/10 bg-white/[0.04] p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                aria-label={t("Card view")}
+                aria-pressed={viewMode === "cards"}
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-lg transition-colors",
+                  viewMode === "cards"
+                    ? "bg-white/[0.10] text-[var(--business-text)]"
+                    : "text-[var(--business-muted)] hover:text-[var(--business-text)]"
+                )}
+              >
+                <Grid2X2 size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("rows")}
+                aria-label={t("Row view")}
+                aria-pressed={viewMode === "rows"}
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-lg transition-colors",
+                  viewMode === "rows"
+                    ? "bg-white/[0.10] text-[var(--business-text)]"
+                    : "text-[var(--business-muted)] hover:text-[var(--business-text)]"
+                )}
+              >
+                <List size={15} />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          <Filter size={12} className="text-muted-foreground shrink-0" />
-          <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mr-1.5 shrink-0">{t("Niches:")}</span>
-          <div className="flex gap-1.5">
-            {allNiches.map((niche) => (
+        <div className="business-scrollbar-none flex gap-2 overflow-x-auto pb-1">
+          {filterOrder.map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              onClick={() => setActiveFilter(filter)}
+              aria-pressed={activeFilter === filter}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                activeFilter === filter
+                  ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
+                  : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
+              )}
+            >
+              {t(filterLabel(filter))}
+              <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px]">
+                {filterCounts[filter]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {niches.length > 0 ? (
+          <div className="business-scrollbar-none flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setSelectedNiche("all")}
+              aria-pressed={selectedNiche === "all"}
+              className={cn(
+                "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                selectedNiche === "all"
+                  ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
+                  : "border-white/10 bg-white/[0.04] text-[var(--business-muted)]"
+              )}
+            >
+              {t("All niches")}
+            </button>
+            {niches.map((niche) => (
               <button
                 key={niche}
+                type="button"
                 onClick={() => setSelectedNiche(niche)}
-                className={`text-[10px] px-3.5 py-1.5 rounded-full font-semibold transition-all border shrink-0 ${
+                aria-pressed={selectedNiche === niche}
+                className={cn(
+                  "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                   selectedNiche === niche
-                    ? "bg-primary/10 text-primary border-primary/25"
-                    : "bg-secondary/35 text-muted-foreground border-transparent hover:bg-secondary/60 hover:text-foreground"
-                }`}
+                    ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
+                    : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
+                )}
               >
-                {niche === "All" ? t("All") : niche}
+                {niche}
               </button>
             ))}
           </div>
-        </div>
-      </div>
+        ) : null}
+      </BusinessGlassCard>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 animate-pulse relative z-10">
-          {[1, 2, 3, 4].map((col) => (
-            <div key={col} className="space-y-4">
-              <div className="flex justify-between items-center px-2">
-                <div className="h-4 w-16 bg-secondary/80 rounded apple-skeleton" />
-                <div className="h-4 w-6 bg-secondary/80 rounded-full apple-skeleton" />
-              </div>
-              <div className="p-4 rounded-3xl bg-secondary/10 border border-border/10 space-y-4 min-h-[440px]">
-                {[1, 2].map((card) => (
-                  <div key={card} className="p-5 rounded-2xl bg-card border border-border/30 space-y-4 shadow-sm">
-                    <div className="h-4 w-[85%] bg-secondary/80 rounded apple-skeleton" />
-                    <div className="space-y-1.5">
-                      <div className="h-3 w-full bg-secondary/80 rounded apple-skeleton" />
-                      <div className="h-3 w-[70%] bg-secondary/80 rounded apple-skeleton" />
-                    </div>
-                    <div className="flex gap-1.5 pt-1">
-                      <div className="h-3.5 w-10 bg-secondary/80 rounded-full apple-skeleton" />
-                      <div className="h-3.5 w-12 bg-secondary/80 rounded-full apple-skeleton" />
-                    </div>
-                    <div className="flex justify-between items-center border-t border-border/10 pt-3 mt-3">
-                      <div className="space-y-1">
-                        <div className="h-2 w-8 bg-secondary/80 rounded apple-skeleton" />
-                        <div className="h-3 w-12 bg-secondary/80 rounded apple-skeleton" />
-                      </div>
-                      <div className="h-5.5 w-16 bg-secondary/80 rounded-lg apple-skeleton" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className={viewMode === "cards" ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" : "space-y-3"}>
+          {[0, 1, 2, 3, 4, 5].map((item) => (
+            <BusinessGlassCard key={item} className="min-h-56">
+              <div className="apple-skeleton h-4 w-40 rounded-full" />
+              <div className="apple-skeleton mt-5 h-8 w-3/4 rounded-full" />
+              <div className="apple-skeleton mt-4 h-3 w-full rounded-full" />
+              <div className="apple-skeleton mt-2 h-3 w-2/3 rounded-full" />
+              <div className="apple-skeleton mt-8 h-2 w-full rounded-full" />
+            </BusinessGlassCard>
           ))}
         </div>
       ) : campaigns.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-20 rounded-3xl bg-card border border-dashed border-border/50 text-center relative z-10">
-          <HelpCircle size={36} className="text-muted-foreground/35 mb-4" />
-          <h3 className="text-lg font-bold text-foreground">{t("No Campaigns Launched")}</h3>
-          <p className="text-xs text-muted-foreground mt-2 max-w-sm leading-relaxed">
-            {t("Setup your target brief and secure campaign payments in Stripe Connect escrow to start Matching with creators.")}
-          </p>
-          <Link href="/business/campaigns/new" className="mt-6">
-            <Button className="rounded-full px-5 py-5 text-xs font-semibold bg-primary text-white cursor-pointer h-auto">
-              {t("Create First Campaign")}
-            </Button>
-          </Link>
-        </div>
+        <BusinessEmptyState
+          icon={Megaphone}
+          title={t("Create your first campaign workspace")}
+          description={t("Launch a UGC or clipping campaign, fund the budget pool, and start collecting verified creator submissions.")}
+          actionHref="/business/campaigns/new"
+          actionLabel={t("Create Campaign")}
+        />
+      ) : filteredCampaigns.length === 0 ? (
+        <BusinessEmptyState
+          icon={Search}
+          title={t("No campaigns match")}
+          description={t("Try another status, niche, or search term.")}
+          actionHref="/business/campaigns/new"
+          actionLabel={t("New Campaign")}
+        />
+      ) : viewMode === "cards" ? (
+        <motion.div
+          layout
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+        >
+          {filteredCampaigns.map((campaign, index) => (
+            <motion.div
+              key={campaign.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(index * 0.03, 0.18) }}
+            >
+              <CampaignCard
+                campaign={campaign}
+                clipSummary={getClipSummary(campaign.id)}
+                participationSummary={getParticipationSummary(campaign.id)}
+                actionLoadingId={actionLoadingId}
+                onStatusUpdate={handleUpdateStatus}
+              />
+            </motion.div>
+          ))}
+        </motion.div>
       ) : (
-        <AnimatePresence mode="wait">
-          
-          {/* KANBAN BOARD VIEW */}
-          {viewMode === "kanban" && (
+        <motion.div layout className="space-y-3">
+          {filteredCampaigns.map((campaign, index) => (
             <motion.div
-              key="kanban"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start relative z-10"
+              key={campaign.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(index * 0.02, 0.14) }}
             >
-              {STATUS_COLUMNS.map((col) => {
-                const columnCampaigns = filteredCampaigns.filter(c => c.status === col.id);
-                return (
-                  <div key={col.id} className="space-y-4">
-                    {/* Column Header */}
-                    <div className="flex justify-between items-center px-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${col.color}`}>
-                        {t(col.label)}
-                      </span>
-                      <span className="text-[9px] font-bold bg-secondary/80 text-muted-foreground px-2 py-0.5 rounded-full border border-border/10">
-                        {columnCampaigns.length}
-                      </span>
-                    </div>
-
-                    {/* Column Body */}
-                    <div className={`p-4 rounded-3xl ${col.bg} border ${col.border} space-y-4 min-h-[500px]`}>
-                      <AnimatePresence>
-                        {columnCampaigns.map((camp) => (
-                          <motion.div
-                            key={camp.id}
-                            layoutId={camp.id}
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={appleSpring}
-                            whileHover={{ y: -3, scale: 1.015 }}
-                            className="p-5 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/25 shadow-sm cursor-pointer relative overflow-hidden group"
-                            onClick={() => router.push(`/campaigns/${camp.id}`)}
-                          >
-                            {/* Inner dynamic content */}
-                            <div className="space-y-3">
-                              <div className="flex justify-between items-start gap-2">
-                                <h4 className="text-xs font-bold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                                  {camp.title}
-                                </h4>
-                              </div>
-
-                              <p className="text-[10px] text-muted-foreground line-clamp-3 leading-relaxed">
-                                {camp.description}
-                              </p>
-
-                              {/* Niches */}
-                              <div className="flex flex-wrap gap-1.5">
-                                {camp.target_niches?.map((n: string) => (
-                                  <span key={n} className="text-[8px] font-bold bg-secondary/80 text-muted-foreground px-2 py-0.5 rounded-full uppercase border border-border/5">
-                                    {n}
-                                  </span>
-                                ))}
-                              </div>
-
-                              {/* Budget & Payout */}
-                              <div className="flex justify-between items-center border-t border-border/10 pt-3 mt-3">
-                                <div>
-                                  <span className="text-[8px] text-muted-foreground font-bold uppercase tracking-wider block">{t("Budget")}</span>
-                                  <span className="text-xs font-bold text-foreground flex items-center mt-0.5">
-                                    <DollarSign size={11} className="text-primary" />{Number(camp.budget_total).toLocaleString()}
-                                  </span>
-                                </div>
-                                
-                                {/* Status transitions button */}
-                                {camp.status === "draft" && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateStatus(camp.id, "open");
-                                    }}
-                                    className="text-[9px] font-bold bg-[#FF9500]/10 text-[#FF9500] hover:bg-[#FF9500]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
-                                  >
-                                    {t("Fund Escrow")}
-                                  </button>
-                                )}
-                                {camp.status === "open" && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateStatus(camp.id, "in_progress");
-                                    }}
-                                    className="text-[9px] font-bold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
-                                  >
-                                    {t("Match Creator")}
-                                  </button>
-                                )}
-                                {camp.status === "in_progress" && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateStatus(camp.id, "completed");
-                                    }}
-                                    className="text-[9px] font-bold bg-[#34C759]/10 text-[#34C759] hover:bg-[#34C759]/25 px-2.5 py-1.5 rounded-lg transition-colors border-0 cursor-pointer shadow-sm"
-                                  >
-                                    {t("Release Escrow")}
-                                  </button>
-                                )}
-                                {camp.status === "completed" && (
-                                  <span className="text-[9px] font-bold text-[#34C759] uppercase tracking-wider flex items-center gap-1">
-                                    <Check size={11} className="stroke-[3]" /> Released
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                      
-                      {columnCampaigns.length === 0 && (
-                        <div className="py-16 text-center text-[10px] text-muted-foreground/45 font-medium">
-                          {t("Empty Column")}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              <CampaignRowItem
+                campaign={campaign}
+                clipSummary={getClipSummary(campaign.id)}
+                participationSummary={getParticipationSummary(campaign.id)}
+                actionLoadingId={actionLoadingId}
+                onStatusUpdate={handleUpdateStatus}
+              />
             </motion.div>
-          )}
-
-          {/* LIST TABLE VIEW */}
-          {viewMode === "list" && (
-            <motion.div
-              key="list"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              variants={containerVariants}
-              className="space-y-4 relative z-10"
-            >
-              {filteredCampaigns.map((camp) => (
-                <motion.div
-                  key={camp.id}
-                  variants={itemVariants}
-                  whileHover={{ y: -2, scale: 1.005 }}
-                  className="p-6 apple-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
-                  onClick={() => router.push(`/campaigns/${camp.id}`)}
-                >
-                  <div className="space-y-2 max-w-xl">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
-                        camp.status === "in_progress" 
-                          ? "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/15" 
-                          : camp.status === "open"
-                          ? "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/15"
-                          : camp.status === "completed"
-                          ? "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/15"
-                          : "bg-secondary/40 text-muted-foreground border-border/10"
-                      }`}>
-                        {t(camp.status === "in_progress" ? "In Progress" : camp.status === "open" ? "Open Escrows" : camp.status === "completed" ? "Completed" : "Drafts")}
-                      </span>
-                      <div className="flex gap-1.5">
-                        {camp.target_niches?.map((n: string) => (
-                          <span key={n} className="text-[8px] bg-secondary/60 text-muted-foreground px-2 py-0.5 rounded-full font-bold uppercase border border-border/5">
-                            {n}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <h3 className="text-base font-bold text-foreground">{camp.title}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">{camp.description}</p>
-                  </div>
-
-                  <div className="flex items-center justify-between md:justify-end gap-12 border-t border-border/10 md:border-t-0 pt-4 md:pt-0 shrink-0">
-                    <div className="text-left md:text-right">
-                      <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider block">{t("Escrow Budget")}</span>
-                      <span className="text-sm font-bold text-foreground flex items-center mt-0.5">
-                        <DollarSign size={13} className="text-primary" />{Number(camp.budget_total).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {camp.status === "draft" && (
-                        <Button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUpdateStatus(camp.id, "open");
-                          }}
-                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#FF9500] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
-                        >
-                          {t("Fund Escrow")}
-                        </Button>
-                      )}
-                      {camp.status === "open" && (
-                        <Button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUpdateStatus(camp.id, "in_progress");
-                          }}
-                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#007AFF] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
-                        >
-                          {t("Match Creator")}
-                        </Button>
-                      )}
-                      {camp.status === "in_progress" && (
-                        <Button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUpdateStatus(camp.id, "completed");
-                          }}
-                          className="rounded-full px-4 py-3.5 text-[10px] font-bold bg-[#34C759] text-white hover:opacity-90 h-auto cursor-pointer border-0 shadow-sm"
-                        >
-                          {t("Release Payout")}
-                        </Button>
-                      )}
-
-                      <div className="w-9 h-9 rounded-2xl bg-secondary/50 border border-border/10 flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors shrink-0">
-                        <ArrowRight size={14} />
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-
-        </AnimatePresence>
+          ))}
+        </motion.div>
       )}
+
+      {hubStats.pendingReviews > 0 ? (
+        <Link
+          href="/business/moderation"
+          className="business-glass-elevated flex flex-col gap-3 rounded-2xl p-4 transition-colors hover:bg-white/[0.08] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(251,191,36,0.25)] bg-[rgba(251,191,36,0.10)] text-[var(--business-warning)]">
+              <ClipboardCheck size={18} />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-[var(--business-text)]">
+                {hubStats.pendingReviews} {t("submission(s) are waiting for moderation")}
+              </span>
+              <span className="mt-1 block text-sm text-[var(--business-muted)]">
+                {t("Approve eligible clips to keep budget pool accounting and verified-view tracking moving.")}
+              </span>
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--business-warning)]">
+            {t("Open moderation")} <ArrowRight size={16} />
+          </span>
+        </Link>
+      ) : null}
     </div>
   );
 }
