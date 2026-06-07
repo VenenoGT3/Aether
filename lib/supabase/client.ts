@@ -99,7 +99,16 @@ export async function signInClient(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (data?.user) {
-    const [{ data: profile }, { data: userRow }] = await withClientTimeout(
+    const fallbackRole =
+      (data.user.app_metadata?.role as UserRole) ||
+      (data.user.user_metadata?.role as UserRole) ||
+      "influencer";
+
+    setUxCookie("aether-role", fallbackRole);
+    setUxCookie("aether-session", "session-active");
+    setUxCookie("aether-onboarded", "false");
+
+    void withClientTimeout(
       Promise.all([
         supabase
           .from("profiles")
@@ -109,18 +118,17 @@ export async function signInClient(email: string, password: string) {
         supabase.from("users").select("role").eq("id", data.user.id).maybeSingle(),
       ]),
       5000
-    ).catch(() => [{ data: null }, { data: null }]);
+    )
+      .then(([{ data: profile }, { data: userRow }]) => {
+        const userRole = (userRow?.role as UserRole) || fallbackRole;
+        const isOnboarded = profile?.onboarded ?? false;
 
-    const userRole =
-      (userRow?.role as UserRole) ||
-      (data.user.app_metadata?.role as UserRole) ||
-      (data.user.user_metadata?.role as UserRole) ||
-      "influencer";
-    const isOnboarded = profile?.onboarded ?? false;
-
-    setUxCookie("aether-role", userRole);
-    setUxCookie("aether-session", "session-active");
-    setUxCookie("aether-onboarded", isOnboarded ? "true" : "false");
+        setUxCookie("aether-role", userRole);
+        setUxCookie("aether-onboarded", isOnboarded ? "true" : "false");
+      })
+      .catch(() => {
+        // The server-side route guard performs the authoritative profile lookup.
+      });
   }
 
   return { data, error };
