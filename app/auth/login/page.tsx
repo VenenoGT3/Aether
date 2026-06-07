@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/language-toggle";
 import {
   signInClient,
-  getClientProfile,
   resendSignupConfirmation,
   supabase,
 } from "@/lib/supabase/client";
@@ -59,9 +58,15 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
   });
 }
 
+function safeRedirectPath(path: string | null | undefined): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) {
+    return "/dashboard";
+  }
+  return path;
+}
+
 function LoginForm() {
   const { t } = useTranslation();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -72,7 +77,7 @@ function LoginForm() {
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const authNoticeHandled = useRef(false);
 
-  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+  const redirectTo = safeRedirectPath(searchParams.get("redirectTo"));
 
   useEffect(() => {
     if (authNoticeHandled.current) return;
@@ -148,34 +153,8 @@ function LoginForm() {
         description: t("Secure authentication completed."),
       });
 
-      // Fetch the updated profile to determine onboarding direction
-      const profile = await withTimeout(
-        getClientProfile(),
-        7000,
-        t("Your account signed in, but workspace lookup timed out.")
-      ).catch((err) => {
-        toast.info(
-          err instanceof Error
-            ? err.message
-            : t("Your account signed in, but workspace lookup timed out."),
-          { description: t("Opening your workspace now.") }
-        );
-        return null;
-      });
-
-      if (profile) {
-        // Role "influencer" maps to the "/creator" URL segment.
-        const segment = profile.role === "influencer" ? "creator" : "business";
-        if (!profile.onboarded) {
-          router.push(`/${segment}/onboarding`);
-        } else {
-          router.push(redirectTo === "/dashboard" ? `/${segment}/dashboard` : redirectTo);
-        }
-      } else {
-        router.push("/dashboard");
-      }
-      
-      router.refresh();
+      window.location.assign(redirectTo);
+      return;
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("An unexpected error occurred during login.")
@@ -227,8 +206,8 @@ function LoginForm() {
       toast.success(t("Welcome back!"), {
         description: t("Secure authentication completed."),
       });
-      router.push(data.redirectTo);
-      router.refresh();
+      window.location.assign(safeRedirectPath(data.redirectTo));
+      return;
     } catch (err) {
       toast.error(
         err instanceof Error
