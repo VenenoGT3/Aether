@@ -1,0 +1,56 @@
+# Local testing for the Aether background worker (worker + Redis).
+#
+#   1. Create a .env with the worker secrets (see PRODUCTION-README.md §1 "Worker"):
+#        NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, AYRSHARE_API_KEY  (required)
+#        STRIPE_SECRET_KEY                                                       (payouts)
+#   2. docker compose up --build
+#   3. curl http://localhost:8080/health        # → {"status":"ok",...}
+#      docker compose logs -f worker
+#
+# This mirrors a single-VPS layout (co-located Redis). In production prefer a
+# managed Redis and point REDIS_URL at it instead of the bundled service.
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Light persistence so local jobs survive a restart; tune/disable for prod.
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aether-worker:local
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Point the worker at the compose Redis (overrides any REDIS_URL in .env).
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      WORKER_HEALTH_PORT: "8080"
+    ports:
+      # Health endpoint, bound to localhost only — the worker has no public HTTP
+      # surface. Probe from the host (curl 127.0.0.1:8080/health) or via an SSH
+      # tunnel. Drop the 127.0.0.1 prefix only if you front it with a firewall.
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  redis-data:

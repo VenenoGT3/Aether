@@ -85,15 +85,15 @@ export default function WalletUI() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadLedger();
     
-    // Listen to local changes (e.g. if released campaign in detail view)
-    const handleStorageChange = () => {
+    // Listen to explicit transaction refresh signals from server-backed actions.
+    const handleLedgerChange = () => {
       loadLedger();
     };
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("role-change", handleStorageChange);
+    window.addEventListener("aether-transactions-update", handleLedgerChange);
+    window.addEventListener("role-change", handleLedgerChange);
     return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("role-change", handleStorageChange);
+      window.removeEventListener("aether-transactions-update", handleLedgerChange);
+      window.removeEventListener("role-change", handleLedgerChange);
     };
   }, []);
 
@@ -112,6 +112,7 @@ export default function WalletUI() {
 
       if (res.success) {
         await loadLedger();
+        window.dispatchEvent(new Event("aether-transactions-update"));
 
         // Fire premium confetti explosion!
         triggerConfetti();

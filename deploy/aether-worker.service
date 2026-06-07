@@ -1,0 +1,40 @@
+# systemd unit for the Aether background worker (Docker Compose: worker + Redis).
+#
+# Install on a Hetzner/Ubuntu VPS (repo cloned to /opt/aether):
+#   sudo cp /opt/aether/deploy/aether-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aether-worker
+#
+# Manage:
+#   systemctl status aether-worker
+#   journalctl -u aether-worker -f          # systemd-level logs
+#   docker compose -f /opt/aether/docker-compose.yml logs -f worker   # app logs
+#
+# If you cloned elsewhere, edit WorkingDirectory + the install path above.
+
+[Unit]
+Description=Aether background worker (BullMQ view-sync, earnings, payouts, fraud)
+Documentation=https://github.com/VenenoGT3/Aether/blob/main/PRODUCTION-README.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/aether
+
+# Run worker + Redis in the foreground so systemd supervises the process tree.
+# (The compose services also set restart: unless-stopped as a second layer.)
+ExecStart=/usr/bin/docker compose up
+ExecStop=/usr/bin/docker compose down
+
+# Restart the unit if `docker compose up` itself ever exits.
+Restart=always
+RestartSec=10
+
+# Allow in-flight BullMQ jobs to drain on stop — tini forwards SIGTERM to the
+# worker, whose graceful-shutdown handler closes queues before exit.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

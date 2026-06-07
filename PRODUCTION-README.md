@@ -111,7 +111,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `SENTRY_TRACES_SAMPLE_RATE` | Performance trace sampling (e.g. `0.1`). |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Build-time source-map upload (CI only). |
 | `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §5. |
-| `GEMINI_API_KEY` | Optional AI campaign-brief generation; the brief action fails clearly without it (no simulated fallback). |
+| `XAI_API_KEY` / `XAI_MODEL` | Optional AI campaign-brief generation; defaults to `grok-4.3` when a key is present. |
 | `STRIPE_WEBHOOK_HANDLER` | `supabase` (default, recommended) or `vercel` (legacy). Must be `supabase` in prod. |
 
 ### Worker (separate host)
@@ -121,7 +121,9 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `REDIS_URL` | BullMQ connection (`redis://` / `rediss://`). |
 | `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | DB access for accrual/payouts. |
 | `STRIPE_SECRET_KEY` | Real payouts. |
-| `AYRSHARE_API_KEY` | **Required** — live view tracking. The worker hard-fails at startup without it, and the real-money safety guard blocks accrual/payouts if it's removed at runtime — see `SETUP.md`. |
+| `YOUTUBE_DATA_API_KEY` | Official YouTube Data API v3 statistics. |
+| `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | TikTok Login Kit credentials; creator OAuth rows with `video.list` scope are also required for TikTok direct polling. |
+| `AYRSHARE_API_KEY` | Optional fallback/aggregator. At least one trusted view provider is required; the worker hard-fails without one. |
 
 > **Secret placement:** `SUPABASE_SERVICE_ROLE_KEY` and `STRIPE_WEBHOOK_SECRET` belong in
 > Supabase Edge Function secrets (the `stripe-webhook` function), **not** on Vercel, when
@@ -136,7 +138,8 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
    - `STRIPE_WEBHOOK_HANDLER=supabase` (the default, required on Vercel Production).
 3. **Database**: production Supabase project `baiyjsjocwccmlopqyqy` is migrated through
    `20260604125713_function_search_path_hardening`. For future changes, run new SQL
-   migrations in timestamp order, then deploy the `stripe-webhook` Edge Function with its secrets.
+   migrations in timestamp order, then deploy the `stripe-webhook` and `social-oauth`
+   Edge Functions with their secrets.
 4. **Stripe**: point the webhook at the Supabase Edge Function URL
    (`<supabase-url>/functions/v1/stripe-webhook`); set `STRIPE_WEBHOOK_SECRET` in Supabase.
 5. **Redis (Upstash)**: provision and set `UPSTASH_REDIS_REST_URL` / `_TOKEN` for the app,
@@ -150,6 +153,85 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 9. **Promote** to Production.
 
 Pre-promotion gate: `npm run typecheck`, `npm run lint`, `npm run test` all green.
+
+---
+
+## Worker deployment (Hetzner VPS)
+
+The background worker is a long-lived process (it can't run on Vercel — see
+"Deployment topology" above). It ships as a Docker image from the repo
+[`Dockerfile`](./Dockerfile): multi-stage, non-root, `tini` PID 1 for clean
+SIGTERM-driven graceful shutdown, and a health endpoint on `:8080`.
+
+### Prerequisites
+- A Hetzner Cloud VPS (CX22 is plenty for a single worker), Ubuntu LTS.
+- Docker Engine + the Compose plugin installed.
+- Redis — co-located via `docker-compose.yml`, or (preferred for prod) a managed
+  Redis with `REDIS_URL` pointed at it.
+
+### Required environment (see §1 "Worker" for the full list)
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role (bypasses RLS) — server-side only |
+| `AYRSHARE_API_KEY` | ✅ | Live view tracking; the worker hard-fails without it and never pays on unverified views |
+| `REDIS_URL` | ▲ | BullMQ connection; defaults to `redis://localhost:6379` |
+| `STRIPE_SECRET_KEY` | ▲ | Required for creator payouts / withdrawal reconciliation |
+| `WORKER_HEALTH_PORT` | optional | Health port (default `8080`; `0` disables) |
+
+### Deploy (Docker Compose — single VPS, co-located Redis)
+```bash
+ssh root@<your-hetzner-ip>
+git clone https://github.com/VenenoGT3/Aether.git && cd Aether
+git checkout main
+cp .env.example .env        # then edit .env and fill the worker secrets above
+docker compose up -d --build worker   # starts redis (dependency) + worker
+docker compose logs -f worker         # watch startup; should report schedulers up
+curl -s localhost:8080/health         # {"status":"ok", ...}
+```
+
+### Deploy (managed Redis, no co-located Redis)
+Set `REDIS_URL` in `.env` to the managed instance and run only the worker:
+```bash
+docker build -t aether-worker .
+docker run -d --name aether-worker --restart unless-stopped \
+  --env-file .env -p 127.0.0.1:8080:8080 aether-worker
+```
+
+### Run as a systemd service (recommended for a VPS)
+A ready-made unit and deploy script live in [`deploy/`](./deploy):
+
+```bash
+# one-time install (repo cloned to /opt/aether)
+sudo cp /opt/aether/deploy/aether-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now aether-worker
+systemctl status aether-worker
+journalctl -u aether-worker -f
+```
+
+The unit (`deploy/aether-worker.service`) runs `docker compose up` (worker + Redis)
+in the foreground under systemd, with `Restart=always` and a 90s stop timeout so
+in-flight BullMQ jobs drain on redeploy (`tini` forwards SIGTERM).
+
+### Update / redeploy
+Use the deploy script — it fast-forwards the repo, rebuilds, restarts (via systemd
+if installed, else compose), and waits on the health endpoint:
+```bash
+cd /opt/aether && ./deploy/deploy-worker.sh main
+```
+Or manually: `git pull origin main && docker compose up -d --build worker`.
+
+### Operations
+- **Health:** `GET :8080/health` (liveness — ready + fresh heartbeat), `:8080/ready`
+  (readiness). Returns `503` if the heartbeat goes stale (hung loop / dead Redis).
+- **Logs:** `docker compose logs -f worker`; alert on lines tagged `[ALERT]`
+  (money-integrity, fraud spikes, withdrawal/payout failures).
+- **Scaling:** horizontally safe — fleet-wide audits use a Redis leader lock and
+  view-sync uses BullMQ `jobId` dedup. Run multiple replicas sharing one Redis.
+- **Security:** firewall to SSH only (`ufw allow OpenSSH`); do **not** expose
+  `8080` (health) or `6379` (Redis) publicly — bind them to localhost as shown.
+  Keep `.env` at `chmod 600`; the image already runs as a non-root user.
 
 ---
 
@@ -232,7 +314,7 @@ Flags resolve with precedence **remote (Upstash) → env → safe default**
 ## 6. Operational notes
 
 - **Production-only**: there is no mock/demo fallback. Every path uses real Supabase,
-  Stripe, Redis, and Ayrshare; missing required config fails clearly at build/startup.
+  Stripe, Redis, and trusted live view providers; missing required config fails clearly at build/startup.
 - **Circuit breakers** (`lib/circuit-breaker.ts`): process-local, 5 failures → open 30s →
   half-open trial. Protect Redis, Stripe, and Supabase reads; fail-open with fallbacks.
   State is surfaced in `/api/health`.

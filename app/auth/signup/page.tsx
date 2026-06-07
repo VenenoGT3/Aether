@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { signUpClient } from "@/lib/supabase/client";
+import { resendSignupConfirmation, signUpClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Sparkles, ArrowRight, ArrowLeft, Mail, KeyRound, User, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, ArrowLeft, Mail, KeyRound, User, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTranslation } from "@/lib/translations";
 
@@ -18,7 +18,9 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [referralRef, setReferralRef] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
 
   // Pre-select the role from the landing-page CTA (?role=business|influencer)
   // and capture a referral code from a share link (?ref=CODE).
@@ -41,10 +43,33 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const { error } = await signUpClient(email, password, fullName, role);
+      // Redirect to the onboarding wizard. Role "influencer" maps to the
+      // "/creator" URL segment; carry any referral code through to onboarding.
+      const segment = role === "influencer" ? "creator" : "business";
+      const dest =
+        segment === "creator" && referralRef
+          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
+          : `/${segment}/onboarding`;
+
+      const { error, needsEmailConfirmation } = await signUpClient(
+        email,
+        password,
+        fullName,
+        role,
+        dest
+      );
 
       if (error) {
-        toast.error(error.message || "Failed to sign up. Please try again.");
+        toast.error(error.message || t("Failed to sign up. Please try again."));
+        setLoading(false);
+        return;
+      }
+
+      if (needsEmailConfirmation) {
+        setPendingEmail(email);
+        toast.success(t("Check your email to confirm your account."), {
+          description: t("After confirming, Aether will send you to the right workspace."),
+        });
         setLoading(false);
         return;
       }
@@ -55,18 +80,42 @@ export default function SignupPage() {
         } onboarding.`,
       });
 
-      // Redirect to the onboarding wizard. Role "influencer" maps to the
-      // "/creator" URL segment; carry any referral code through to onboarding.
-      const segment = role === "influencer" ? "creator" : "business";
-      const dest =
-        segment === "creator" && referralRef
-          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
-          : `/${segment}/onboarding`;
       router.push(dest);
       router.refresh();
     } catch {
       toast.error("An unexpected error occurred during signup.");
       setLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const targetEmail = pendingEmail || email;
+    if (!targetEmail) {
+      toast.error(t("Enter your email address first."));
+      return;
+    }
+
+    setResending(true);
+    try {
+      const segment = role === "influencer" ? "creator" : "business";
+      const dest =
+        segment === "creator" && referralRef
+          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
+          : `/${segment}/onboarding`;
+      const { error } = await resendSignupConfirmation(targetEmail, dest);
+
+      if (error) {
+        toast.error(error.message || t("Could not resend the confirmation email."));
+        return;
+      }
+
+      toast.success(t("Confirmation email sent."), {
+        description: t("Open the newest email link to finish signup."),
+      });
+    } catch {
+      toast.error(t("Could not resend the confirmation email."));
+    } finally {
+      setResending(false);
     }
   };
 
@@ -233,6 +282,41 @@ export default function SignupPage() {
               </>
             )}
           </Button>
+
+          {pendingEmail && (
+            <div className="rounded-2xl border border-[#34C759]/20 bg-[#34C759]/10 p-4 text-sm text-muted-foreground">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#34C759]" />
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-foreground">{t("Check your inbox")}</p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      {t("We sent a confirmation link to")}{" "}
+                      <span className="font-semibold text-foreground">{pendingEmail}</span>.{" "}
+                      {t("Use the newest email link before signing in.")}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl text-xs"
+                    disabled={resending}
+                    onClick={() => void handleResendConfirmation()}
+                  >
+                    {resending ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        {t("Resending...")}
+                      </>
+                    ) : (
+                      t("Resend confirmation email")
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
 
         <div className="mt-8 text-center text-xs text-muted-foreground">

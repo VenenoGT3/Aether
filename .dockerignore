@@ -16,12 +16,19 @@ node_modules
 app
 components
 public
-lib
+lib/*
+!lib/social-post.ts
 types
 hooks
 
 # Supabase migrations / edge functions (applied separately)
 supabase
+
+# Load tests, one-off scripts, deploy/systemd assets, Vercel link state
+tests
+scripts
+deploy
+.vercel
 
 # Docs, tooling, editor, CI
 docs
@@ -37,5 +44,8 @@ coverage
 # Misc
 .DS_Store
 npm-debug.log*
+*.log
+*.tsbuildinfo
 Dockerfile
 .dockerignore
+docker-compose.yml

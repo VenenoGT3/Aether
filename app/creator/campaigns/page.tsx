@@ -2,18 +2,30 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  DollarSign, 
-  Calendar, 
-  ArrowRight, 
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight,
+  Calendar,
+  Check,
+  DollarSign,
+  FileText,
   FolderLock,
   Layers,
-  Sparkles
+  Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
+
+import {
+  CreatorActionButton,
+  CreatorEmptyState,
+  CreatorGlassCard,
+  CreatorPageShell,
+  CreatorProgressBar,
+  CreatorSectionHeader,
+  CreatorStatusPill,
+  type CreatorTone,
+} from "@/components/creator/creator-ui";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
 
 interface CampaignParticipation {
@@ -22,20 +34,58 @@ interface CampaignParticipation {
   title: string;
   brandName: string;
   proposedPayout: number;
-  status: "applied" | "offered" | "accepted" | "declined" | "escrowed" | "submitted" | "released" | "completed" | "cancelled" | "in_progress";
+  status:
+    | "applied"
+    | "offered"
+    | "accepted"
+    | "declined"
+    | "escrowed"
+    | "submitted"
+    | "released"
+    | "completed"
+    | "cancelled"
+    | "in_progress";
   appliedAt: string;
-  dueDate: string;
   deliverableType: string;
 }
 
-/** Raw participation row (with joined campaign) as returned by Supabase. */
 interface RawParticipationRow {
   id: string;
   campaign_id: string;
   proposed_payout: number;
   status: CampaignParticipation["status"];
   applied_at?: string;
-  campaign?: { title?: string; deliverables?: Array<{ type?: string }> } | null;
+  campaign?: {
+    title?: string;
+    deliverables?: Array<{ type?: string }>;
+  } | null;
+}
+
+function statusTone(status: CampaignParticipation["status"]): CreatorTone {
+  if (status === "released" || status === "completed") return "success";
+  if (status === "declined" || status === "cancelled") return "danger";
+  if (status === "offered" || status === "submitted") return "warning";
+  if (status === "accepted" || status === "escrowed" || status === "in_progress") return "accent";
+  return "violet";
+}
+
+function milestoneStep(status: CampaignParticipation["status"]) {
+  switch (status) {
+    case "applied":
+    case "offered":
+      return 1;
+    case "accepted":
+    case "escrowed":
+    case "in_progress":
+      return 2;
+    case "submitted":
+      return 3;
+    case "released":
+    case "completed":
+      return 4;
+    default:
+      return 1;
+  }
 }
 
 export default function InfluencerCampaignsPage() {
@@ -64,21 +114,20 @@ export default function InfluencerCampaignsPage() {
 
       if (error) throw error;
 
-      const formatted: CampaignParticipation[] = ((data || []) as RawParticipationRow[]).map((p) => ({
-        participationId: p.id,
-        campaignId: p.campaign_id,
-        title: p.campaign?.title || "Sponsorship Campaign",
-        brandName: "Brand Client",
-        proposedPayout: Number(p.proposed_payout),
-        status: p.status,
-        appliedAt: p.applied_at || new Date().toISOString(),
-        dueDate: "June 25, 2026",
-        deliverableType: p.campaign?.deliverables?.[0]?.type || "instagram_reel"
-      }));
-
-      setParticipations(formatted);
-    } catch (err) {
-      console.error("Error loading creator campaigns:", err);
+      setParticipations(
+        ((data || []) as RawParticipationRow[]).map((participation) => ({
+          participationId: participation.id,
+          campaignId: participation.campaign_id,
+          title: participation.campaign?.title || "Campaign",
+          brandName: "Brand",
+          proposedPayout: Number(participation.proposed_payout),
+          status: participation.status,
+          appliedAt: participation.applied_at || new Date().toISOString(),
+          deliverableType: participation.campaign?.deliverables?.[0]?.type || "deliverable",
+        }))
+      );
+    } catch (error) {
+      console.error("Error loading creator campaigns:", error);
       toast.error(t("Failed to load campaign contracts."));
     } finally {
       setLoading(false);
@@ -88,21 +137,18 @@ export default function InfluencerCampaignsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadData();
-
-    // Listen to changes from detail chat pages or discover updates
     const handleSync = () => {
       loadData();
     };
-    window.addEventListener("storage", handleSync);
+    window.addEventListener("aether-campaigns-update", handleSync);
     window.addEventListener("role-change", handleSync);
     return () => {
-      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("aether-campaigns-update", handleSync);
       window.removeEventListener("role-change", handleSync);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- page-level bootstrap
   }, []);
 
-  // Tabs splitting logic
   const appliedList = participations.filter(
     (p) => p.status === "applied" || p.status === "offered" || p.status === "declined"
   );
@@ -112,285 +158,201 @@ export default function InfluencerCampaignsPage() {
   const completedList = participations.filter(
     (p) => p.status === "completed" || p.status === "released" || p.status === "cancelled"
   );
+  const currentList =
+    activeTab === "applied" ? appliedList : activeTab === "active" ? activeList : completedList;
 
-  const currentList = 
-    activeTab === "applied" ? appliedList :
-    activeTab === "active" ? activeList : completedList;
-
-  // Segmented Pill animations
-  const appleSpring = {
-    type: "spring" as const,
-    stiffness: 380,
-    damping: 30
-  };
-
-  // Helper to determine active stage step in milestone
-  const getMilestoneStep = (status: string) => {
-    switch (status) {
-      case "applied": return 1;
-      case "accepted":
-      case "escrowed": return 2;
-      case "submitted": return 3;
-      case "released":
-      case "completed": return 4;
-      default: return 1;
-    }
-  };
-
-  // Colors based on status
-  const getStatusBadgeStyles = (status: string) => {
-    switch (status) {
-      case "applied":
-        return "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/25";
-      case "offered":
-        return "bg-[#5856D6]/10 text-[#5856D6] border-[#5856D6]/25 animate-pulse";
-      case "escrowed":
-      case "accepted":
-      case "in_progress":
-        return "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/25";
-      case "submitted":
-        return "bg-indigo-500/10 text-indigo-500 border-indigo-500/25";
-      case "released":
-      case "completed":
-        return "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/25";
-      case "declined":
-      case "cancelled":
-        return "bg-destructive/10 text-destructive border-destructive/25";
-      default:
-        return "bg-secondary text-muted-foreground border-border/10";
-    }
-  };
+  const tabs = [
+    { id: "applied" as const, label: t("Applied"), count: appliedList.length },
+    { id: "active" as const, label: t("Active"), count: activeList.length },
+    { id: "completed" as const, label: t("Completed"), count: completedList.length },
+  ];
 
   return (
-    <div className="flex-1 max-w-5xl w-full mx-auto px-6 py-10 md:py-16">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
-        <div>
-          <span className="text-xs font-semibold text-[#34C759] uppercase tracking-wider block mb-1.5">
-            {t("Aether Creator Hub")}
-          </span>
-          <h1 className="text-3xl font-extrabold tracking-tight">{t("My Campaigns")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("Manage pipeline applications, secure escrows, and track active deliverables.")}</p>
+    <CreatorPageShell maxWidth="content">
+      <CreatorSectionHeader
+        eyebrow={t("Contract stage view")}
+        title={t("Contracts")}
+        description={t("Manage submitted pitches, active escrow work, deliverables, and completed payout releases.")}
+        action={
+          <CreatorActionButton href="/creator/discover">
+            <Sparkles size={15} />
+            {t("Discover Campaigns")}
+          </CreatorActionButton>
+        }
+      />
+
+      <CreatorGlassCard className="mt-8 p-1">
+        <div className="grid grid-cols-3 gap-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors ${
+                activeTab === tab.id ? "text-white" : "text-white/45 hover:text-white"
+              }`}
+            >
+              {activeTab === tab.id ? (
+                <motion.span
+                  layoutId="creatorContractTab"
+                  className="absolute inset-0 rounded-xl bg-[var(--creator-primary)]"
+                  transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
+                />
+              ) : null}
+              <span className="relative z-10">{tab.label}</span>
+              <span className="relative z-10 ml-1 text-white/60">({tab.count})</span>
+            </button>
+          ))}
         </div>
-        
-        <Link href="/creator/discover">
-          <Button className="rounded-full px-5 py-5 text-xs font-semibold cursor-pointer gap-1.5 shadow-sm">
-            {t("Discover Campaigns")} <ArrowRight size={13} />
-          </Button>
-        </Link>
-      </div>
+      </CreatorGlassCard>
 
-      {/* Segmented Control Selector (App Store style) */}
-      <div className="flex justify-center sm:justify-start mb-8">
-        <div className="bg-secondary/40 border border-border/20 p-1 rounded-full flex gap-1 relative max-w-md w-full sm:w-auto">
-          {/* Active Tab Sliding Pill */}
-          <div className="absolute inset-y-1 left-1 right-1 pointer-events-none">
-            <motion.div
-              layoutId="activeCampaignTabPill"
-              className="bg-card shadow-sm border border-border/30 rounded-full h-full"
-              initial={false}
-              animate={{
-                x: activeTab === "applied" ? "0%" : activeTab === "active" ? "100%" : "200%",
-                width: "33.33%"
-              }}
-              transition={appleSpring}
-            />
-          </div>
-
-          <button
-            onClick={() => setActiveTab("applied")}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2 text-xs font-semibold rounded-full relative z-10 transition-colors cursor-pointer select-none ${
-              activeTab === "applied" ? "text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("Applied ({count})").replace("{count}", appliedList.length.toString())}
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("active")}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2 text-xs font-semibold rounded-full relative z-10 transition-colors cursor-pointer select-none ${
-              activeTab === "active" ? "text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("Active ({count})").replace("{count}", activeList.length.toString())}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("completed")}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2 text-xs font-semibold rounded-full relative z-10 transition-colors cursor-pointer select-none ${
-              activeTab === "completed" ? "text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("Completed ({count})").replace("{count}", completedList.length.toString())}
-          </button>
-        </div>
-      </div>
-
-      {/* Campaigns Feed List */}
       {loading ? (
-        <div className="space-y-6">
-          {[1, 2].map((i) => (
-            <div key={i} className="p-6 rounded-3xl bg-card border border-border/30 shadow-sm space-y-6 animate-pulse">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/10 pb-4">
-                <div className="space-y-2">
-                  <div className="h-4 w-20 bg-secondary/80 rounded apple-skeleton" />
-                  <div className="h-5 w-56 bg-secondary/80 rounded apple-skeleton" />
-                  <div className="h-3.5 w-40 bg-secondary/80 rounded apple-skeleton" />
-                </div>
-                <div className="space-y-1">
-                  <div className="h-2 w-16 bg-secondary/80 rounded apple-skeleton" />
-                  <div className="h-5 w-24 bg-secondary/80 rounded apple-skeleton" />
-                </div>
-              </div>
-              <div className="space-y-3 pt-1">
-                <div className="flex justify-between">
-                  <div className="h-3 w-28 bg-secondary/80 rounded apple-skeleton" />
-                  <div className="h-3 w-36 bg-secondary/80 rounded apple-skeleton" />
-                </div>
-                <div className="h-1.5 w-full bg-secondary/40 border border-border/5 rounded-full apple-skeleton" />
-                <div className="grid grid-cols-4 text-center">
-                  <div className="h-2.5 w-10 bg-secondary/80 rounded mx-auto apple-skeleton" />
-                  <div className="h-2.5 w-14 bg-secondary/80 rounded mx-auto apple-skeleton" />
-                  <div className="h-2.5 w-12 bg-secondary/80 rounded mx-auto apple-skeleton" />
-                  <div className="h-2.5 w-10 bg-secondary/80 rounded mx-auto apple-skeleton" />
-                </div>
-              </div>
-            </div>
+        <div className="mt-6 space-y-4">
+          {[1, 2].map((item) => (
+            <CreatorGlassCard key={item} className="h-48 animate-pulse" />
           ))}
         </div>
       ) : currentList.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-16 rounded-3xl bg-card border border-dashed border-border/60 text-center">
-          <Layers size={36} className="text-muted-foreground/35 mb-4" />
-          <h3 className="text-lg font-bold">{t("No campaigns found")}</h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-            {activeTab === "applied" && t("You haven't submitted any campaign pitches yet.")}
-            {activeTab === "active" && t("No active contracts. Express interest in live briefs to get hired!")}
-            {activeTab === "completed" && t("Completed collaborations will show up here after payout release.")}
-          </p>
-          {activeTab !== "completed" && (
-            <Link href="/creator/discover" className="mt-5 block">
-              <Button variant="outline" size="sm" className="rounded-full text-xs cursor-pointer">
-                {t("Explore Discover Feed")}
-              </Button>
-            </Link>
-          )}
+        <div className="mt-6">
+          <CreatorEmptyState
+            icon={Layers}
+            title={t("No campaigns found")}
+            description={
+              activeTab === "applied"
+                ? t("You haven't submitted any campaign pitches yet.")
+                : activeTab === "active"
+                  ? t("No active contracts. Express interest in live briefs to get hired.")
+                  : t("Completed collaborations will show up here after payout release.")
+            }
+          />
         </div>
       ) : (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="grid grid-cols-1 gap-4"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 space-y-4">
           <AnimatePresence mode="popLayout">
             {currentList.map((item) => {
-              const currentStep = getMilestoneStep(item.status);
-              
+              const step = milestoneStep(item.status);
+              const progress = ((step - 1) / 3) * 100;
+              const disabled = item.status === "declined" || item.status === "cancelled";
+
               return (
-                <motion.div
+                <motion.article
                   key={item.participationId}
                   layout
-                  initial={{ opacity: 0, y: 15 }}
+                  initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  whileHover={{ y: -3, scale: 1.004 }}
-                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                  className="apple-card group"
+                  transition={{ type: "spring", stiffness: 330, damping: 26 }}
+                  className="creator-glass rounded-2xl transition-all hover:-translate-y-0.5 hover:border-white/15"
                 >
-                  <Link href={`/campaigns/${item.campaignId}`} className="block">
-                    <div className="p-6 flex flex-col gap-6">
-                      
-                      {/* Top Header Row */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/10 pb-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${getStatusBadgeStyles(item.status)}`}>
+                  <Link href={`/campaigns/${item.campaignId}`} className="block p-5">
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                        <div className="min-w-0">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <CreatorStatusPill tone={statusTone(item.status)}>
                               {item.status === "applied" ? t("Pitch Submitted") : t(item.status.replace("_", " "))}
-                            </span>
-                            
-                            {item.status === "offered" && (
-                              <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/25 flex items-center gap-0.5 select-none">
-                                <Sparkles size={9} /> {t("Offer Received")}
-                              </span>
-                            )}
+                            </CreatorStatusPill>
+                            {item.status === "offered" ? (
+                              <CreatorStatusPill tone="warning">
+                                <Sparkles size={10} />
+                                {t("Offer Received")}
+                              </CreatorStatusPill>
+                            ) : null}
                           </div>
-                          
-                          <h3 className="text-lg font-bold text-foreground leading-snug group-hover:text-[#007AFF] transition-colors">
-                            {item.title}
-                          </h3>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {t("Brand Client:")} <span className="font-semibold text-foreground">{item.brandName}</span>
+                          <h3 className="text-lg font-semibold leading-snug text-white">{item.title}</h3>
+                          <p className="mt-1 text-xs text-white/50">
+                            {t("Brand:")} <span className="font-semibold text-white/80">{item.brandName}</span>
                           </p>
                         </div>
 
-                        {/* Payout Metric */}
-                        <div className="text-left sm:text-right">
-                          <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">{t("Proposed Payout")}</span>
-                          <span className="text-lg font-extrabold text-foreground flex items-center mt-0.5">
-                            <DollarSign size={15} />{item.proposedPayout.toLocaleString()}
-                          </span>
+                        <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left sm:text-right">
+                          <p className="creator-label text-white/35">{t("Proposed payout")}</p>
+                          <p className="mt-1 flex items-center text-xl font-bold text-white sm:justify-end">
+                            <DollarSign size={16} />
+                            {item.proposedPayout.toLocaleString()}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Milestone Progress Bar (Apple Stock style timeline indicator) */}
-                      {item.status !== "declined" && item.status !== "cancelled" && (
-                        <div className="space-y-3 pt-1">
-                          <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            <span>{t("Contract Pipeline Status")}</span>
-                            <span className="text-foreground">
-                              {item.status === "applied" && t("Awaiting Brand Review")}
-                              {item.status === "offered" && t("Review Brand Offer")}
-                              {item.status === "escrowed" && t("Content Creation Stage")}
-                              {item.status === "submitted" && t("Deliverable Under Review")}
-                              {(item.status === "released" || item.status === "completed") && t("Collaboration Completed")}
+                      {!disabled ? (
+                        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="creator-label text-white/35">{t("Contract timeline progress")}</p>
+                            <span className="text-xs font-semibold text-white/70">
+                              {item.status === "applied" && t("Awaiting brand review")}
+                              {item.status === "offered" && t("Review brand offer")}
+                              {(item.status === "accepted" || item.status === "escrowed" || item.status === "in_progress") &&
+                                t("Content creation stage")}
+                              {item.status === "submitted" && t("Deliverable under review")}
+                              {(item.status === "released" || item.status === "completed") && t("Collaboration completed")}
                             </span>
                           </div>
-
-                          {/* Progress Line */}
-                          <div className="relative w-full h-1 bg-secondary rounded-full overflow-hidden">
-                            <div 
-                              className="bg-primary h-full rounded-full transition-all duration-500" 
-                              style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
-                            />
-                          </div>
-
-                          {/* Steps text */}
-                          <div className="grid grid-cols-4 text-[9px] font-semibold text-muted-foreground text-center">
-                            <div className={`text-left ${currentStep >= 1 ? "text-primary font-bold" : ""}`}>
-                              {t("Applied")}
-                            </div>
-                            <div className={currentStep >= 2 ? "text-primary font-bold" : ""}>
-                              {t("Escrow Locked")}
-                            </div>
-                            <div className={currentStep >= 3 ? "text-primary font-bold" : ""}>
-                              {t("Draft Sent")}
-                            </div>
-                            <div className={`text-right ${currentStep >= 4 ? "text-[#34C759] font-bold" : ""}`}>
-                              {t("Paid Out")}
-                            </div>
+                          <CreatorProgressBar value={progress} />
+                          <div className="grid grid-cols-4 text-[9px] font-semibold text-white/35">
+                            <span className={step >= 1 ? "text-[var(--creator-primary)]" : ""}>{t("Applied")}</span>
+                            <span className={step >= 2 ? "text-[var(--creator-primary)]" : ""}>{t("Escrow")}</span>
+                            <span className={step >= 3 ? "text-[var(--creator-primary)]" : ""}>{t("Draft")}</span>
+                            <span className={`text-right ${step >= 4 ? "text-[var(--creator-success)]" : ""}`}>{t("Paid")}</span>
                           </div>
                         </div>
-                      )}
+                      ) : null}
 
-                      {/* Bottom Info Bar */}
-                      <div className="flex items-center justify-between pt-4 border-t border-border/5 text-xs text-muted-foreground">
-                        <div className="flex gap-4">
-                          <span className="flex items-center gap-1"><Calendar size={13} /> {t("Applied:")} {new Date(item.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          <span className="flex items-center gap-1 capitalize"><FolderLock size={13} /> {t("Deliverable:")} {t(item.deliverableType.replace("_", " "))}</span>
+                      <div className="flex flex-col gap-3 border-t border-white/5 pt-4 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-wrap gap-4">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={13} />
+                            {t("Applied:")}{" "}
+                            {new Date(item.appliedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                          <span className="flex items-center gap-1.5 capitalize">
+                            <FolderLock size={13} />
+                            {t("Deliverable:")} {t(item.deliverableType.replace("_", " "))}
+                          </span>
                         </div>
-
-                        <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-all">
+                        <span className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/50">
                           <ArrowRight size={15} />
-                        </div>
+                        </span>
                       </div>
-
                     </div>
                   </Link>
-                </motion.div>
+                </motion.article>
               );
             })}
           </AnimatePresence>
         </motion.div>
       )}
-    </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CreatorGlassCard className="p-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--creator-primary)]">
+              <FileText size={18} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-white">{t("Deliverable workflow")}</h2>
+              <p className="mt-1 text-xs leading-5 text-white/50">
+                {t("Contracts link into campaign detail pages where creators can review scope, status, and submission requirements.")}
+              </p>
+            </div>
+          </div>
+        </CreatorGlassCard>
+        <CreatorGlassCard className="p-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--creator-success)]">
+              <Check size={18} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-white">{t("Payout safety")}</h2>
+              <p className="mt-1 text-xs leading-5 text-white/50">
+                {t("Performance clips and fixed-fee contracts stay tied to approval states before earnings are released.")}
+              </p>
+            </div>
+          </div>
+        </CreatorGlassCard>
+      </div>
+    </CreatorPageShell>
   );
 }

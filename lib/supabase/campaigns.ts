@@ -24,6 +24,7 @@ const CampaignCreateSchema = z.object({
   brand_cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
   cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
   budget_pool: z.number().finite().nonnegative().max(10_000_000).nullable().optional(),
+  min_payout_threshold: z.number().finite().nonnegative().max(1_000_000).optional(),
 });
 
 /** Fields read off the campaign-creation payload (extra keys are passed through). */
@@ -40,6 +41,7 @@ interface CampaignInput {
   content_rules?: Record<string, unknown>;
   cpm_rate?: number | null;
   max_payout_per_creator?: number | null;
+  min_payout_threshold?: number | null;
   view_holdback_hours?: number;
   platforms?: string[];
   target_niches?: string[];
@@ -175,6 +177,9 @@ export async function createCampaignAction(campaignData: CampaignInput) {
         max_payout_per_creator: isPerformance
           ? campaignData.max_payout_per_creator ?? null
           : null,
+        min_payout_threshold: isPerformance
+          ? campaignData.min_payout_threshold ?? 10
+          : 10,
         platforms: campaignData.platforms || [],
         view_holdback_hours: campaignData.view_holdback_hours ?? 48,
         content_rules: campaignData.content_rules || {},

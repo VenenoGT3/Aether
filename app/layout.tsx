@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Instrument_Serif } from "next/font/google";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { NavBar } from "@/components/nav-bar";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
@@ -10,13 +10,6 @@ import "./globals.css";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument-serif",
-  subsets: ["latin"],
-  weight: ["400"],
-  style: ["normal", "italic"],
 });
 
 export const viewport: Viewport = {
@@ -83,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} h-full antialiased dark`}
+      className={`${inter.variable} h-full antialiased dark`}
       style={{ colorScheme: "dark" }}
       suppressHydrationWarning
     >

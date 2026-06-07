@@ -33,8 +33,10 @@ export function MobileTabBar() {
   }, []);
 
   const isAuthPage = pathname?.startsWith("/auth");
+  const isBusinessRoute = pathname?.startsWith("/business");
+  const isCreatorRoute = pathname?.startsWith("/creator");
 
-  if (isAuthPage || !user) return null;
+  if (isAuthPage || isBusinessRoute || isCreatorRoute || !user) return null;
 
   const brandTabs = [
     {

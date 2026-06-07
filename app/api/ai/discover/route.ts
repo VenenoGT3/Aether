@@ -39,7 +39,7 @@ Campaigns to evaluate:
 ${campaigns.map(c => `- Campaign [ID: ${c.id}]: Title: "${c.title}", Description: "${c.description}", Niches: ${c.target_niches.join(", ")}, Budget: $${c.budget_total}`).join("\n")}
 
 For each campaign, calculate a matchScore (integer from 50 to 100) and generate a matchingReason.
-The matchingReason must be a short, extremely compelling, third-person smart matching suggestion (e.g. "This creator has delivered 3.2× ROI for similar beauty campaigns", "Your 4.8% ER in Tech setups makes you a top 5% candidate for this product launch", "This creator has delivered 2.8× ROI on minimal desk campaigns", etc.). Keep the suggestion under 15 words.
+The matchingReason must be a short, compelling smart matching suggestion grounded only in the provided creator/campaign fields (e.g. "Your tech content focus aligns with this launch", "Your 4.8% engagement rate makes you a strong candidate", "Your beauty niche matches this brand brief"). Keep the suggestion under 15 words. Do not claim past ROI, rankings, previous campaign results, or performance metrics not present in the profile.
 
 Please respond with a raw JSON array (and nothing else! Do not wrap in markdown \`\`\`json blocks, do not write any introductory or concluding text) that strictly complies with the following TypeScript interface:
 interface MatchResponse {
@@ -87,13 +87,13 @@ interface MatchResponse {
       const nicheStr = c.target_niches[0] ? c.target_niches[0].toLowerCase() : "niche";
 
       if (nicheStr.includes("tech") || nicheStr.includes("minimal") || nicheStr.includes("design") || nicheStr.includes("setup")) {
-        matchingReason = `This creator has delivered 3.2× ROI for similar tech campaigns`;
+        matchingReason = "Your content focus aligns with this tech campaign.";
       } else if (nicheStr.includes("fashion") || nicheStr.includes("apparel") || nicheStr.includes("beauty") || nicheStr.includes("lifestyle")) {
-        matchingReason = `This creator has delivered 3.2× ROI for similar beauty campaigns`;
+        matchingReason = "Your style niche matches this brand brief.";
       } else if (nicheStr.includes("fitness") || nicheStr.includes("wellness") || nicheStr.includes("health") || nicheStr.includes("nutrition")) {
-        matchingReason = `This creator has delivered 2.8× ROI for similar wellness campaigns`;
+        matchingReason = "Your wellness content focus matches this campaign audience.";
       } else {
-        matchingReason = `Based on your ${creator.engagement}% engagement rate, you are a strong candidate`;
+        matchingReason = `Your ${creator.engagement}% engagement rate supports a strong fit.`;
       }
 
       return {

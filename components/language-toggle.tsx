@@ -11,37 +11,37 @@ export function LanguageToggle() {
   };
 
   return (
-    <div className="bg-secondary/40 p-[2.5px] rounded-full flex items-center border border-border/10 text-[10px] font-bold select-none relative h-7">
+    <div className="relative flex h-8 select-none items-center rounded-full border border-white/10 bg-slate-950/70 p-1 text-[10px] font-bold shadow-[0_8px_28px_rgba(0,0,0,0.24)] backdrop-blur-xl">
       <button
         onClick={() => handleToggle("en")}
-        className={`px-2 h-full flex items-center justify-center rounded-full transition-all cursor-pointer relative z-10 ${
+        className={`relative z-10 flex h-full cursor-pointer items-center justify-center rounded-full px-2.5 transition-all ${
           locale === "en"
-            ? "text-foreground font-extrabold"
-            : "text-muted-foreground/80 hover:text-foreground"
+            ? "font-extrabold text-[#07101f]"
+            : "text-[#c2c6d6] hover:text-white"
         }`}
       >
-        EN
+        <span className="relative z-10">EN</span>
         {locale === "en" && (
           <motion.div
             layoutId="activeLangTab"
-            className="absolute inset-0 bg-background rounded-full shadow-sm z-0 border border-border/5"
+            className="absolute inset-0 z-0 rounded-full border border-white/10 bg-[#adc6ff] shadow-sm"
             transition={{ type: "spring", stiffness: 350, damping: 25 }}
           />
         )}
       </button>
       <button
         onClick={() => handleToggle("it")}
-        className={`px-2 h-full flex items-center justify-center rounded-full transition-all cursor-pointer relative z-10 ${
+        className={`relative z-10 flex h-full cursor-pointer items-center justify-center rounded-full px-2.5 transition-all ${
           locale === "it"
-            ? "text-foreground font-extrabold"
-            : "text-muted-foreground/80 hover:text-foreground"
+            ? "font-extrabold text-[#07101f]"
+            : "text-[#c2c6d6] hover:text-white"
         }`}
       >
-        IT
+        <span className="relative z-10">IT</span>
         {locale === "it" && (
           <motion.div
             layoutId="activeLangTab"
-            className="absolute inset-0 bg-background rounded-full shadow-sm z-0 border border-border/5"
+            className="absolute inset-0 z-0 rounded-full border border-white/10 bg-[#adc6ff] shadow-sm"
             transition={{ type: "spring", stiffness: 350, damping: 25 }}
           />
         )}

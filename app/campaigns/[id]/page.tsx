@@ -38,6 +38,11 @@ import {
 import { toast } from "sonner";
 import { fundEscrowAction, releaseEscrowAction } from "@/lib/stripe/actions";
 import { apiPost } from "@/lib/api/client";
+import {
+  BusinessCampaignInsights,
+  type BusinessCampaignInsightData,
+  type BusinessCampaignInsightMoney,
+} from "@/components/business/business-campaign-insights";
 
 import {
   ResponsiveContainer,
@@ -220,9 +225,48 @@ interface ParticipationRow {
   status: string;
   proposed_payout: number | null;
   actual_payout: number | null;
+  total_views?: number | null;
+  total_earned?: number | null;
+  total_paid?: number | null;
+  creator_cpm_rate?: number | null;
   influencer_id: string;
   applied_at: string;
   posts: PostRow[] | null;
+}
+
+/** Performance clip row used for business campaign insights. */
+interface CampaignClipRow {
+  id: string;
+  campaign_id: string;
+  creator_id: string;
+  participation_id: string;
+  platform: string | null;
+  post_url: string | null;
+  status: string;
+  current_views: number | string | null;
+  counted_views: number | string | null;
+  quality_status: string | null;
+  quality_score: number | string | null;
+  fraud_flagged: boolean | null;
+  fraud_score: number | string | null;
+  submitted_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Performance earning row used for business campaign insights. */
+interface CampaignEarningRow {
+  id: string;
+  clip_id: string;
+  participation_id: string;
+  campaign_id: string;
+  creator_id: string;
+  billable_views: number | string | null;
+  effective_cpm: number | string | null;
+  amount: number | string | null;
+  status: "accrued" | "approved" | "paid" | "reversed" | string;
+  payout_id: string | null;
+  accrued_at: string | null;
 }
 
 /** A raw messages row (before display fields are derived). */
@@ -248,6 +292,26 @@ function mapCampaignStatus(status: string): CampaignDetailState["status"] {
   if (status === "completed") return "released";
   if (status === "in_progress") return "escrowed";
   return "open";
+}
+
+function numberValue(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function emptyInsightMoney(): BusinessCampaignInsightMoney {
+  return { accrued: 0, approved: 0, paid: 0, reversed: 0 };
+}
+
+function addInsightMoney(
+  target: BusinessCampaignInsightMoney,
+  row: { amount: number | string | null; status: string }
+) {
+  const amount = numberValue(row.amount);
+  if (row.status === "accrued") target.accrued += amount;
+  else if (row.status === "approved") target.approved += amount;
+  else if (row.status === "paid") target.paid += amount;
+  else if (row.status === "reversed") target.reversed += amount;
 }
 
 /** Map the campaign's stored deliverables JSON into the workspace shape. */
@@ -283,10 +347,10 @@ function mapDeliverables(raw: unknown): CampaignDetailState["deliverables"] {
 /** Derive timeline milestones from the campaign's real dates + status. */
 function buildTimeline(c: {
   status: string;
-  created_at?: string;
+  created_at?: string | null;
   timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
 }): CampaignDetailState["timeline"] {
-  const fmt = (d?: string) =>
+  const fmt = (d?: string | null) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
   const tl = c.timeline || {};
   const live = c.status !== "draft";
@@ -313,24 +377,42 @@ function enrichMessage(m: RawMessage, viewer: Profile, otherName: string, otherA
   };
 }
 
-const PRESET_IMAGES = [
-  {
-    name: "Minimal Tech",
-    url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Studio View",
-    url: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Cozy Workspace",
-    url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    name: "Programming Setup",
-    url: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=600&q=80"
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function AvatarBubble({
+  src,
+  name,
+  className = "w-10 h-10",
+}: {
+  src?: string;
+  name: string;
+  className?: string;
+}) {
+  if (src) {
+    return (
+      <span
+        role="img"
+        aria-label={name}
+        className={`${className} rounded-full bg-center bg-cover border border-border/20 shrink-0`}
+        style={{ backgroundImage: `url(${src})` }}
+      />
+    );
   }
-];
+
+  return (
+    <span className={`${className} rounded-full bg-primary/10 text-primary border border-border/20 flex items-center justify-center text-[10px] font-bold uppercase shrink-0`}>
+      {initials(name)}
+    </span>
+  );
+}
 
 export default function CampaignDetailPage() {
   const params = useParams();
@@ -342,6 +424,8 @@ export default function CampaignDetailPage() {
 
   // Core Campaign detail state
   const [campaign, setCampaign] = useState<CampaignDetailState | null>(null);
+  const [businessInsight, setBusinessInsight] = useState<BusinessCampaignInsightData | null>(null);
+  const [businessInsightRefreshing, setBusinessInsightRefreshing] = useState(false);
   const [activeParticipantId, setActiveParticipantId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"Brief" | "Deliverables" | "Timeline" | "Budget">("Brief");
   
@@ -390,11 +474,10 @@ export default function CampaignDetailPage() {
   // Submission form state (Influencer side)
   const [postUrl, setPostUrl] = useState("");
   const [postCaption, setPostCaption] = useState("");
-  const [selectedPresetImage, setSelectedPresetImage] = useState(PRESET_IMAGES[0].url);
-  const [estViews, setEstViews] = useState("15000");
-  const [estLikes, setEstLikes] = useState("950");
-  const [estComments, setEstComments] = useState("70");
-  const [estShares, setEstShares] = useState("30");
+  const [estViews, setEstViews] = useState("");
+  const [estLikes, setEstLikes] = useState("");
+  const [estComments, setEstComments] = useState("");
+  const [estShares, setEstShares] = useState("");
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [fetchedPreview, setFetchedPreview] = useState<{
     views: number;
@@ -425,7 +508,7 @@ export default function CampaignDetailPage() {
   
   const [actionLoading, setActionLoading] = useState(false);
   
-  const imageRef = useRef<HTMLImageElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const runSafetyAudit = async () => {
     const participant = campaign?.participants.find(p => p.id === activeParticipantId);
@@ -645,6 +728,7 @@ export default function CampaignDetailPage() {
     setUser(activeUser);
     if (!activeUser || !campaignId) {
       setCampaign(null);
+      setBusinessInsight(null);
       setLoading(false);
       return;
     }
@@ -652,34 +736,81 @@ export default function CampaignDetailPage() {
     const campRes = await getCampaignByIdAction(campaignId);
     if (!campRes.success || !campRes.campaign) {
       setCampaign(null);
+      setBusinessInsight(null);
       setLoading(false);
       return;
     }
     const c = campRes.campaign as {
       id: string;
       title: string;
-      budget_total: number;
+      budget_total: number | string | null;
+      budget_pool?: number | string | null;
+      available_pool?: number | string | null;
+      budget_reserved?: number | string | null;
+      budget_paid?: number | string | null;
+      brand_cpm_rate?: number | string | null;
+      cpm_rate?: number | string | null;
+      min_payout_threshold?: number | string | null;
+      max_payout_per_creator?: number | string | null;
+      campaign_type?: "fixed" | "performance" | null;
+      campaign_category?: "ugc" | "clipping" | null;
+      target_niches?: string[] | null;
+      platforms?: string[] | null;
       status: string;
       description?: string | null;
       deliverables?: unknown;
       timeline?: { startDate?: string; endDate?: string; draftDueDate?: string } | null;
       content_rules?: { notes?: string } | null;
-      created_at?: string;
+      funded_at?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
     };
 
     // Participations on this campaign, with each creator's submitted posts.
     const { data: parts } = await supabase
       .from("participations")
       .select(
-        "id, status, proposed_payout, actual_payout, influencer_id, applied_at, posts ( id, post_url, platform, views, likes, comments, shares, engagement_rate, submitted_at )"
+        "id, status, proposed_payout, actual_payout, total_views, total_earned, total_paid, creator_cpm_rate, influencer_id, applied_at, posts ( id, post_url, platform, views, likes, comments, shares, engagement_rate, submitted_at )"
       )
       .eq("campaign_id", campaignId)
       .order("applied_at", { ascending: true });
 
     const rows = (parts as ParticipationRow[] | null) ?? [];
 
+    const [clipResult, earningResult] = await Promise.all([
+      supabase
+        .from("clips")
+        .select(
+          "id, campaign_id, creator_id, participation_id, platform, post_url, status, current_views, counted_views, quality_status, quality_score, fraud_flagged, fraud_score, submitted_at, created_at, updated_at"
+        )
+        .eq("campaign_id", campaignId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("earnings")
+        .select(
+          "id, clip_id, participation_id, campaign_id, creator_id, billable_views, effective_cpm, amount, status, payout_id, accrued_at"
+        )
+        .eq("campaign_id", campaignId)
+        .order("accrued_at", { ascending: false }),
+    ]);
+
+    if (clipResult.error) {
+      console.error("Failed to load campaign clips:", clipResult.error);
+    }
+    if (earningResult.error) {
+      console.error("Failed to load campaign earnings:", earningResult.error);
+    }
+
+    const clipRows = ((clipResult.data ?? []) as CampaignClipRow[]);
+    const earningRows = ((earningResult.data ?? []) as CampaignEarningRow[]);
+
     // Resolve creator display info (RLS exposes applicant profiles to the brand).
-    const influencerIds = [...new Set(rows.map((r) => r.influencer_id))];
+    const influencerIds = [
+      ...new Set([
+        ...rows.map((r) => r.influencer_id),
+        ...clipRows.map((clip) => clip.creator_id),
+      ].filter(Boolean)),
+    ];
     const profilesById: Record<string, ProfileLite> = {};
     if (influencerIds.length > 0) {
       const { data: profs } = await supabase
@@ -725,10 +856,124 @@ export default function CampaignDetailPage() {
       };
     });
 
+    const earningsByClip = new Map<string, CampaignEarningRow[]>();
+    const earningsByCreator = new Map<string, CampaignEarningRow[]>();
+    for (const earning of earningRows) {
+      earningsByClip.set(earning.clip_id, [...(earningsByClip.get(earning.clip_id) ?? []), earning]);
+      earningsByCreator.set(earning.creator_id, [...(earningsByCreator.get(earning.creator_id) ?? []), earning]);
+    }
+
+    const clipsByCreator = new Map<string, CampaignClipRow[]>();
+    for (const clip of clipRows) {
+      clipsByCreator.set(clip.creator_id, [...(clipsByCreator.get(clip.creator_id) ?? []), clip]);
+    }
+
+    const participationByCreator = new Map(rows.map((row) => [row.influencer_id, row]));
+    const insightCreatorIds = [
+      ...new Set([
+        ...rows.map((row) => row.influencer_id),
+        ...clipRows.map((clip) => clip.creator_id),
+        ...earningRows.map((earning) => earning.creator_id),
+      ].filter(Boolean)),
+    ];
+
+    const insightCreators = insightCreatorIds.map((creatorId) => {
+      const prof = profilesById[creatorId];
+      const handles = (prof?.social_handles ?? {}) as Record<string, string>;
+      const rawHandle = handles.instagram || handles.tiktok || handles.youtube || "";
+      const creatorClips = clipsByCreator.get(creatorId) ?? [];
+      const creatorEarnings = earningsByCreator.get(creatorId) ?? [];
+      const earnings = emptyInsightMoney();
+      creatorEarnings.forEach((earning) => addInsightMoney(earnings, earning));
+      const participation = participationByCreator.get(creatorId);
+      const lastActivity = creatorClips
+        .map((clip) => clip.updated_at ?? clip.created_at ?? clip.submitted_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(String(b)).getTime() - new Date(String(a)).getTime())[0] ?? participation?.applied_at ?? null;
+
+      return {
+        creatorId,
+        participationId: participation?.id ?? null,
+        name: prof?.full_name || "Creator",
+        handle: rawHandle ? `@${rawHandle.replace(/^@/, "")}` : "",
+        avatarUrl: prof?.avatar_url ?? null,
+        status: participation?.status ?? "active",
+        clips: creatorClips.length,
+        pendingClips: creatorClips.filter((clip) => clip.status === "pending").length,
+        trackingClips: creatorClips.filter((clip) => clip.status === "tracking").length,
+        views: creatorClips.reduce(
+          (sum, clip) => sum + numberValue(clip.current_views ?? clip.counted_views),
+          0
+        ),
+        earnings,
+        lastActivity,
+      };
+    });
+
+    const insightEarnings = emptyInsightMoney();
+    earningRows.forEach((earning) => addInsightMoney(insightEarnings, earning));
+
+    const insightClips = clipRows.map((clip) => {
+      const prof = profilesById[clip.creator_id];
+      const clipEarnings = earningsByClip.get(clip.id) ?? [];
+      const estimatedEarnings = clipEarnings.reduce((sum, earning) => sum + numberValue(earning.amount), 0);
+
+      return {
+        id: clip.id,
+        creatorId: clip.creator_id,
+        creatorName: prof?.full_name || "Creator",
+        creatorAvatarUrl: prof?.avatar_url ?? null,
+        platform: clip.platform ?? "social",
+        postUrl: clip.post_url ?? "",
+        status: clip.status,
+        currentViews: numberValue(clip.current_views ?? clip.counted_views),
+        estimatedEarnings,
+        qualityStatus: clip.quality_status,
+        qualityScore: clip.quality_score == null ? null : numberValue(clip.quality_score),
+        fraudFlagged: clip.fraud_flagged === true,
+        fraudScore: clip.fraud_score == null ? null : numberValue(clip.fraud_score),
+        submittedAt: clip.submitted_at ?? clip.created_at,
+        updatedAt: clip.updated_at,
+      };
+    });
+
+    setBusinessInsight(
+      activeUser.role === "business"
+        ? {
+            campaign: {
+              id: c.id,
+              title: c.title,
+              description: c.description || "",
+              status: c.status,
+              campaignType: c.campaign_type ?? "fixed",
+              campaignCategory: c.campaign_category ?? null,
+              targetNiches: c.target_niches ?? [],
+              platforms: c.platforms ?? [],
+              createdAt: c.created_at ?? null,
+              updatedAt: c.updated_at ?? null,
+              fundedAt: c.funded_at ?? null,
+              cpmRate: numberValue(c.brand_cpm_rate ?? c.cpm_rate) || null,
+              budgetTotal: numberValue(c.budget_total),
+              budgetPool: numberValue(c.budget_pool ?? c.budget_total),
+              availablePool: c.available_pool == null ? null : numberValue(c.available_pool),
+              budgetReserved: numberValue(c.budget_reserved),
+              budgetPaid: numberValue(c.budget_paid),
+              minPayoutThreshold:
+                c.min_payout_threshold == null ? null : numberValue(c.min_payout_threshold),
+              maxPayoutPerCreator:
+                c.max_payout_per_creator == null ? null : numberValue(c.max_payout_per_creator),
+            },
+            creators: insightCreators,
+            clips: insightClips,
+            earnings: insightEarnings,
+          }
+        : null
+    );
+
     const mapped: CampaignDetailState = {
       id: c.id,
       title: c.title,
-      budget: Number(c.budget_total) || 0,
+      budget: numberValue(c.budget_total),
       status: mapCampaignStatus(c.status),
       brief: {
         objectives: [],
@@ -760,13 +1005,6 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch campaign + participants on mount
     loadCampaign();
-    const handleSync = () => loadCampaign();
-    window.addEventListener("storage", handleSync);
-    window.addEventListener("role-change", handleSync);
-    return () => {
-      window.removeEventListener("storage", handleSync);
-      window.removeEventListener("role-change", handleSync);
-    };
   }, [loadCampaign]);
 
   // In-memory campaign-state update for ephemeral UI (pin annotations have no
@@ -806,6 +1044,26 @@ export default function CampaignDetailPage() {
   }
 
   const isBusiness = user.role === "business";
+  const handleBusinessInsightRefresh = async () => {
+    setBusinessInsightRefreshing(true);
+    try {
+      await loadCampaign();
+    } finally {
+      setBusinessInsightRefreshing(false);
+    }
+  };
+
+  if (isBusiness && businessInsight) {
+    return (
+      <BusinessCampaignInsights
+        data={businessInsight}
+        onBack={() => router.push("/business/campaigns")}
+        onRefresh={handleBusinessInsightRefresh}
+        refreshing={businessInsightRefreshing}
+      />
+    );
+  }
+
   const selectedParticipant = campaign.participants.find(p => p.id === activeParticipantId);
 
   // Extract versions for version dropdown
@@ -1084,9 +1342,9 @@ export default function CampaignDetailPage() {
 
   // User clicks on the Image Mockup to drop a pin
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!currentSubmission || !imageRef.current) return;
+    if (!currentSubmission || !previewRef.current) return;
     
-    const rect = imageRef.current.getBoundingClientRect();
+    const rect = previewRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -1386,17 +1644,14 @@ export default function CampaignDetailPage() {
 
   // Render Live Analytics ROI panel
   const renderLiveMetrics = () => {
-    // Generate daily tracking data dynamically matching the current metrics
+    // Generate deterministic daily tracking data matching the current metrics.
     const days = 7;
     const historyData = [];
     for (let i = 1; i <= days; i++) {
       const ratio = i / days;
-      // Introduce slight randomness for realistic curves (demo chart only)
-      /* eslint-disable react-hooks/purity -- cosmetic jitter for the demo history chart */
-      const clicks = Math.round(metrics.clicks * ratio * (0.95 + (i * 0.01) * Math.random()));
-      const conversions = Math.round(metrics.conversions * ratio * (0.95 + (i * 0.01) * Math.random()));
-      const revenue = Math.round(metrics.attributed_value * ratio * (0.95 + (i * 0.01) * Math.random()));
-      /* eslint-enable react-hooks/purity */
+      const clicks = Math.round(metrics.clicks * ratio);
+      const conversions = Math.round(metrics.conversions * ratio);
+      const revenue = Math.round(metrics.attributed_value * ratio);
       
       historyData.push({
         day: `Day ${i}`,
@@ -1901,14 +2156,7 @@ export default function CampaignDetailPage() {
         <div className="lg:col-span-2 p-6 md:p-8 apple-card flex flex-col h-[560px]">
           {/* Header */}
           <div className="flex items-center gap-3.5 pb-4 border-b border-border/10 mb-4 select-none">
-            {partnerAvatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={partnerAvatar} alt={partnerName} className="w-10 h-10 rounded-full object-cover border border-border/20" />
-            ) : (
-              <span className="w-10 h-10 rounded-full bg-primary/10 text-primary border border-border/20 flex items-center justify-center text-sm font-bold uppercase shrink-0">
-                {(partnerName || "?").charAt(0)}
-              </span>
-            )}
+            <AvatarBubble src={partnerAvatar} name={partnerName} />
             <div>
               <h3 className="text-xs font-bold text-foreground leading-none">{partnerName}</h3>
               <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
@@ -2240,7 +2488,7 @@ export default function CampaignDetailPage() {
                       : "bg-card/40 border-border hover:bg-card/75 hover:border-border/60"
                   }`}
                 >
-                  <img src={p.avatarUrl} alt={p.fullName} className="w-9 h-9 rounded-full object-cover border border-border" />
+                  <AvatarBubble src={p.avatarUrl} name={p.fullName} className="w-9 h-9" />
                   <div>
                     <p className="text-xs font-bold text-foreground leading-none">{p.fullName}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{p.handle}</p>
@@ -2518,24 +2766,6 @@ export default function CampaignDetailPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground block mb-1.5 uppercase">{t("Select Aesthetic Preset Image")}</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {PRESET_IMAGES.map((img) => (
-                        <button
-                          key={img.name}
-                          type="button"
-                          onClick={() => setSelectedPresetImage(img.url)}
-                          className={`relative aspect-square rounded-lg overflow-hidden border cursor-pointer ${
-                            selectedPresetImage === img.url ? "border-primary ring-2 ring-primary/20 scale-95" : "border-border hover:border-border/60"
-                          }`}
-                        >
-                          <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="grid grid-cols-2 gap-3.5 pt-1">
                     <div>
                       <label className="text-[9px] font-bold text-muted-foreground block mb-1 uppercase">{t("Est. Views")}</label>
@@ -2684,17 +2914,17 @@ export default function CampaignDetailPage() {
                   
                   {/* Interactive Pinning Layer */}
                   <div 
+                    ref={previewRef}
                     onClick={handleImageClick}
                     className="w-full h-full relative cursor-crosshair group overflow-hidden bg-[#16161a]"
                   >
                     {/* Content preview */}
                     {currentSubmission && currentSubmission.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img 
-                        ref={imageRef}
-                        src={currentSubmission.imageUrl} 
-                        alt="Draft deliverable" 
-                        className="w-full h-full object-cover select-none"
+                      <span
+                        role="img"
+                        aria-label="Draft deliverable"
+                        className="block w-full h-full bg-center bg-cover select-none"
+                        style={{ backgroundImage: `url(${currentSubmission.imageUrl})` }}
                       />
                     ) : currentSubmission ? (
                       <a

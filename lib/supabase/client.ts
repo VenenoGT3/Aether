@@ -1,51 +1,120 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
+import { authCallbackUrl as buildAuthCallbackUrl } from "@/lib/supabase/auth-redirect";
 import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export type { Profile };
 
 /** Browser Supabase client (anon key). Real auth + data only — no mock paths. */
-export const supabase = createSupabaseClient(getSupabaseUrl(), getSupabaseAnonKey());
+export const supabase = createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  auth: {
+    detectSessionInUrl: false,
+  },
+});
+
+/**
+ * Hosted Supabase email templates are locked on the free/default mailer.
+ * Use implicit signup links there so confirmation emails don't depend on a
+ * browser-local PKCE verifier that may be absent when users open email links.
+ */
+const signupRedirectClient = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  auth: {
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    flowType: "implicit",
+    persistSession: false,
+  },
+});
 
 /** A one-year, lax cookie used by middleware/server for coarse role + onboarding UX. */
 function setUxCookie(name: string, value: string): void {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out")), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+export function authCallbackUrl(nextPath = "/dashboard"): string {
+  return buildAuthCallbackUrl(
+    nextPath,
+    typeof window !== "undefined" ? window.location.origin : undefined
+  );
+}
+
 export async function signUpClient(
   email: string,
   password: string,
   fullName: string,
-  role: UserRole
+  role: UserRole,
+  nextPath?: string
 ) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await signupRedirectClient.auth.signUp({
     email,
     password,
-    options: { data: { role, full_name: fullName } },
+    options: {
+      data: { role, full_name: fullName },
+      emailRedirectTo: authCallbackUrl(nextPath),
+    },
   });
 
-  if (data?.user) {
+  if (data.session) {
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  }
+
+  if (data?.user && data.session) {
     setUxCookie("aether-role", role);
     setUxCookie("aether-session", "session-active");
     setUxCookie("aether-onboarded", "false");
   }
 
-  return { data, error };
+  return { data, error, needsEmailConfirmation: !!data?.user && !data.session };
+}
+
+export async function resendSignupConfirmation(email: string, nextPath = "/dashboard") {
+  return signupRedirectClient.auth.resend({
+    type: "signup",
+    email,
+    options: { emailRedirectTo: authCallbackUrl(nextPath) },
+  });
 }
 
 export async function signInClient(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (data?.user) {
-    const [{ data: profile }, { data: userRow }] = await Promise.all([
-      supabase.from("profiles").select("onboarded").eq(PROFILE_PK_COLUMN, data.user.id).single(),
-      supabase.from("users").select("role").eq("id", data.user.id).single(),
-    ]);
+    const [{ data: profile }, { data: userRow }] = await withClientTimeout(
+      Promise.all([
+        supabase
+          .from("profiles")
+          .select("onboarded")
+          .eq(PROFILE_PK_COLUMN, data.user.id)
+          .maybeSingle(),
+        supabase.from("users").select("role").eq("id", data.user.id).maybeSingle(),
+      ]),
+      5000
+    ).catch(() => [{ data: null }, { data: null }]);
 
     const userRole =
       (userRow?.role as UserRole) ||
       (data.user.app_metadata?.role as UserRole) ||
+      (data.user.user_metadata?.role as UserRole) ||
       "influencer";
     const isOnboarded = profile?.onboarded ?? false;
 
@@ -77,12 +146,16 @@ export async function getClientProfile(): Promise<Profile | null> {
   if (!user) return null;
 
   const [{ data: profile }, { data: userRow }] = await Promise.all([
-    supabase.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).single(),
-    supabase.from("users").select("role").eq("id", user.id).single(),
+    supabase.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).maybeSingle(),
+    supabase.from("users").select("role").eq("id", user.id).maybeSingle(),
   ]);
 
   if (profile) {
-    return mergeProfileWithUser(profile, userRow?.role, user.email);
+    return mergeProfileWithUser(
+      profile,
+      userRow?.role ?? user.user_metadata?.role,
+      user.email
+    );
   }
   return null;
 }

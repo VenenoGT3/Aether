@@ -29,6 +29,7 @@ import {
   getProviderErrorAlertThreshold,
   getFraudDisqualifyRateAlertThreshold,
   getFraudRepeatOffenderMinEvents,
+  getConfiguredViewProviderNames,
   getHealthPort,
   getViewSyncBatchSize,
   getViewSyncIntervalMinutes,
@@ -171,7 +172,11 @@ function startViewSyncWorker(): Worker {
           if (outcome.status === "synced") {
             await earningsCalcQueue.add(
               JOB_NAMES.calcEarning,
-              { clipId: outcome.clipId, views: outcome.views } satisfies CalcEarningJob,
+              {
+                clipId: outcome.clipId,
+                views: outcome.views,
+                source: outcome.source,
+              } satisfies CalcEarningJob,
               { ...CLIP_RETRY }
             );
           }
@@ -199,15 +204,16 @@ function startEarningsWorker(): Worker {
   return new Worker(
     QUEUE_NAMES.earningsCalc,
     async (job: Job) => {
-      const { clipId, views } = job.data as CalcEarningJob;
+      const { clipId, views, source } = job.data as CalcEarningJob;
       try {
-        const amount = await runEarningsCalc(clipId, views);
+        const amount = await runEarningsCalc(clipId, views, source);
         return { clipId, amount };
       } catch (err) {
         log.error("earnings.error", {
           jobId: job.id,
           clipId,
           views,
+          source,
           attempt: job.attemptsMade + 1,
           error: errMessage(err),
         });
@@ -462,7 +468,7 @@ async function main(): Promise<void> {
   log.info("env.validated", {});
 
   log.info("startup", {
-    viewProvider: "ayrshare",
+    viewProviders: getConfiguredViewProviderNames(),
     viewSyncEveryMin: getViewSyncIntervalMinutes(),
     payoutEveryMin: getPayoutBatchIntervalMinutes(),
     batchSize: getViewSyncBatchSize(),

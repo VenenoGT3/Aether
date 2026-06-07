@@ -3,16 +3,17 @@ import {
   runViewSyncForClip,
   runEarningsCalc,
 } from "./processors";
+import { getConfiguredViewProviderNames } from "./env";
 import { log, errMessage } from "./logger";
 
 /**
  * One-shot runner: executes a single view-sync + earnings cycle WITHOUT Redis.
  * Run with `npm run worker:once`. Ideal for cron-style invocation. Pulls live
- * view counts from Ayrshare (AYRSHARE_API_KEY required) and runs the full
+ * view counts from configured trusted providers and runs the full
  * views -> snapshots -> earnings flow against Supabase without BullMQ.
  */
 async function main(): Promise<void> {
-  log.info("once.start", { viewProvider: "ayrshare" });
+  log.info("once.start", { viewProviders: getConfiguredViewProviderNames() });
 
   const clipIds = await fetchTrackingClipIds();
   log.info("once.tracking", { clips: clipIds.length });
@@ -26,7 +27,11 @@ async function main(): Promise<void> {
       const outcome = await runViewSyncForClip(clipId);
       if (outcome.status === "synced") {
         synced++;
-        totalAccrued += await runEarningsCalc(outcome.clipId, outcome.views);
+        totalAccrued += await runEarningsCalc(
+          outcome.clipId,
+          outcome.views,
+          outcome.source
+        );
       } else {
         skipped++;
         log.info("once.skipped", { clipId, status: outcome.status, reason: outcome.reason });

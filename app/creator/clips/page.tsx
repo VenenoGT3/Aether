@@ -1,36 +1,42 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Eye,
-  DollarSign,
-  Clock,
   CheckCircle2,
-  Plus,
+  Clock,
+  DollarSign,
+  Eye,
   Link2,
   Loader2,
-  Wallet,
+  Plus,
+  ShieldCheck,
   TrendingUp,
+  Wallet,
   Zap,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useTranslation } from "@/lib/translations";
-import { supabase, getClientProfile } from "@/lib/supabase/client";
+
+import {
+  CreatorActionButton,
+  CreatorEmptyState,
+  CreatorGlassCard,
+  CreatorMetricCard,
+  CreatorPageShell,
+  CreatorSectionHeader,
+  CreatorStatusPill,
+  type CreatorTone,
+} from "@/components/creator/creator-ui";
+import { Button } from "@/components/ui/button";
+import { approvalCountdownLabel } from "@/lib/approval";
+import { getClientProfile, supabase } from "@/lib/supabase/client";
 import {
   useCreatorClips,
   useCreatorEarnings,
   useJoinedCampaigns,
   type ClipStatus,
 } from "@/lib/supabase/clips";
-import { approvalCountdownLabel } from "@/lib/approval";
-import { AyrshareLinkPlaceholder } from "@/components/ayrshare-link-placeholder";
-import { CreatorWallet } from "@/components/creator-wallet";
-import { ShieldCheck } from "lucide-react";
-import { StatCard } from "@/components/ui/stat-card";
-import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
-import { EmptyState } from "@/components/ui/empty-state";
+import { useTranslation } from "@/lib/translations";
 
 interface PerfCampaign {
   id: string;
@@ -38,18 +44,22 @@ interface PerfCampaign {
   cpm_rate?: number | null;
 }
 
-const STATUS_STYLES: Record<ClipStatus, { label: string; tone: BadgeTone }> = {
+const STATUS_STYLES: Record<ClipStatus, { label: string; tone: CreatorTone }> = {
   pending: { label: "Pending review", tone: "warning" },
-  approved: { label: "Approved", tone: "info" },
-  tracking: { label: "Tracking · Live", tone: "success" },
+  approved: { label: "Approved", tone: "accent" },
+  tracking: { label: "Tracking live", tone: "success" },
   rejected: { label: "Rejected", tone: "neutral" },
   disqualified: { label: "Disqualified", tone: "danger" },
 };
 
+function money(value: number) {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
 export default function CreatorClipsPage() {
   const { t } = useTranslation();
   const { clips, loading, submitClip } = useCreatorClips();
-  const { breakdown, payouts } = useCreatorEarnings();
+  const { breakdown, payouts, withdraw } = useCreatorEarnings();
   const { joinedIds, join } = useJoinedCampaigns();
 
   const [campaigns, setCampaigns] = useState<PerfCampaign[]>([]);
@@ -57,11 +67,11 @@ export default function CreatorClipsPage() {
   const [postUrl, setPostUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [trusted, setTrusted] = useState(false);
 
   const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
-  const selectedOfferedCpm =
-    campaigns.find((c) => c.id === selectedCampaign)?.cpm_rate ?? null;
+  const selectedOfferedCpm = campaigns.find((c) => c.id === selectedCampaign)?.cpm_rate ?? null;
 
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase
@@ -71,14 +81,14 @@ export default function CreatorClipsPage() {
       .in("status", ["open", "in_progress"]);
     const list = (data ?? []) as PerfCampaign[];
     setCampaigns(list);
-    if (list.length > 0) setSelectedCampaign(list[0].id);
+    if (list.length > 0) setSelectedCampaign((current) => current || list[0].id);
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
     loadCampaigns();
     getClientProfile()
-      .then((p) => setTrusted(p?.trusted_creator === true))
+      .then((profile) => setTrusted(profile?.trusted_creator === true))
       .catch(() => {});
   }, [loadCampaigns]);
 
@@ -127,291 +137,339 @@ export default function CreatorClipsPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    toast.loading(t("Preparing withdrawal..."), { id: "creator-withdrawal" });
+    const res = await withdraw();
+    setWithdrawing(false);
+    if (res.ok) {
+      toast.success(t("Withdrawal requested."), {
+        id: "creator-withdrawal",
+        description:
+          res.net != null
+            ? t("Net payout: {amount}").replace("{amount}", money(Number(res.net)))
+            : undefined,
+      });
+    } else {
+      toast.error(res.error || t("Withdrawal failed."), { id: "creator-withdrawal" });
+    }
+  };
+
   const totalLiveViews = clips
-    .filter((c) => c.status === "tracking")
-    .reduce((sum, c) => sum + c.current_views, 0);
+    .filter((clip) => clip.status === "tracking")
+    .reduce((sum, clip) => sum + clip.current_views, 0);
+  const grossEarnings = breakdown.readyForPayout + breakdown.inHoldback + breakdown.paid;
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16">
-      <div className="mb-10">
-        <span className="text-xs font-semibold text-[#34C759] uppercase tracking-wider block mb-1.5">
-          {t("Performance Clipping")}
-        </span>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{t("Clips & Earnings")}</h1>
-        <p className="text-sm text-muted-foreground mt-2">
-          {t("Submit clips, track live views, and watch your earnings accrue per view.")}
-        </p>
-      </div>
+    <CreatorPageShell>
+      <CreatorSectionHeader
+        eyebrow={t("Performance clipping")}
+        title={t("Clips & Earnings")}
+        description={t("Submit clips, track live views, manage holdback, and request Stripe-backed creator payouts.")}
+        action={
+          <CreatorActionButton href="/creator/discover" variant="secondary">
+            <Zap size={15} className="text-[var(--creator-success)]" />
+            {t("Find Campaigns")}
+          </CreatorActionButton>
+        }
+      />
 
-      {/* Trusted Creator banner — clips skip the review window. */}
-      {trusted && (
-        <div className="mb-8 p-4 rounded-2xl bg-[#34C759]/5 border border-[#34C759]/20 flex items-center gap-3">
-          <span className="p-2 rounded-xl bg-[#34C759]/10 text-[#34C759] shrink-0">
-            <ShieldCheck size={16} />
-          </span>
-          <div>
-            <h4 className="text-xs font-bold text-foreground">{t("You're a Trusted Creator")}</h4>
-            <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">
-              {t("Your clips are approved instantly and start tracking right away — no 5-day review wait.")}
-            </p>
+      {trusted ? (
+        <CreatorGlassCard className="mt-8 border-[rgba(52,211,153,0.18)] bg-[rgba(52,211,153,0.055)]">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[rgba(52,211,153,0.22)] bg-[rgba(52,211,153,0.10)] text-[var(--creator-success)]">
+              <ShieldCheck size={18} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-white">{t("You're a Trusted Creator")}</h2>
+              <p className="mt-1 text-xs leading-5 text-white/55">
+                {t("Your clips are approved instantly and start tracking right away, without the review wait.")}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        </CreatorGlassCard>
+      ) : null}
 
-      {/* Wallet — balances + withdraw */}
-      <div className="mb-8">
-        <CreatorWallet />
-      </div>
-
-      {/* Earnings summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard
-          label={t("Ready for payout")}
-          value={`$${breakdown.readyForPayout.toLocaleString()}`}
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CreatorMetricCard
+          label={t("Gross earnings")}
+          value={money(grossEarnings)}
+          icon={TrendingUp}
+          detail={t("Across performance clips")}
+          tone="cyan"
+        />
+        <CreatorMetricCard
+          label={t("Available balance")}
+          value={money(breakdown.readyForPayout)}
           icon={Wallet}
-          color="#34C759"
-          sub={t("Cleared holdback")}
+          detail={t("Cleared holdback")}
+          tone="accent"
         />
-        <StatCard
-          label={t("In holdback")}
-          value={`$${breakdown.inHoldback.toLocaleString()}`}
+        <CreatorMetricCard
+          label={t("Locked in holdback")}
+          value={money(breakdown.inHoldback)}
           icon={Clock}
-          color="#FF9500"
-          sub={t("Pending settle window")}
+          detail={t("Pending settle window")}
+          tone="warning"
         />
-        <StatCard
-          label={t("Paid out")}
-          value={`$${breakdown.paid.toLocaleString()}`}
-          icon={DollarSign}
-          color="#007AFF"
-          sub={t("Lifetime")}
-        />
-        <StatCard
+        <CreatorMetricCard
           label={t("Live views")}
           value={totalLiveViews.toLocaleString()}
-          icon={TrendingUp}
-          color="#5856D6"
-          sub={t("Across tracking clips")}
+          icon={Eye}
+          detail={t("Across tracking clips")}
+          tone="violet"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Clips list */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-bold tracking-tight">{t("Your Clips")}</h2>
-
-          {loading ? (
-            <div className="p-12 apple-card flex justify-center text-muted-foreground">
-              <Loader2 className="animate-spin" />
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(330px,0.85fr)]">
+        <div className="space-y-4">
+          <CreatorGlassCard>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="creator-label text-white/35">{t("Creator clips")}</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">{t("Your Clips")}</h2>
+              </div>
+              <CreatorStatusPill tone="neutral">{clips.length} clips</CreatorStatusPill>
             </div>
-          ) : clips.length === 0 ? (
-            <div className="apple-card">
-              <EmptyState
+
+            {loading ? (
+              <div className="flex h-44 items-center justify-center text-white/45">
+                <Loader2 className="animate-spin" />
+              </div>
+            ) : clips.length === 0 ? (
+              <CreatorEmptyState
                 icon={Link2}
                 title={t("No clips yet")}
-                description={t("Submit your first clip to start earning per view.")}
+                description={t("Submit your first clip to start earning per verified view.")}
               />
-            </div>
-          ) : (
-            clips.map((clip) => {
-              const style = STATUS_STYLES[clip.status];
-              return (
-                <motion.div
-                  key={clip.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-5 apple-card flex flex-col sm:flex-row sm:items-center gap-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      {clip.quality_status === "changes_requested" ? (
-                        <StatusBadge tone="warning">{t("Changes requested")}</StatusBadge>
-                      ) : (
-                        <StatusBadge tone={style.tone}>{t(style.label)}</StatusBadge>
-                      )}
-                      <span className="text-[10px] text-muted-foreground capitalize">{clip.platform}</span>
-                      {clip.status === "pending" && clip.quality_status !== "changes_requested" && (
-                        <span className="text-[9px] font-bold text-[#FF9500] flex items-center gap-1">
-                          <Clock size={9} /> {t(approvalCountdownLabel(clip.approval_deadline))}
-                        </span>
-                      )}
-                      {clip.status === "tracking" && clip.auto_approved && (
-                        <StatusBadge tone="neutral">
-                          {trusted ? t("Auto-approved · Trusted") : t("Auto-approved")}
-                        </StatusBadge>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold truncate">{clip.campaignTitle}</p>
-                    <a
-                      href={clip.post_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] text-primary hover:underline truncate block max-w-full"
-                    >
-                      {clip.post_url}
-                    </a>
-                    {clip.quality_notes &&
-                      (clip.quality_status === "changes_requested" ||
-                        clip.quality_status === "rejected") && (
-                        <div className="mt-2 p-2.5 rounded-xl bg-[#FF9500]/5 border border-[#FF9500]/15 text-[11px] text-foreground leading-normal">
-                          <span className="font-bold text-[#FF9500]">
-                            {clip.quality_status === "changes_requested"
-                              ? t("Changes requested:")
-                              : t("Rejected:")}
-                          </span>{" "}
-                          {clip.quality_notes}
-                          {clip.quality_status === "changes_requested" && (
-                            <span className="block text-muted-foreground mt-1">
-                              {t("Submit an improved clip below to try again.")}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                  <div className="flex gap-6 shrink-0">
-                    <div className="text-right">
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase justify-end">
-                        <Eye size={11} /> {t("Views")}
-                      </span>
-                      <p className="text-sm font-bold mt-0.5">{clip.current_views.toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase justify-end">
-                        <DollarSign size={11} /> {t("Earned")}
-                      </span>
-                      <p className="text-sm font-bold mt-0.5 text-[#34C759]">
-                        ${clip.estimated_earnings.toLocaleString()}
-                      </p>
-                      {clip.creator_cpm != null && (
-                        <span className="text-[9px] text-muted-foreground block mt-0.5">
-                          @ ${Number(clip.creator_cpm).toFixed(2)} {t("CPM")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Submit + payout history */}
-        <div className="space-y-6">
-          <div className="p-6 apple-card space-y-4">
-            <h3 className="text-sm font-bold flex items-center gap-1.5">
-              <Plus size={15} className="text-primary" /> {t("Submit a clip")}
-            </h3>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Campaign")}</label>
-              <select
-                value={selectedCampaign}
-                onChange={(e) => setSelectedCampaign(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 cursor-pointer"
-              >
-                {campaigns.length === 0 && <option value="">{t("No open campaigns")}</option>}
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-popover">
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {!isJoined ? (
-              <div className="space-y-3 pt-1">
-                <div className="rounded-xl bg-secondary/30 border border-border/10 p-3">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                    {t("Payout rate (set by brand)")}
-                  </span>
-                  <div className="flex items-baseline gap-1.5 mt-1">
-                    <span className="text-lg font-bold tracking-tight">
-                      ${Number(selectedOfferedCpm ?? 0).toFixed(2)}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">{t("CPM · per 1,000 views")}</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-normal mt-1">
-                    {selectedOfferedCpm
-                      ? t("Earn ${per100k} per 100k views at the brand's rate.").replace(
-                          "{per100k}",
-                          Math.round(Number(selectedOfferedCpm) * 100).toLocaleString()
-                        )
-                      : t("This brand sets the pay-per-view rate.")}
-                  </p>
-                </div>
-                <Button
-                  onClick={handleJoin}
-                  disabled={joining || !selectedCampaign}
-                  className="w-full rounded-xl py-5 font-bold text-xs gap-1.5 cursor-pointer bg-[#34C759] hover:bg-[#2fb350] text-white border-0 h-auto"
-                >
-                  {joining ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                  {t("Join Campaign")}
-                </Button>
-                <p className="text-[10px] text-muted-foreground leading-normal">
-                  {t("Join this campaign to start submitting clips. It's instant and free — no application needed.")}
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">{t("Clip URL")}</label>
-                    <span className="text-[9px] font-bold text-[#34C759] flex items-center gap-1">
-                      <CheckCircle2 size={10} /> {t("Joined")}
-                    </span>
-                  </div>
-                  <input
-                    type="url"
-                    placeholder="https://tiktok.com/@you/video/..."
-                    value={postUrl}
-                    onChange={(e) => setPostUrl(e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-border bg-secondary/30 focus:outline-none focus:border-primary/80 placeholder:text-muted-foreground/40"
-                  />
-                </div>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="w-full rounded-xl py-5 font-bold text-xs gap-1.5 cursor-pointer bg-primary text-white border-0 h-auto"
-                >
-                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  {t("Submit clip")}
-                </Button>
-                <p className="text-[10px] text-muted-foreground leading-normal">
-                  {t("You can submit as many clips as you like. Each is reviewed, then tracked for views.")}
-                </p>
-              </>
-            )}
-          </div>
-
-          <AyrshareLinkPlaceholder />
-
-          <div className="p-6 apple-card">
-            <h3 className="text-sm font-bold mb-4">{t("Payout history")}</h3>
-            {payouts.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("No payouts yet.")}</p>
             ) : (
               <div className="space-y-3">
-                {payouts.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={13} className="text-[#34C759]" />
-                      <span className="text-muted-foreground">
-                        {new Date(p.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                {clips.map((clip) => {
+                  const style = STATUS_STYLES[clip.status];
+                  return (
+                    <motion.article
+                      key={clip.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            {clip.quality_status === "changes_requested" ? (
+                              <CreatorStatusPill tone="warning">{t("Changes requested")}</CreatorStatusPill>
+                            ) : (
+                              <CreatorStatusPill tone={style.tone}>{t(style.label)}</CreatorStatusPill>
+                            )}
+                            <span className="text-[10px] capitalize text-white/40">{clip.platform}</span>
+                            {clip.status === "pending" && clip.quality_status !== "changes_requested" ? (
+                              <span className="flex items-center gap-1 text-[9px] font-semibold text-[var(--creator-warning)]">
+                                <Clock size={9} />
+                                {t(approvalCountdownLabel(clip.approval_deadline))}
+                              </span>
+                            ) : null}
+                            {clip.status === "tracking" && clip.auto_approved ? (
+                              <CreatorStatusPill tone="neutral">
+                                {trusted ? t("Auto-approved trusted") : t("Auto-approved")}
+                              </CreatorStatusPill>
+                            ) : null}
+                          </div>
+                          <p className="truncate text-sm font-semibold text-white">{clip.campaignTitle}</p>
+                          <a
+                            href={clip.post_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 block max-w-full truncate text-xs text-[var(--creator-primary)] hover:underline"
+                          >
+                            {clip.post_url}
+                          </a>
+                          {clip.quality_notes &&
+                          (clip.quality_status === "changes_requested" || clip.quality_status === "rejected") ? (
+                            <div className="mt-3 rounded-xl border border-[rgba(245,158,11,0.18)] bg-[rgba(245,158,11,0.06)] p-3 text-xs leading-5 text-white/70">
+                              <span className="font-semibold text-[var(--creator-warning)]">
+                                {clip.quality_status === "changes_requested" ? t("Changes requested:") : t("Rejected:")}
+                              </span>{" "}
+                              {clip.quality_notes}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:w-44">
+                          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                              <Eye size={11} /> {t("Views")}
+                            </span>
+                            <p className="mt-1 text-sm font-bold text-white">{clip.current_views.toLocaleString()}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                              <DollarSign size={11} /> {t("Earned")}
+                            </span>
+                            <p className="mt-1 text-sm font-bold text-[var(--creator-success)]">
+                              {money(clip.estimated_earnings)}
+                            </p>
+                            {clip.creator_cpm != null ? (
+                              <span className="mt-0.5 block text-[9px] text-white/35">
+                                @ ${Number(clip.creator_cpm).toFixed(2)} {t("CPM")}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.article>
+                  );
+                })}
+              </div>
+            )}
+          </CreatorGlassCard>
+        </div>
+
+        <div className="space-y-4">
+          <CreatorGlassCard>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="creator-label text-white/35">{t("Submit work")}</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">{t("Submit a clip")}</h2>
+              </div>
+              <Plus size={20} className="text-[var(--creator-primary)]" />
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="creator-label block text-white/40">{t("Campaign")}</label>
+                <select
+                  value={selectedCampaign}
+                  onChange={(event) => setSelectedCampaign(event.target.value)}
+                  className="creator-input w-full rounded-xl px-3 py-3 text-sm"
+                >
+                  {campaigns.length === 0 ? <option value="">{t("No open campaigns")}</option> : null}
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id} className="bg-slate-950">
+                      {campaign.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {!isJoined ? (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                    <p className="creator-label text-white/35">{t("Brand rate")}</p>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-white">
+                        ${Number(selectedOfferedCpm ?? 0).toFixed(2)}
+                      </span>
+                      <span className="text-xs text-white/45">{t("CPM per 1,000 views")}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-white/45">
+                      {selectedOfferedCpm
+                        ? t("Earn ${per100k} per 100k views at the brand's rate.").replace(
+                            "{per100k}",
+                            Math.round(Number(selectedOfferedCpm) * 100).toLocaleString()
+                          )
+                        : t("This brand sets the pay-per-view rate.")}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleJoin}
+                    disabled={joining || !selectedCampaign}
+                    className="creator-gradient-accent h-11 w-full rounded-xl border-0 text-xs font-semibold text-white hover:brightness-105"
+                  >
+                    {joining ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                    {t("Join Campaign")}
+                  </Button>
+                  <p className="text-xs leading-5 text-white/45">
+                    {t("Join this campaign to start submitting clips. It is instant and free.")}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="creator-label block text-white/40">{t("Clip URL")}</label>
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--creator-success)]">
+                        <CheckCircle2 size={10} /> {t("Joined")}
                       </span>
                     </div>
-                    <span className="font-bold">${Number(p.amount).toLocaleString()}</span>
+                    <input
+                      type="url"
+                      placeholder="https://youtube.com/shorts/..."
+                      value={postUrl}
+                      onChange={(event) => setPostUrl(event.target.value)}
+                      className="creator-input w-full rounded-xl px-3 py-3 text-sm placeholder:text-white/30"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="creator-gradient-accent h-11 w-full rounded-xl border-0 text-xs font-semibold text-white hover:brightness-105"
+                  >
+                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    {t("Submit clip")}
+                  </Button>
+                  <p className="text-xs leading-5 text-white/45">
+                    {t("You can submit multiple clips. Each is reviewed, then tracked for verified views.")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CreatorGlassCard>
+
+          <CreatorGlassCard>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="creator-label text-white/35">{t("Available balance")}</p>
+                <h2 className="mt-1 text-3xl font-bold text-[var(--creator-primary)]">
+                  {money(breakdown.readyForPayout)}
+                </h2>
+              </div>
+              <Wallet size={22} className="text-[var(--creator-primary)]" />
+            </div>
+            <Button
+              onClick={handleWithdraw}
+              disabled={withdrawing || breakdown.readyForPayout <= 0}
+              className="creator-gradient-accent h-11 w-full rounded-xl border-0 text-xs font-semibold text-white hover:brightness-105 disabled:opacity-45"
+            >
+              {withdrawing ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
+              {t("Withdraw Funds")}
+            </Button>
+            <p className="mt-3 text-xs leading-5 text-white/45">
+              {t("Only cleared earnings can be withdrawn. Holdback earnings become available automatically.")}
+            </p>
+          </CreatorGlassCard>
+
+          <CreatorGlassCard>
+            <p className="creator-label mb-3 text-white/35">{t("Recent performance payouts")}</p>
+            {payouts.length === 0 ? (
+              <p className="text-xs text-white/45">{t("No payouts yet.")}</p>
+            ) : (
+              <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5">
+                {payouts.slice(0, 6).map((payout) => (
+                  <div key={payout.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--creator-success)]">
+                        <CheckCircle2 size={15} />
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          {new Date(payout.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-white/35">{payout.status}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-[var(--creator-success)]">
+                      +{money(Number(payout.amount))}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground mt-4 pt-3 border-t border-border/10 leading-normal">
-              {t("Earnings clear the holdback window automatically, then become available to withdraw from your Creator Wallet above.")}
-            </p>
-          </div>
+          </CreatorGlassCard>
         </div>
       </div>
-    </div>
+    </CreatorPageShell>
   );
 }

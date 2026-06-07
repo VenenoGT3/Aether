@@ -1,6 +1,6 @@
 # Aether
 
-**Performance-based UGC + Clipping platform.** Brands fund a budget pool and pay creators **per view** (CPM). Creators join campaigns openly (no application), post short-form clips, and earn automatically as their views accrue — with brand moderation, a holdback window, and automated batched payouts via Stripe Connect.
+**Performance-based UGC + Clipping platform.** Brands fund a budget pool and pay creators **per view** (CPM). Creators join campaigns openly (no application), post short-form clips, and earn as their views accrue — with brand moderation, a holdback window, and creator-initiated Stripe Connect withdrawals by default.
 
 The original **fixed-fee escrow** model (apply → approve → escrow → manual release) is still fully supported. The two coexist via a `campaign_type` discriminator (`'fixed'` vs `'performance'`), so the platform handles both during and after the transition.
 
@@ -19,14 +19,14 @@ This is an **honest** status. The performance model is built end-to-end and the 
 - **View tracking → earnings** — a worker syncs views and accrues earnings via an atomic, pool-aware SQL function (`record_clip_earning`).
 - **Pooled budgets + caps** — per-campaign budget pool, per-creator caps, atomic spend.
 - **Real pool funding** — performance campaigns must be paid (Stripe PaymentIntent) before going live; they stay `draft` until the webhook confirms payment.
-- **Automated payouts** — a batch worker promotes earnings past the holdback window and pays creators via idempotent Stripe transfers.
+- **Withdrawable earnings** — a batch worker promotes earnings past the holdback window; creators withdraw approved balances via idempotent Stripe transfers by default (`WORKER_AUTO_PAYOUTS=true` enables fully automatic payouts).
 - **Earnings reversal** — rejecting/disqualifying a clip reverses its unpaid earnings (DB trigger) and releases reserved budget.
 - **UI** — performance campaign builder, creator Clips & Earnings page, brand moderation + burn-down, dashboard summaries.
 - **Legacy fixed-fee flow** — unchanged and working.
 
 ### 🚧 In progress / needs testing
 - **Live end-to-end run** — the schema, worker, and Stripe paths typecheck/build and are unit-tested, but have **never executed against a real Supabase + Redis + Stripe**. This is the top priority before launch.
-- **Ayrshare view tracking** — the provider and DB fields exist and `AYRSHARE_API_KEY` is **required** (the worker hard-fails without it), but **account linking is a placeholder** and the live provider response parsing is unverified against a real Ayrshare account.
+- **Official view tracking architecture** — the worker now routes payout-grade metrics through official YouTube Data API and TikTok Display API providers first, with Ayrshare as an optional fallback. TikTok still needs the creator OAuth connect flow before real TikTok clips can accrue.
 - **Worker deployment** — the worker is not deployed and there is no provisioned Redis.
 - **Fraud controls** — only a basic velocity check today.
 
@@ -36,7 +36,7 @@ See [HANDOFF.md](HANDOFF.md) → *Known limitations & risks* for the full list.
 
 ## Quick start
 
-Aether requires real services (Supabase, Stripe, Redis, Ayrshare). See **[SETUP.md](SETUP.md)** for the full walkthrough (migrations, auth, Stripe webhook, worker).
+Aether requires real services (Supabase, Stripe, Redis, and at least one trusted view provider). See **[SETUP.md](SETUP.md)** for the full walkthrough (migrations, auth, Stripe webhook, worker).
 
 ```bash
 git clone https://github.com/VenenoGT3/Aether.git
@@ -63,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | **`npm run worker:once`** | One view-sync + earnings cycle, **no Redis** — ideal for testing/cron |
 | **`npm run payouts:once`** | One payout batch, **no Redis** — ideal for testing/cron |
 
-> The worker is a **standalone Node process**, separate from the Next.js app. It uses the Supabase **service role**, Stripe (payouts), and Ayrshare (live views, required). See [SETUP.md](SETUP.md).
+> The worker is a **standalone Node process**, separate from the Next.js app. It uses the Supabase **service role**, Stripe (payouts), and at least one trusted live view provider (`YOUTUBE_DATA_API_KEY`, TikTok OAuth credentials, or `AYRSHARE_API_KEY`). See [SETUP.md](SETUP.md).
 
 ---
 
@@ -75,7 +75,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | Database & auth | Supabase (Postgres, RLS, Realtime) |
 | Payments | Stripe (PaymentIntents for pool/escrow funding, Connect transfers for payouts) |
 | Background worker | BullMQ + Redis (`worker/`), run with `tsx` |
-| View tracking | Ayrshare (live view tracking) |
+| View tracking | Official YouTube Data API + TikTok Display API, optional Ayrshare fallback |
 | UI | Tailwind CSS v4, shadcn/ui + Base UI, Framer Motion, Recharts |
 | Types / validation | TypeScript + Zod (`types/database.ts`, `lib/api/schemas.ts`) |
 | Tests | Vitest |
@@ -89,14 +89,14 @@ app/                     Next.js routes (business/, creator/, api/)
   api/campaigns/[id]/join Open-join endpoint (performance)
   api/clips/             Clip submission + moderation (approve/reject)
 worker/                  Standalone BullMQ worker (view-sync, earnings, payouts)
-  views-provider.ts      Ayrshare live view provider
+  views-provider.ts      Trusted view-provider router (YouTube/TikTok/Ayrshare)
   payout.ts              Payout batch logic
 lib/
   supabase/              Client/server/admin + clips & campaigns data layers
   stripe/                Connect, actions (pool funding, escrow), webhook handler
   api/                   API guard, schemas, services (join, clip submit, moderation)
 supabase/migrations/     Schema (additive; fixed-fee + performance coexist)
-supabase/functions/      stripe-webhook Edge Function
+supabase/functions/      stripe-webhook + social-oauth Edge Functions
 types/                   Zod schemas / DB types
 docs/                    Reference docs (SECRETS, SECURITY, PERMISSIONS, etc.)
 ```
@@ -105,7 +105,7 @@ docs/                    Reference docs (SECRETS, SECURITY, PERMISSIONS, etc.)
 
 ## Documentation
 
-- **[SETUP.md](SETUP.md)** — set up Supabase, Stripe, Redis, Ayrshare, and the worker (migrations, env).
+- **[SETUP.md](SETUP.md)** — set up Supabase, Stripe, Redis, trusted view providers, and the worker (migrations, env).
 - **[HANDOFF.md](HANDOFF.md)** — migration summary, current state, risks, architecture, next steps.
 - **[docs/SECRETS.md](docs/SECRETS.md)** — where every secret lives (Vercel vs Supabase Edge vs worker).
 - **[docs/SECURITY.md](docs/SECURITY.md)** / **[docs/PERMISSIONS.md](docs/PERMISSIONS.md)** — RLS and permission model.

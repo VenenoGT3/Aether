@@ -12,12 +12,13 @@ import type { UserRole } from "@/types";
 
 export type ParticipationStatus =
   | "applied"
-  | "approved"
-  | "escrowed"
-  | "in_progress"
-  | "submitted"
+  | "offered"
+  | "accepted"
+  | "declined"
   | "completed"
-  | "rejected";
+  | "cancelled"
+  | "active"
+  | "banned";
 
 export class AuthorizationError extends Error {
   constructor(message: string) {
@@ -70,11 +71,7 @@ export function assertCanApprovePost(
   participationStatus: ParticipationStatus
 ): void {
   assertBusinessOwnsCampaign(actorId, businessId);
-  const approvable: ParticipationStatus[] = [
-    "submitted",
-    "in_progress",
-    "escrowed",
-  ];
+  const approvable: ParticipationStatus[] = ["accepted"];
   if (!approvable.includes(participationStatus)) {
     throw new AuthorizationError(
       `Cannot approve post while participation is in status: ${participationStatus}`
