@@ -151,9 +151,18 @@ function LoginForm() {
       // Fetch the updated profile to determine onboarding direction
       const profile = await withTimeout(
         getClientProfile(),
-        10000,
+        7000,
         t("Your account signed in, but workspace lookup timed out.")
-      );
+      ).catch((err) => {
+        toast.info(
+          err instanceof Error
+            ? err.message
+            : t("Your account signed in, but workspace lookup timed out."),
+          { description: t("Opening your workspace now.") }
+        );
+        return null;
+      });
+
       if (profile) {
         // Role "influencer" maps to the "/creator" URL segment.
         const segment = profile.role === "influencer" ? "creator" : "business";

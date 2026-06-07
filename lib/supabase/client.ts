@@ -33,6 +33,21 @@ function setUxCookie(name: string, value: string): void {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out")), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 export function authCallbackUrl(nextPath = "/dashboard"): string {
   return buildAuthCallbackUrl(
     nextPath,
@@ -84,14 +99,22 @@ export async function signInClient(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (data?.user) {
-    const [{ data: profile }, { data: userRow }] = await Promise.all([
-      supabase.from("profiles").select("onboarded").eq(PROFILE_PK_COLUMN, data.user.id).single(),
-      supabase.from("users").select("role").eq("id", data.user.id).single(),
-    ]);
+    const [{ data: profile }, { data: userRow }] = await withClientTimeout(
+      Promise.all([
+        supabase
+          .from("profiles")
+          .select("onboarded")
+          .eq(PROFILE_PK_COLUMN, data.user.id)
+          .maybeSingle(),
+        supabase.from("users").select("role").eq("id", data.user.id).maybeSingle(),
+      ]),
+      5000
+    ).catch(() => [{ data: null }, { data: null }]);
 
     const userRole =
       (userRow?.role as UserRole) ||
       (data.user.app_metadata?.role as UserRole) ||
+      (data.user.user_metadata?.role as UserRole) ||
       "influencer";
     const isOnboarded = profile?.onboarded ?? false;
 
@@ -123,12 +146,16 @@ export async function getClientProfile(): Promise<Profile | null> {
   if (!user) return null;
 
   const [{ data: profile }, { data: userRow }] = await Promise.all([
-    supabase.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).single(),
-    supabase.from("users").select("role").eq("id", user.id).single(),
+    supabase.from("profiles").select("*").eq(PROFILE_PK_COLUMN, user.id).maybeSingle(),
+    supabase.from("users").select("role").eq("id", user.id).maybeSingle(),
   ]);
 
   if (profile) {
-    return mergeProfileWithUser(profile, userRow?.role, user.email);
+    return mergeProfileWithUser(
+      profile,
+      userRow?.role ?? user.user_metadata?.role,
+      user.email
+    );
   }
   return null;
 }
