@@ -4,12 +4,29 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
+
+const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
+  "signup",
+  "invite",
+  "magiclink",
+  "recovery",
+  "email_change",
+  "email",
+]);
 
 function safeNextPath(value: string | null): string {
   if (!value?.startsWith("/") || value.startsWith("//")) return "/dashboard";
   return value;
+}
+
+function emailOtpType(value: string | null): EmailOtpType {
+  if (value && EMAIL_OTP_TYPES.has(value as EmailOtpType)) {
+    return value as EmailOtpType;
+  }
+  return "email";
 }
 
 function loginUrl(params: Record<string, string>): string {
@@ -49,8 +66,17 @@ export default function AuthCallbackPage() {
       }
 
       try {
+        const tokenHash = currentUrl.searchParams.get("token_hash");
+        if (tokenHash) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: emailOtpType(currentUrl.searchParams.get("type")),
+          });
+          if (error) throw error;
+        }
+
         const code = currentUrl.searchParams.get("code");
-        if (code) {
+        if (!tokenHash && code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
         }
@@ -80,7 +106,11 @@ export default function AuthCallbackPage() {
         router.refresh();
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : t("Authentication link failed.");
+          err instanceof Error && err.message.includes("PKCE code verifier")
+            ? t("This confirmation link was opened outside the browser that started signup. Please request a new confirmation email and open the new link.")
+            : err instanceof Error
+              ? err.message
+              : t("Authentication link failed.");
         if (active) setErrorMessage(message);
       }
     }

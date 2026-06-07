@@ -46,6 +46,12 @@ export const dictionary: Record<string, string> = {
   "Welcome to Aether!": "Benvenuto su Aether!",
   "Profile setup completed successfully.": "Configurazione del profilo completata con successo.",
   "Successfully signed out.": "Disconnesso con successo.",
+  "Authentication link failed.": "Link di autenticazione non riuscito.",
+  "Authentication link failed": "Link di autenticazione non riuscito",
+  "Confirming your account": "Conferma dell'account in corso",
+  "Please wait while Aether verifies your email and prepares your workspace.": "Attendi mentre Aether verifica la tua email e prepara il tuo workspace.",
+  "Back to sign in": "Torna all'accesso",
+  "This confirmation link was opened outside the browser that started signup. Please request a new confirmation email and open the new link.": "Questo link di conferma e stato aperto fuori dal browser usato per iniziare la registrazione. Richiedi una nuova email di conferma e apri il nuovo link.",
   
   // Landing Page
   "Introducing Aether platform v1.0": "Presentazione della piattaforma Aether v1.0",

@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
@@ -6,7 +7,25 @@ import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile"
 export type { Profile };
 
 /** Browser Supabase client (anon key). Real auth + data only — no mock paths. */
-export const supabase = createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey());
+export const supabase = createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  auth: {
+    detectSessionInUrl: false,
+  },
+});
+
+/**
+ * Hosted Supabase email templates are locked on the free/default mailer.
+ * Use implicit signup links there so confirmation emails don't depend on a
+ * browser-local PKCE verifier that may be absent when users open email links.
+ */
+const signupRedirectClient = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  auth: {
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    flowType: "implicit",
+    persistSession: false,
+  },
+});
 
 /** A one-year, lax cookie used by middleware/server for coarse role + onboarding UX. */
 function setUxCookie(name: string, value: string): void {
@@ -38,7 +57,7 @@ export async function signUpClient(
   role: UserRole,
   nextPath?: string
 ) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await signupRedirectClient.auth.signUp({
     email,
     password,
     options: {
@@ -46,6 +65,13 @@ export async function signUpClient(
       emailRedirectTo: authCallbackUrl(nextPath),
     },
   });
+
+  if (data.session) {
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  }
 
   if (data?.user && data.session) {
     setUxCookie("aether-role", role);
@@ -57,7 +83,7 @@ export async function signUpClient(
 }
 
 export async function resendSignupConfirmation(email: string, nextPath = "/dashboard") {
-  return supabase.auth.resend({
+  return signupRedirectClient.auth.resend({
     type: "signup",
     email,
     options: { emailRedirectTo: authCallbackUrl(nextPath) },
