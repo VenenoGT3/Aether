@@ -26,6 +26,14 @@ describe("Supabase auth redirect URLs", () => {
     expect(appOrigin("http://localhost:3000")).toBe("http://localhost:3000");
   });
 
+  it("falls back to the public alias for Vercel deployment origins when env is missing", () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+
+    expect(appOrigin("https://aether-kh95em9gr-fatturage-technologies.vercel.app")).toBe(
+      "https://aether-blue-alpha.vercel.app"
+    );
+  });
+
   it("builds callback URLs with a sanitized next path", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://aether-blue-alpha.vercel.app/";
 
