@@ -38,7 +38,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { campaignCategoryLabel } from "@/lib/campaign-category";
 import { cn } from "@/lib/utils";
-import { useTranslation } from "@/lib/translations";
+import { useTranslation, type Locale } from "@/lib/translations";
 import type { CampaignStatus, DbCampaign } from "@/types/database";
 
 type CampaignRow = Omit<DbCampaign, "status"> & {
@@ -114,8 +114,12 @@ function numberValue(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function money(value: number, digits = 0): string {
-  return new Intl.NumberFormat("en-US", {
+function localeCode(locale: Locale): string {
+  return locale === "it" ? "it-IT" : "en-US";
+}
+
+function money(value: number, digits = 0, locale: Locale = "en"): string {
+  return new Intl.NumberFormat(localeCode(locale), {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: digits,
@@ -123,10 +127,16 @@ function money(value: number, digits = 0): string {
   }).format(value);
 }
 
-function compactNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+function compactNumber(value: number, locale: Locale = "en"): string {
+  return new Intl.NumberFormat(localeCode(locale), {
     notation: value >= 10000 ? "compact" : "standard",
     maximumFractionDigits: value >= 10000 ? 1 : 0,
+  }).format(value);
+}
+
+function integerNumber(value: number, locale: Locale = "en"): string {
+  return new Intl.NumberFormat(localeCode(locale), {
+    maximumFractionDigits: 0,
   }).format(value);
 }
 
@@ -145,11 +155,11 @@ function statusTone(status: string): BusinessTone {
   return "neutral";
 }
 
-function formatDate(value: string | Date | null | undefined): string {
+function formatDate(value: string | Date | null | undefined, locale: Locale = "en"): string {
   if (!value) return "Recently";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Recently";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(localeCode(locale), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -301,6 +311,7 @@ function CampaignCard({
   actionLoadingId: string | null;
   onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
 }) {
+  const { t, locale } = useTranslation();
   const isPerformance = isPerformanceCampaign(campaign);
   const category = campaignCategoryLabel(campaign.campaign_category);
   const rate = rewardRate(campaign);
@@ -321,12 +332,12 @@ function CampaignCard({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <BusinessStatusPill tone={statusTone(campaign.status)}>
-              {statusLabel(campaign.status)}
+              {t(statusLabel(campaign.status))}
             </BusinessStatusPill>
             <BusinessStatusPill tone={isPerformance ? "accent" : "neutral"}>
-              {isPerformance ? "Performance" : "Fixed fee"}
+              {isPerformance ? t("Performance") : t("Fixed fee")}
             </BusinessStatusPill>
-            {category ? <BusinessStatusPill tone="info">{category}</BusinessStatusPill> : null}
+            {category ? <BusinessStatusPill tone="info">{t(category)}</BusinessStatusPill> : null}
           </div>
           <Link href={detailHref(campaign)}>
             <h2 className="line-clamp-2 text-lg font-semibold tracking-normal text-[var(--business-text)] transition-colors group-hover:text-[var(--business-primary)]">
@@ -334,13 +345,13 @@ function CampaignCard({
             </h2>
           </Link>
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--business-muted)]">
-            {campaign.description || "No brief description yet."}
+            {campaign.description || t("No brief description yet.")}
           </p>
         </div>
         <Link
           href={detailHref(campaign)}
           className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[var(--business-muted)] transition-colors hover:text-[var(--business-primary)]"
-          aria-label={`Open ${campaign.title}`}
+          aria-label={`${t("Open")} ${campaign.title}`}
         >
           <ArrowRight size={16} />
         </Link>
@@ -352,7 +363,7 @@ function CampaignCard({
             key={niche}
             className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--business-muted)]"
           >
-            {niche}
+            {t(niche)}
           </span>
         ))}
       </div>
@@ -360,16 +371,16 @@ function CampaignCard({
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
-            Budget pool
+            {t("Budget pool")}
           </p>
-          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0, locale)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
-            Reward rate
+            {t("Reward rate")}
           </p>
           <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
-            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : "Fixed"}
+            {isPerformance && rate > 0 ? `${money(rate, 2, locale)} RPM` : t("Fixed")}
           </p>
         </div>
       </div>
@@ -379,12 +390,12 @@ function CampaignCard({
           <BusinessProgressBar
             value={used}
             max={pool || 100}
-            label={`${money(remaining)} remaining`}
+            label={`${money(remaining, 0, locale)} ${t("remaining")}`}
             tone={campaign.status === "exhausted" ? "danger" : used / Math.max(pool, 1) >= 0.9 ? "warning" : "accent"}
           />
           {funded > pool ? (
             <p className="text-[10px] text-[var(--business-muted)]">
-              {money(funded)} funded · creators earn from {money(pool)}
+              {money(funded, 0, locale)} {t("funded")} · {t("creators earn from")} {money(pool, 0, locale)}
             </p>
           ) : null}
         </div>
@@ -392,27 +403,27 @@ function CampaignCard({
 
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
-          <p className="font-semibold text-[var(--business-text)]">{compactNumber(clipSummary.verifiedViews || participationSummary.totalViews)}</p>
-          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">verified views</p>
+          <p className="font-semibold text-[var(--business-text)]">{compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("verified views")}</p>
         </div>
         <div>
-          <p className="font-semibold text-[var(--business-text)]">{clipSummary.pending}</p>
-          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">pending clips</p>
+          <p className="font-semibold text-[var(--business-text)]">{integerNumber(clipSummary.pending, locale)}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("pending clips")}</p>
         </div>
         <div>
-          <p className="font-semibold text-[var(--business-text)]">{clipSummary.creators || participationSummary.creators}</p>
-          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">creators</p>
+          <p className="font-semibold text-[var(--business-text)]">{integerNumber(clipSummary.creators || participationSummary.creators, locale)}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("creators")}</p>
         </div>
       </div>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[10px] text-[var(--business-muted)]">
-          Updated {formatDate(campaign.updated_at || campaign.created_at)}
+          {t("Updated")} {t(formatDate(campaign.updated_at || campaign.created_at, locale))}
         </p>
         {campaign.status === "draft" ? (
           isPerformance && !isFunded ? (
             <BusinessActionButton href="/business/campaigns/new" size="sm" variant="secondary">
-              Finish funding
+              {t("Finish funding")}
             </BusinessActionButton>
           ) : (
             <BusinessActionButton
@@ -423,12 +434,12 @@ function CampaignCard({
               icon={loading ? Loader2 : Sparkles}
               className={loading ? "[&_svg]:animate-spin" : undefined}
             >
-              Open marketplace
+              {t("Open marketplace")}
             </BusinessActionButton>
           )
         ) : clipSummary.pending > 0 ? (
           <BusinessActionButton href="/business/moderation" size="sm" variant="secondary" icon={ClipboardCheck}>
-            Review submissions
+            {t("Review submissions")}
           </BusinessActionButton>
         ) : campaign.status === "open" ? (
           <BusinessActionButton
@@ -439,11 +450,11 @@ function CampaignCard({
             icon={loading ? Loader2 : Zap}
             className={loading ? "[&_svg]:animate-spin" : undefined}
           >
-            Start tracking
+            {t("Start tracking")}
           </BusinessActionButton>
         ) : (
           <BusinessActionButton href={detailHref(campaign)} size="sm" variant="ghost" trailingIcon={ArrowRight}>
-            View insights
+            {t("View insights")}
           </BusinessActionButton>
         )}
       </div>
@@ -464,6 +475,7 @@ function CampaignRowItem({
   actionLoadingId: string | null;
   onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
 }) {
+  const { t, locale } = useTranslation();
   const isPerformance = isPerformanceCampaign(campaign);
   const pool = campaignPool(campaign);
   const used = campaignUsed(campaign);
@@ -477,10 +489,10 @@ function CampaignRowItem({
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <BusinessStatusPill tone={statusTone(campaign.status)}>
-              {statusLabel(campaign.status)}
+              {t(statusLabel(campaign.status))}
             </BusinessStatusPill>
             <BusinessStatusPill tone={isPerformance ? "accent" : "neutral"}>
-              {isPerformance ? "Performance" : "Fixed fee"}
+              {isPerformance ? t("Performance") : t("Fixed fee")}
             </BusinessStatusPill>
           </div>
           <Link href={detailHref(campaign)}>
@@ -489,34 +501,34 @@ function CampaignRowItem({
             </h2>
           </Link>
           <p className="mt-1 line-clamp-1 text-sm text-[var(--business-muted)]">
-            {campaign.description || "No brief description yet."}
+            {campaign.description || t("No brief description yet.")}
           </p>
         </div>
 
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
-            Budget pool
+            {t("Budget pool")}
           </p>
-          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0, locale)}</p>
           {isPerformance ? <BusinessProgressBar value={used} max={pool || 100} className="mt-2" /> : null}
         </div>
 
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
-            Performance
+            {t("Performance")}
           </p>
           <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
-            {compactNumber(clipSummary.verifiedViews || participationSummary.totalViews)}
+            {compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}
           </p>
           <p className="text-[10px] text-[var(--business-muted)]">
-            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : `${clipSummary.total} clips`}
+            {isPerformance && rate > 0 ? `${money(rate, 2, locale)} RPM` : `${integerNumber(clipSummary.total, locale)} ${t("clips")}`}
           </p>
         </div>
 
         <div className="flex gap-2 lg:justify-end">
           {clipSummary.pending > 0 ? (
             <BusinessActionButton href="/business/moderation" size="sm" variant="secondary" icon={ClipboardCheck}>
-              Review
+              {t("Review submissions")}
             </BusinessActionButton>
           ) : campaign.status === "open" ? (
             <BusinessActionButton
@@ -527,11 +539,11 @@ function CampaignRowItem({
               icon={loading ? Loader2 : Zap}
               className={loading ? "[&_svg]:animate-spin" : undefined}
             >
-              Track
+              {t("Track")}
             </BusinessActionButton>
           ) : null}
           <BusinessActionButton href={detailHref(campaign)} size="sm" variant="ghost" trailingIcon={ArrowRight}>
-            Open
+            {t("Open")}
           </BusinessActionButton>
         </div>
       </div>
@@ -540,7 +552,7 @@ function CampaignRowItem({
 }
 
 export default function CampaignsPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
@@ -729,29 +741,29 @@ export default function CampaignsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <BusinessMetricCard
           label={t("Live campaigns")}
-          value={hubStats.activeCampaigns.toLocaleString()}
-          detail={`${hubStats.performanceCampaigns} ${t("performance")}`}
+          value={integerNumber(hubStats.activeCampaigns, locale)}
+          detail={`${integerNumber(hubStats.performanceCampaigns, locale)} ${t("performance")}`}
           icon={Megaphone}
           tone="accent"
         />
         <BusinessMetricCard
           label={t("Needs review")}
-          value={hubStats.pendingReviews.toLocaleString()}
+          value={integerNumber(hubStats.pendingReviews, locale)}
           detail={t("pending submissions")}
           icon={ClipboardCheck}
           tone={hubStats.pendingReviews > 0 ? "warning" : "success"}
         />
         <BusinessMetricCard
           label={t("Verified views")}
-          value={compactNumber(hubStats.verifiedViews)}
-          detail={`${hubStats.campaignsWithCreators} ${t("campaigns with creators")}`}
+          value={compactNumber(hubStats.verifiedViews, locale)}
+          detail={`${integerNumber(hubStats.campaignsWithCreators, locale)} ${t("campaigns with creators")}`}
           icon={Eye}
           tone="info"
         />
         <BusinessMetricCard
           label={t("Remaining pool")}
-          value={money(hubStats.remainingPool)}
-          detail={hubStats.totalEarned > 0 ? `${money(hubStats.totalEarned)} ${t("earned")}` : t("available budget")}
+          value={money(hubStats.remainingPool, 0, locale)}
+          detail={hubStats.totalEarned > 0 ? `${money(hubStats.totalEarned, 0, locale)} ${t("earned")}` : t("available budget")}
           icon={CircleDollarSign}
           tone="success"
         />
@@ -858,7 +870,7 @@ export default function CampaignsPage() {
                     : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
                 )}
               >
-                {niche}
+                {t(niche)}
               </button>
             ))}
           </div>
@@ -901,8 +913,6 @@ export default function CampaignsPage() {
           {filteredCampaigns.map((campaign, index) => (
             <motion.div
               key={campaign.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.03, 0.18) }}
             >
               <CampaignCard
@@ -920,8 +930,6 @@ export default function CampaignsPage() {
           {filteredCampaigns.map((campaign, index) => (
             <motion.div
               key={campaign.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.02, 0.14) }}
             >
               <CampaignRowItem

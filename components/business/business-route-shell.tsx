@@ -83,16 +83,16 @@ function BusinessBrandMark() {
   const { t } = useTranslation();
 
   return (
-    <Link href="/business/dashboard" className="flex min-w-0 items-center gap-3">
+    <Link href="/business/dashboard" className="flex w-36 shrink-0 items-center gap-3 sm:w-40">
       <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-[var(--business-primary)] to-[var(--business-secondary)] text-sm font-black text-[var(--business-bg)] shadow-[0_12px_28px_-16px_rgba(173,198,255,0.8)]">
         AE
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold tracking-normal text-[var(--business-text)]">
-          Aether Business
+          Aether
         </span>
         <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
-          {t("Content Rewards")}
+          {t("Business dashboard")}
         </span>
       </span>
     </Link>
@@ -132,7 +132,7 @@ function BusinessNavLink({
         />
       ) : null}
       <Icon size={compact ? 18 : 16} className="relative z-10" aria-hidden="true" />
-      <span className="relative z-10">{label}</span>
+      <span className={cn("relative z-10", !compact && "whitespace-nowrap")}>{label}</span>
     </Link>
   );
 }
@@ -264,10 +264,13 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
   return (
     <div className="business-route-shell business-portal min-h-[100svh] overflow-x-clip bg-[linear-gradient(180deg,#0c1324_0%,#10131d_58%,#0b0f18_100%)] text-[var(--business-text)]">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[rgba(12,19,36,0.86)] backdrop-blur-xl">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-6">
+        <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-5">
             <BusinessBrandMark />
-            <nav className="hidden items-center gap-1 md:flex" aria-label="Business navigation">
+            <nav
+              className="business-scrollbar-none hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex"
+              aria-label="Business navigation"
+            >
               {businessNavItems.map((item) => (
                 <BusinessNavLink
                   key={item.href}
@@ -281,12 +284,12 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <BusinessStatusPill className="hidden lg:inline-flex" tone="accent">
+            <BusinessStatusPill className="hidden max-w-44 truncate whitespace-nowrap 2xl:inline-flex" tone="accent">
               {profileLoaded ? businessName : t("Loading")}
             </BusinessStatusPill>
             <Link
               href="/business/campaigns/new"
-              className="hidden h-9 items-center justify-center rounded-lg border border-transparent bg-[linear-gradient(135deg,var(--business-primary)_0%,var(--business-secondary)_100%)] px-3 text-sm font-semibold text-[var(--business-bg)] shadow-[0_8px_28px_-14px_rgba(173,198,255,0.7)] transition-all hover:brightness-105 sm:inline-flex"
+              className="hidden h-9 items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-[linear-gradient(135deg,var(--business-primary)_0%,var(--business-secondary)_100%)] px-3 text-sm font-semibold text-[var(--business-bg)] shadow-[0_8px_28px_-14px_rgba(173,198,255,0.7)] transition-all hover:brightness-105 lg:inline-flex"
             >
               <Plus size={15} aria-hidden="true" />
               <span className="ml-2">{t("New Campaign")}</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 export type Locale = "en" | "it";
 
@@ -151,8 +151,9 @@ export const dictionary: Record<string, string> = {
   "Loading": "Caricamento",
   "Loading workspace": "Caricamento workspace",
   "New campaign": "Nuova campagna",
-  "Submissions": "Submission",
+  "Submissions": "Invii",
   "Setup": "Configurazione",
+  "Business dashboard": "Dashboard business",
 
   // Business Dashboard
   "Overview": "Panoramica",
@@ -209,6 +210,51 @@ export const dictionary: Record<string, string> = {
   "Search campaigns...": "Cerca campagne...",
   "Niches:": "Nicchie:",
   "All": "Tutti",
+  "Live": "Live",
+  "Needs review": "Da rivedere",
+  "Fixed fee": "Tariffa fissa",
+  "Campaign workspaces": "Workspace campagne",
+  "Search, monitor, and manage performance campaigns by lifecycle, budget pool, verified views, and moderation status.": "Cerca, monitora e gestisci campagne performance per ciclo di vita, budget pool, visualizzazioni verificate e stato moderazione.",
+  "Live campaigns": "Campagne live",
+  "performance": "performance",
+  "pending submissions": "submission in attesa",
+  "Verified views": "Visualizzazioni verificate",
+  "campaigns with creators": "campagne con creator",
+  "available budget": "budget disponibile",
+  "earned": "guadagnati",
+  "Search campaigns, briefs, or niches": "Cerca campagne, brief o nicchie",
+  "View": "Vista",
+  "Card view": "Vista card",
+  "Row view": "Vista righe",
+  "All niches": "Tutte le nicchie",
+  "Design": "Design",
+  "Food": "Food",
+  "Lifestyle": "Lifestyle",
+  "Marketplace open": "Marketplace aperto",
+  "Tracking": "Tracking",
+  "Budget exhausted": "Budget esaurito",
+  "Recently": "Recentemente",
+  "No brief description yet.": "Nessuna descrizione brief ancora.",
+  "Budget pool": "Budget pool",
+  "Fixed": "Fisso",
+  "remaining": "rimanenti",
+  "funded": "finanziati",
+  "creators earn from": "i creator guadagnano da",
+  "verified views": "visualizzazioni verificate",
+  "pending clips": "clip in attesa",
+  "Updated": "Aggiornato",
+  "Finish funding": "Completa finanziamento",
+  "Open marketplace": "Apri marketplace",
+  "Review submissions": "Rivedi submission",
+  "Start tracking": "Avvia tracking",
+  "View insights": "Vedi insight",
+  "Open": "Apri",
+  "Track": "Traccia",
+  "Create your first campaign workspace": "Crea il tuo primo workspace campagna",
+  "Launch a UGC or clipping campaign, fund the budget pool, and start collecting verified creator submissions.": "Lancia una campagna UGC o clipping, finanzia il budget pool e inizia a raccogliere submission creator verificate.",
+  "No campaigns match": "Nessuna campagna corrisponde",
+  "Try another status, niche, or search term.": "Prova un altro stato, una nicchia o un termine di ricerca.",
+  "Clipping": "Clipping",
 
   // Create Campaign Wizard
   "Campaign Creator Wizard": "Procedura Guidata di Creazione Campagna",
@@ -957,7 +1003,7 @@ export const dictionary: Record<string, string> = {
   "Total budget pool": "Budget pool totale",
   "Total campaign budget": "Budget totale campagna",
   "Reward rate / RPM": "Reward rate / RPM",
-  "Reward rate": "Reward rate",
+  "Reward rate": "Tasso premio",
   "RPM": "RPM",
   "Dollar amount paid per 1,000 verified views.": "Importo pagato per 1.000 visualizzazioni verificate.",
   "Minimum payout threshold": "Soglia minima di payout",
@@ -993,7 +1039,6 @@ export const dictionary: Record<string, string> = {
   "Creator performance": "Performance creator",
   "Creator earnings": "Guadagni creator",
   "Creator payout recorded": "Payout creator registrato",
-  "Verified views": "Visualizzazioni verificate",
   "Reserved earnings": "Guadagni riservati",
   "Paid to creators": "Pagato ai creator",
   "Remaining pool": "Pool rimanente",
@@ -1045,20 +1090,22 @@ export function useTranslation() {
     return () => window.removeEventListener("locale-change", handleLocaleChange);
   }, []);
 
-  const t = (text: string): string => {
+  const t = useCallback((text: string): string => {
     if (locale === "it") {
       return dictionary[text] || text;
     }
     return text;
-  };
+  }, [locale]);
+
+  const setLocaleValue = useCallback((newLocale: Locale) => {
+    setClientLocale(newLocale);
+    setLocale(newLocale);
+  }, []);
 
   return { 
     t, 
     locale, 
-    setLocale: (newLocale: Locale) => {
-      setClientLocale(newLocale);
-      setLocale(newLocale);
-    } 
+    setLocale: setLocaleValue,
   };
 }
 

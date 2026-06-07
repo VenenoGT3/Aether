@@ -214,7 +214,7 @@ export function BusinessStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 whitespace-normal rounded-full border px-2.5 py-1 text-center text-[10px] font-semibold uppercase leading-4 tracking-[0.14em]",
+        "inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-center text-[10px] font-semibold uppercase leading-4 tracking-[0.14em]",
         toneChip[tone],
         className
       )}
@@ -288,7 +288,7 @@ export function BusinessActionButton({
   ...props
 }: BusinessActionButtonProps) {
   const classes = cn(
-    "inline-flex min-w-0 shrink-0 items-center justify-center gap-2 whitespace-normal rounded-xl border text-center text-sm font-semibold leading-5 tracking-normal transition-all",
+    "inline-flex min-w-0 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border text-center text-sm font-semibold leading-5 tracking-normal transition-all",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(173,198,255,0.60)] disabled:pointer-events-none disabled:opacity-50",
     size === "sm" && "h-8 px-3 text-xs",
     size === "md" && "h-10 px-4",
