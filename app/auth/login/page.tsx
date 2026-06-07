@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/language-toggle";
-import { signInClient, getClientProfile, supabase } from "@/lib/supabase/client";
+import {
+  signInClient,
+  getClientProfile,
+  resendSignupConfirmation,
+  supabase,
+} from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles,
@@ -17,6 +22,7 @@ import {
   Building2,
   UserRound,
   ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import { useTranslation } from "@/lib/translations";
 import { motion } from "framer-motion";
@@ -38,6 +44,21 @@ type TestLoginResponse = {
   };
 };
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function LoginForm() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -45,10 +66,44 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [testLoginRoles, setTestLoginRoles] = useState<TestLoginRole[]>([]);
   const [testLoading, setTestLoading] = useState<TestLoginRole | null>(null);
+  const [confirmationEmail, setConfirmationEmail] = useState("");
+  const authNoticeHandled = useRef(false);
 
   const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+
+  useEffect(() => {
+    if (authNoticeHandled.current) return;
+
+    const confirmed = searchParams.get("confirmed");
+    const confirmationExpired = searchParams.get("confirmationExpired");
+    const authError = searchParams.get("authError");
+
+    if (confirmed) {
+      toast.success(t("Email confirmed."), {
+        description: t("You can now sign in to your Aether workspace."),
+      });
+      authNoticeHandled.current = true;
+      return;
+    }
+
+    if (confirmationExpired) {
+      toast.error(t("Your confirmation link expired."), {
+        description: t("Enter your email and request a new confirmation link."),
+      });
+      authNoticeHandled.current = true;
+      return;
+    }
+
+    if (authError) {
+      toast.error(t("Authentication link failed."), {
+        description: authError,
+      });
+      authNoticeHandled.current = true;
+    }
+  }, [searchParams, t]);
 
   useEffect(() => {
     let active = true;
@@ -74,9 +129,16 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const { error } = await signInClient(email, password);
+      const { error } = await withTimeout(
+        signInClient(email, password),
+        20000,
+        t("Sign in timed out. Please try again.")
+      );
       
       if (error) {
+        if (/confirm|verified|verification/i.test(error.message || "")) {
+          setConfirmationEmail(email);
+        }
         toast.error(error.message || t("Failed to sign in. Please verify your credentials."));
         setLoading(false);
         return;
@@ -87,7 +149,11 @@ function LoginForm() {
       });
 
       // Fetch the updated profile to determine onboarding direction
-      const profile = await getClientProfile();
+      const profile = await withTimeout(
+        getClientProfile(),
+        10000,
+        t("Your account signed in, but workspace lookup timed out.")
+      );
       if (profile) {
         // Role "influencer" maps to the "/creator" URL segment.
         const segment = profile.role === "influencer" ? "creator" : "business";
@@ -101,9 +167,38 @@ function LoginForm() {
       }
       
       router.refresh();
-    } catch {
-      toast.error(t("An unexpected error occurred during login."));
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("An unexpected error occurred during login.")
+      );
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const targetEmail = confirmationEmail || email;
+    if (!targetEmail) {
+      toast.error(t("Enter your email address first."));
+      return;
+    }
+
+    setResending(true);
+    try {
+      const { error } = await resendSignupConfirmation(targetEmail, redirectTo);
+      if (error) {
+        toast.error(error.message || t("Could not resend the confirmation email."));
+        return;
+      }
+
+      setConfirmationEmail(targetEmail);
+      toast.success(t("Confirmation email sent."), {
+        description: t("Open the newest email link to finish signup."),
+      });
+    } catch {
+      toast.error(t("Could not resend the confirmation email."));
+    } finally {
+      setResending(false);
     }
   };
 
@@ -277,6 +372,41 @@ function LoginForm() {
               </>
             )}
           </Button>
+
+          {(confirmationEmail || searchParams.get("confirmationExpired")) && (
+            <div className="rounded-2xl border border-[#adc6ff]/20 bg-[#adc6ff]/10 p-4 text-sm text-[#c2c6d6]">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="mt-0.5 shrink-0 text-[#adc6ff]" />
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-bold text-white">{t("Need a new confirmation link?")}</p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      {confirmationEmail
+                        ? t("Open the newest email we send before trying to sign in again.")
+                        : t("Enter your email above, then request a new confirmation link.")}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl border-white/10 bg-white/[0.04] text-xs font-bold text-white hover:bg-white/[0.08]"
+                    disabled={resending}
+                    onClick={() => void handleResendConfirmation()}
+                  >
+                    {resending ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        {t("Resending...")}
+                      </>
+                    ) : (
+                      t("Resend confirmation email")
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
 
         {testLoginRoles.length > 0 && (

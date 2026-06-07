@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
@@ -6,32 +6,62 @@ import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile"
 export type { Profile };
 
 /** Browser Supabase client (anon key). Real auth + data only — no mock paths. */
-export const supabase = createSupabaseClient(getSupabaseUrl(), getSupabaseAnonKey());
+export const supabase = createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey());
 
 /** A one-year, lax cookie used by middleware/server for coarse role + onboarding UX. */
 function setUxCookie(name: string, value: string): void {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+function appOrigin(): string {
+  if (typeof window !== "undefined") return window.location.origin;
+
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  return configured || "http://localhost:3000";
+}
+
+function safeNextPath(nextPath?: string): string {
+  if (!nextPath?.startsWith("/") || nextPath.startsWith("//")) return "/dashboard";
+  return nextPath;
+}
+
+export function authCallbackUrl(nextPath = "/dashboard"): string {
+  const url = new URL("/auth/callback", appOrigin());
+  url.searchParams.set("next", safeNextPath(nextPath));
+  return url.toString();
+}
+
 export async function signUpClient(
   email: string,
   password: string,
   fullName: string,
-  role: UserRole
+  role: UserRole,
+  nextPath?: string
 ) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { role, full_name: fullName } },
+    options: {
+      data: { role, full_name: fullName },
+      emailRedirectTo: authCallbackUrl(nextPath),
+    },
   });
 
-  if (data?.user) {
+  if (data?.user && data.session) {
     setUxCookie("aether-role", role);
     setUxCookie("aether-session", "session-active");
     setUxCookie("aether-onboarded", "false");
   }
 
-  return { data, error };
+  return { data, error, needsEmailConfirmation: !!data?.user && !data.session };
+}
+
+export async function resendSignupConfirmation(email: string, nextPath = "/dashboard") {
+  return supabase.auth.resend({
+    type: "signup",
+    email,
+    options: { emailRedirectTo: authCallbackUrl(nextPath) },
+  });
 }
 
 export async function signInClient(email: string, password: string) {

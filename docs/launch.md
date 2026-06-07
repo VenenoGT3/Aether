@@ -40,7 +40,21 @@ Configure these environment variables in your production hosting provider (e.g.,
 
 ---
 
-## 2. Vercel-Ready Production Checklist
+## 2. Supabase Auth URL Configuration
+
+Configure these values in Supabase Dashboard -> Authentication -> URL Configuration before testing production signup.
+
+| Setting | Production value |
+| :--- | :--- |
+| Site URL | Your deployed app origin, for example `https://aether.inc` |
+| Redirect URLs | `https://aether.inc/**` plus any Vercel preview URLs you intentionally use |
+| Local dev redirect | Keep `http://localhost:3000/**` only for local development |
+
+The app passes `/auth/callback` as `emailRedirectTo` for signup and resend-confirmation emails. If Supabase email templates are customized, ensure confirmation links use Supabase's confirmation URL / redirect value and do not hardcode `localhost`.
+
+---
+
+## 3. Vercel-Ready Production Checklist
 
 Ensure every item on this checklist is marked off before completing production deployment.
 
