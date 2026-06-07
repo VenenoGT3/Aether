@@ -176,12 +176,27 @@ export async function updateClientProfile(
   } = await supabase.auth.getUser();
   if (!user) return { data: null, error: { message: "User not authenticated" } };
 
-  // Strip identity columns that must not be updated here.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { role: _role, user_id: _uid, email: _email, ...profileFields } = data;
+  const dbProfileFields: Record<string, unknown> = { ...data };
+  const followers = data.followers;
+  const niche = data.niche;
+  const socialLinks = data.social_links;
+
+  delete dbProfileFields.role;
+  delete dbProfileFields.user_id;
+  delete dbProfileFields.email;
+  delete dbProfileFields.followers;
+  delete dbProfileFields.niche;
+  delete dbProfileFields.social_handle;
+  delete dbProfileFields.social_links;
+  delete dbProfileFields.portfolio;
+
+  if (followers !== undefined) dbProfileFields.follower_count = followers;
+  if (niche !== undefined) dbProfileFields.niches = niche ? [niche] : [];
+  if (socialLinks !== undefined) dbProfileFields.social_handles = socialLinks;
+
   const { data: updated, error } = await supabase
     .from("profiles")
-    .update(profileFields)
+    .update(dbProfileFields)
     .eq(PROFILE_PK_COLUMN, user.id)
     .select()
     .single();
