@@ -2,6 +2,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { Profile, UserRole } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
+import { authCallbackUrl as buildAuthCallbackUrl } from "@/lib/supabase/auth-redirect";
 import { mergeProfileWithUser, PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 
 export type { Profile };
@@ -32,22 +33,11 @@ function setUxCookie(name: string, value: string): void {
   document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
-function appOrigin(): string {
-  if (typeof window !== "undefined") return window.location.origin;
-
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  return configured || "http://localhost:3000";
-}
-
-function safeNextPath(nextPath?: string): string {
-  if (!nextPath?.startsWith("/") || nextPath.startsWith("//")) return "/dashboard";
-  return nextPath;
-}
-
 export function authCallbackUrl(nextPath = "/dashboard"): string {
-  const url = new URL("/auth/callback", appOrigin());
-  url.searchParams.set("next", safeNextPath(nextPath));
-  return url.toString();
+  return buildAuthCallbackUrl(
+    nextPath,
+    typeof window !== "undefined" ? window.location.origin : undefined
+  );
 }
 
 export async function signUpClient(
