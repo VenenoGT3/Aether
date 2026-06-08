@@ -88,7 +88,7 @@ export async function handleStripeWebhookEvent(
       if (account.details_submitted) {
         const { error: profileError } = await supabase
           .from("profiles")
-          .update({ stripe_onboarding_completed: true })
+          .update({ stripe_onboarding_completed: true, onboarded: true })
           .eq("stripe_connect_id", account.id);
 
         if (profileError) {

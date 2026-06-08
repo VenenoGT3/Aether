@@ -220,6 +220,11 @@ export async function updateClientProfile(
   delete dbProfileFields.social_handle;
   delete dbProfileFields.social_links;
   delete dbProfileFields.portfolio;
+  delete dbProfileFields.onboarded;
+  delete dbProfileFields.trusted_creator;
+  delete dbProfileFields.stripe_connect_id;
+  delete dbProfileFields.stripe_onboarding_completed;
+  delete dbProfileFields.authenticity_score;
 
   if (followers !== undefined) dbProfileFields.follower_count = followers;
   if (niche !== undefined) dbProfileFields.niches = niche ? [niche] : [];

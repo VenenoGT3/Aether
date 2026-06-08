@@ -20,6 +20,8 @@ type OAuthState = {
   platform: Platform;
   provider: Provider;
   redirect_origin: string;
+  verifier_hash: string | null;
+  consumed_at: string | null;
   expires_at: string;
 };
 
@@ -28,18 +30,59 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const youtubeClientId = Deno.env.get("YOUTUBE_OAUTH_CLIENT_ID");
 const youtubeClientSecret = Deno.env.get("YOUTUBE_OAUTH_CLIENT_SECRET");
 const configuredFunctionUrl = Deno.env.get("SOCIAL_OAUTH_FUNCTION_URL");
+const configuredAllowedOrigins = Deno.env.get("SOCIAL_OAUTH_ALLOWED_ORIGINS");
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
+function allowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  (configuredAllowedOrigins ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .forEach((origin) => {
+      try {
+        origins.add(new URL(origin).origin);
+      } catch {
+        // Ignore malformed env entries.
+      }
+    });
+  origins.add("http://localhost:3000");
+  origins.add("http://127.0.0.1:3000");
+  return origins;
+}
+
+function originAllowed(origin: string): boolean {
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    const allowed = allowedOrigins();
+    if (allowed.has(parsed.origin)) return true;
+    // Preview deploys still need OAuth during QA. Restrict this fallback to
+    // Vercel HTTPS origins rather than accepting arbitrary domains.
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+
+function cors(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": originAllowed(origin) ? origin : "null",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
+}
+
+const corsCommon = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-function json(data: unknown, status = 200): Response {
+function json(req: Request, data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...cors, "Content-Type": "application/json" },
+    headers: { ...cors(req), ...corsCommon, ...extraHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -69,6 +112,28 @@ function stateToken(): string {
     .replace(/=+$/g, "");
 }
 
+async function sha256Base64Url(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function oauthCookieName(state: string): string {
+  return `aether_oauth_${state}`;
+}
+
+function readCookie(req: Request, name: string): string | null {
+  const cookie = req.headers.get("cookie") ?? "";
+  for (const part of cookie.split(";")) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (rawName === name) return decodeURIComponent(rawValue.join("="));
+  }
+  return null;
+}
+
 function functionBaseUrl(req: Request): string {
   if (configuredFunctionUrl?.trim()) return configuredFunctionUrl.replace(/\/$/, "");
   const url = new URL(req.url);
@@ -88,21 +153,25 @@ async function authenticatedUserId(req: Request): Promise<string | null> {
 
 async function start(req: Request): Promise<Response> {
   const userId = await authenticatedUserId(req);
-  if (!userId) return json({ error: "Authentication required." }, 401);
+  if (!userId) return json(req, { error: "Authentication required." }, 401);
 
   const body = (await req.json().catch(() => ({}))) as { provider?: unknown };
   const provider = parseProvider(body.provider);
-  if (!provider) return json({ error: "Unsupported provider." }, 400);
+  if (!provider) return json(req, { error: "Unsupported provider." }, 400);
 
   if (provider === "youtube_official" && (!youtubeClientId || !youtubeClientSecret)) {
-    return json({ error: "YouTube OAuth is not configured." }, 503);
+    return json(req, { error: "YouTube OAuth is not configured." }, 503);
   }
 
   const origin = req.headers.get("origin") ?? "";
-  if (!origin) return json({ error: "Missing request origin." }, 400);
+  if (!originAllowed(origin)) {
+    return json(req, { error: "This origin is not allowed to start account linking." }, 403);
+  }
 
   const platform = providerToPlatform();
   const state = stateToken();
+  const verifier = stateToken();
+  const verifierHash = await sha256Base64Url(verifier);
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   const supabase = serviceClient();
 
@@ -116,21 +185,11 @@ async function start(req: Request): Promise<Response> {
     user_id: userId,
     platform,
     provider,
-    redirect_origin: origin,
+    redirect_origin: new URL(origin).origin,
+    verifier_hash: verifierHash,
     expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
   });
-  if (error) return json({ error: "Could not start account linking." }, 500);
-
-  if (provider === "tiktok_official") {
-    const params = new URLSearchParams({
-      client_key: tiktokClientKey!,
-      response_type: "code",
-      scope: "user.info.basic,video.list",
-      redirect_uri: redirectUri,
-      state,
-    });
-    return json({ url: `https://www.tiktok.com/v2/auth/authorize/?${params}` });
-  }
+  if (error) return json(req, { error: "Could not start account linking." }, 500);
 
   const params = new URLSearchParams({
     client_id: youtubeClientId!,
@@ -141,7 +200,9 @@ async function start(req: Request): Promise<Response> {
     redirect_uri: redirectUri,
     state,
   });
-  return json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+  return json(req, { url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` }, 200, {
+    "Set-Cookie": `${oauthCookieName(state)}=${encodeURIComponent(verifier)}; Path=/functions/v1/social-oauth; Max-Age=600; HttpOnly; Secure; SameSite=None`,
+  });
 }
 
 async function exchangeYouTube(code: string, redirectUri: string) {
@@ -197,30 +258,68 @@ async function callback(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const state = url.searchParams.get("state") ?? "";
   const code = url.searchParams.get("code") ?? "";
-  if (!state || !code) return json({ error: "Missing OAuth state or code." }, 400);
+  if (!state || !code) return json(req, { error: "Missing OAuth state or code." }, 400);
 
   const supabase = serviceClient();
   const { data: stateRow, error: stateErr } = await supabase
     .from("creator_social_oauth_states")
-    .select("state, user_id, platform, provider, redirect_origin, expires_at")
+    .select("state, user_id, platform, provider, redirect_origin, verifier_hash, consumed_at, expires_at")
     .eq("state", state)
     .maybeSingle();
 
-  if (stateErr || !stateRow) return json({ error: "Invalid OAuth state." }, 400);
+  if (stateErr || !stateRow) return json(req, { error: "Invalid OAuth state." }, 400);
   const oauthState = stateRow as OAuthState;
   const redirectOrigin = oauthState.redirect_origin;
+  if (!originAllowed(redirectOrigin)) {
+    await supabase.from("creator_social_oauth_states").delete().eq("state", state);
+    return json(req, { error: "Invalid OAuth redirect origin." }, 400);
+  }
   if (oauthState.provider !== "youtube_official") {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
     return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=unsupported`, 303);
+  }
+  if (oauthState.consumed_at) {
+    await supabase.from("creator_social_oauth_states").delete().eq("state", state);
+    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=consumed`, 303);
   }
   if (new Date(oauthState.expires_at).getTime() < Date.now()) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
     return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=expired`, 303);
   }
 
+  const verifier = readCookie(req, oauthCookieName(state));
+  const verifierHash = verifier ? await sha256Base64Url(verifier) : null;
+  if (!oauthState.verifier_hash || verifierHash !== oauthState.verifier_hash) {
+    await supabase.from("creator_social_oauth_states").delete().eq("state", state);
+    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=state`, 303);
+  }
+
+  const { data: consumedState } = await supabase
+    .from("creator_social_oauth_states")
+    .update({ consumed_at: new Date().toISOString() })
+    .eq("state", state)
+    .is("consumed_at", null)
+    .select("state")
+    .maybeSingle();
+  if (!consumedState) {
+    await supabase.from("creator_social_oauth_states").delete().eq("state", state);
+    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=consumed`, 303);
+  }
+
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   try {
     const linked = await exchangeYouTube(code, redirectUri);
+
+    const { data: existingAccount } = await supabase
+      .from("creator_social_accounts")
+      .select("user_id")
+      .eq("platform", oauthState.platform)
+      .eq("provider", oauthState.provider)
+      .eq("external_account_id", linked.externalAccountId)
+      .maybeSingle();
+    if (existingAccount?.user_id && existingAccount.user_id !== oauthState.user_id) {
+      throw new Error("This YouTube channel is already linked to another Aether account.");
+    }
 
     const { error } = await supabase.from("creator_social_accounts").upsert(
       {
@@ -245,36 +344,44 @@ async function callback(req: Request): Promise<Response> {
     if (error) throw new Error(error.message);
 
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(
-      `${redirectOrigin}/creator/clips?social_linked=${oauthState.platform}`,
-      303
-    );
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: `${redirectOrigin}/creator/clips?social_linked=${oauthState.platform}`,
+        "Set-Cookie": `${oauthCookieName(state)}=; Path=/functions/v1/social-oauth; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+      },
+    });
   } catch (err) {
     console.error("social oauth callback:", err);
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(
-      `${redirectOrigin}/creator/clips?social_link_error=${oauthState.platform}`,
-      303
-    );
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: `${redirectOrigin}/creator/clips?social_link_error=${oauthState.platform}`,
+        "Set-Cookie": `${oauthCookieName(state)}=; Path=/functions/v1/social-oauth; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+      },
+    });
   }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: { ...cors(req), ...corsCommon } });
+  }
 
   const pathname = new URL(req.url).pathname;
   try {
     if (pathname.endsWith("/start")) {
-      if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      if (req.method !== "POST") return json(req, { error: "Method not allowed." }, 405);
       return await start(req);
     }
     if (pathname.endsWith("/callback")) {
-      if (req.method !== "GET") return json({ error: "Method not allowed." }, 405);
+      if (req.method !== "GET") return json(req, { error: "Method not allowed." }, 405);
       return await callback(req);
     }
-    return json({ error: "Not found." }, 404);
+    return json(req, { error: "Not found." }, 404);
   } catch (err) {
     console.error("social oauth error:", err);
-    return json({ error: "Social account linking failed." }, 500);
+    return json(req, { error: "Social account linking failed." }, 500);
   }
 });

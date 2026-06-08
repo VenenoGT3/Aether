@@ -3,14 +3,17 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { PROFILE_PK_COLUMN } from "@/lib/supabase/profile";
 import {
+  getTestLoginAccessCode,
   getAvailableTestLoginRoles,
   getTestLoginCredentials,
+  isTestLoginAccessCodeRequired,
   type TestLoginRole,
 } from "@/lib/env.server";
 import { jsonError, jsonSuccess, methodNotAllowed } from "@/lib/api/response";
 
 const TestLoginBodySchema = z.object({
   role: z.enum(["business", "influencer"]),
+  accessCode: z.string().trim().optional(),
 });
 
 export const dynamic = "force-dynamic";
@@ -23,7 +26,10 @@ function redirectFor(role: TestLoginRole, onboarded: boolean): string {
 }
 
 export async function GET(): Promise<Response> {
-  return jsonSuccess({ roles: getAvailableTestLoginRoles() });
+  return jsonSuccess({
+    roles: getAvailableTestLoginRoles(),
+    requiresAccessCode: isTestLoginAccessCodeRequired(),
+  });
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -31,6 +37,16 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = TestLoginBodySchema.safeParse(body);
   if (!parsed.success) {
     return jsonError("Choose a valid test account.", 400);
+  }
+
+  const configuredAccessCode = getTestLoginAccessCode();
+  if (isTestLoginAccessCodeRequired()) {
+    if (!configuredAccessCode) {
+      return jsonError("Test login is not available on this deployment.", 404);
+    }
+    if (parsed.data.accessCode !== configuredAccessCode) {
+      return jsonError("Invalid test login access code.", 403);
+    }
   }
 
   const credentials = getTestLoginCredentials(parsed.data.role);
@@ -78,9 +94,5 @@ export async function POST(request: Request): Promise<Response> {
 
   return jsonSuccess({
     redirectTo: redirectFor(role, onboarded),
-    session: {
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-    },
   });
 }

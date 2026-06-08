@@ -267,12 +267,21 @@ export default function BrandModerationPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadCampaigns = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setCampaigns([]);
+      return;
+    }
+
     const { data } = await supabase
       .from("campaigns")
       .select(
         "id, title, status, budget_pool, available_pool, budget_reserved, budget_paid, brand_cpm_rate, cpm_rate, min_payout_threshold, max_payout_per_creator"
       )
       .eq("campaign_type", "performance")
+      .eq("business_id", user.id)
       .order("created_at", { ascending: false });
     setCampaigns((data ?? []) as PerfCampaign[]);
   }, []);

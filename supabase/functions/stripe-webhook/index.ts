@@ -82,7 +82,7 @@ async function handleEvent(
       if (account.details_submitted) {
         const { error } = await supabase
           .from("profiles")
-          .update({ stripe_onboarding_completed: true })
+          .update({ stripe_onboarding_completed: true, onboarded: true })
           .eq("stripe_connect_id", account.id);
         if (error) console.error("profile update:", error.message);
       }

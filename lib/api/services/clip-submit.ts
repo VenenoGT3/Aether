@@ -9,6 +9,8 @@ import {
   detectSocialPlatform,
   extractPlatformPostId,
 } from "@/lib/social-post";
+import { getYoutubeDataApiKey } from "@/lib/env.server";
+import { fetchYouTubeVideoMetadata } from "@/lib/youtube/metadata";
 
 export type SubmittedClip = {
   id: string;
@@ -89,6 +91,50 @@ export async function submitClip(
     };
   }
 
+  const youtubeApiKey = getYoutubeDataApiKey();
+  if (!youtubeApiKey) {
+    return {
+      ok: false,
+      error: "YouTube tracking is not configured. Please try again later.",
+      status: 503,
+    };
+  }
+
+  const { data: connectedAccounts, error: accountsErr } = await supabase
+    .from("creator_social_account_status")
+    .select("id, external_account_id, status, platform, provider")
+    .eq("platform", "youtube")
+    .eq("provider", "youtube_official")
+    .eq("status", "active");
+
+  if (accountsErr) {
+    return {
+      ok: false,
+      error: "Could not verify your connected YouTube channel.",
+      status: 500,
+    };
+  }
+
+  const videoMetadata = await fetchYouTubeVideoMetadata(externalPostId, youtubeApiKey);
+  if (!videoMetadata) {
+    return {
+      ok: false,
+      error: "Could not verify this YouTube Short. Make sure the link is public.",
+      status: 422,
+    };
+  }
+
+  const matchedYouTubeAccount = (connectedAccounts ?? []).find(
+    (account) => account.external_account_id === videoMetadata.channelId
+  );
+  if (!matchedYouTubeAccount) {
+    return {
+      ok: false,
+      error: "Connect the YouTube channel that owns this Short before submitting it.",
+      status: 403,
+    };
+  }
+
   if (campaign) {
     const usage =
       campaign.campaign_type === "performance" ? budgetUsage(campaign) : null;
@@ -147,16 +193,33 @@ export async function submitClip(
     }
   }
 
-  // Anti-fraud: the same post can't be reused across campaigns to double-dip a
-  // single video's views against multiple pools. The per-campaign unique
-  // constraint already blocks same-campaign dupes; this catches the same URL
-  // still active in *another* campaign. (RLS scopes this to the caller's own
-  // clips, so it stops a creator reusing their own post; terminal-state clips
-  // — rejected/disqualified — are excluded so a clean re-submission is allowed.)
+  const { data: sameCampaignDuplicate } = await supabase
+    .from("clips")
+    .select("id")
+    .eq("campaign_id", body.campaign_id)
+    .eq("platform", platform)
+    .eq("external_post_id", externalPostId)
+    .in("status", ["pending", "approved", "tracking"])
+    .limit(1)
+    .maybeSingle();
+
+  if (sameCampaignDuplicate) {
+    return {
+      ok: false,
+      error: "This video has already been submitted to this campaign.",
+      status: 409,
+    };
+  }
+
+  // Anti-fraud: the same normalized video id can't be reused across campaigns to
+  // double-dip a single video's views against multiple pools. RLS scopes this to
+  // the caller's own clips, so it stops a creator reusing their own video while
+  // keeping other creators' submissions private.
   const { data: reused } = await supabase
     .from("clips")
     .select("id")
-    .eq("post_url", body.post_url)
+    .eq("platform", platform)
+    .eq("external_post_id", externalPostId)
     .neq("campaign_id", body.campaign_id)
     .in("status", ["pending", "approved", "tracking"])
     .limit(1)
@@ -179,6 +242,7 @@ export async function submitClip(
       platform,
       post_url: body.post_url,
       external_post_id: externalPostId,
+      creator_social_account_id: matchedYouTubeAccount.id,
       view_provider: viewProvider,
       status: "pending",
     })

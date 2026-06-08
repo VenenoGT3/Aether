@@ -97,6 +97,7 @@ export function AyrshareLinkPlaceholder() {
         `${getSupabaseUrl().replace(/\/$/, "")}/functions/v1/social-oauth/start`,
         {
           method: "POST",
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${session.access_token}`,
             "Content-Type": "application/json",

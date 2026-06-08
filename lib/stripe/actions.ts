@@ -2,6 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { getServerUser, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createStripeExpressAccount,
   createEscrowPaymentIntent,
@@ -63,13 +64,10 @@ export async function startStripeOnboardingAction(
     );
 
     const supabase = await createClient();
-    await supabase
-      .from("profiles")
-      .update({
-        stripe_connect_id: accountId,
-        stripe_onboarding_completed: false,
-      })
-      .eq(PROFILE_PK_COLUMN, userId);
+    const { error: accountErr } = await supabase.rpc("set_stripe_connect_account", {
+      p_account_id: accountId,
+    });
+    if (accountErr) throw accountErr;
 
     return { success: true, url, accountId };
   } catch (error) {
@@ -97,6 +95,32 @@ export async function fundEscrowAction(
     assertBusinessCanFundEscrow(user?.role);
 
     const supabase = await createClient();
+
+    const { data: participation, error: partErr } = await supabase
+      .from("participations")
+      .select("id, proposed_payout, status, campaign:campaign_id(id, business_id, status, campaign_type)")
+      .eq("id", participationId)
+      .single();
+
+    if (partErr || !participation) {
+      throw new NotFoundError("Participation agreement not found.", partErr);
+    }
+
+    const campaign = Array.isArray(participation.campaign)
+      ? participation.campaign[0]
+      : participation.campaign;
+    if (!campaign || campaign.business_id !== user!.user_id) {
+      throw new ForbiddenError("You can only fund escrow for your own campaigns.");
+    }
+
+    const requiredAmount = Number(participation.proposed_payout ?? 0);
+    if (!Number.isFinite(requiredAmount) || requiredAmount <= 0) {
+      throw new ConflictError("This participation does not have a valid payout amount.");
+    }
+    if (Math.abs(amount - requiredAmount) > 0.01) {
+      throw new ConflictError("Escrow amount must match the agreed participation payout.");
+    }
+    amount = requiredAmount;
 
     const { data: transaction, error: txError } = await supabase
       .from("transactions")
@@ -187,10 +211,12 @@ export async function fundCampaignPoolAction(campaignId: string) {
       { campaignId, kind: "pool_funding" }
     );
 
-    await supabase
-      .from("campaigns")
-      .update({ funding_payment_intent_id: paymentIntentId })
-      .eq("id", campaignId);
+    const { error: fundingErr } = await supabase.rpc("record_pool_funding_intent", {
+      p_campaign_id: campaignId,
+      p_payment_intent_id: paymentIntentId,
+    });
+
+    if (fundingErr) throw fundingErr;
 
     return {
       success: true,
@@ -247,6 +273,36 @@ export async function releaseEscrowAction(participationId: string) {
     }
 
     const amount = Number(participation.proposed_payout);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ConflictError("This participation does not have a valid payout amount.");
+    }
+
+    const { data: releases, error: releaseQueryErr } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("participation_id", participationId)
+      .eq("type", "release")
+      .eq("status", "succeeded")
+      .limit(1);
+    if (releaseQueryErr) throw releaseQueryErr;
+    if ((releases ?? []).length > 0) {
+      throw new ConflictError("Escrow has already been released for this participation.");
+    }
+
+    const { data: escrows, error: escrowQueryErr } = await supabase
+      .from("transactions")
+      .select("amount")
+      .eq("participation_id", participationId)
+      .eq("type", "escrow")
+      .eq("status", "succeeded");
+    if (escrowQueryErr) throw escrowQueryErr;
+    const funded = (escrows ?? []).reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0);
+    if (funded + 0.01 < amount) {
+      throw new ConflictError("Escrow must be fully funded before release.");
+    }
+
+    const admin = createAdminClient();
+
     const { success, transferId } = await releaseEscrowPayment(
       amount,
       influencerProfile.stripe_connect_id,
@@ -254,14 +310,15 @@ export async function releaseEscrowAction(participationId: string) {
         kind: "escrow_release",
         campaignId: participation.campaign_id,
         participationId,
-      }
+      },
+      `escrow_release_${participationId}`
     );
 
     if (!success) {
       throw new ExternalServiceError("The payout transfer could not be completed. Please try again.");
     }
 
-    await supabase.from("transactions").insert({
+    await admin.from("transactions").insert({
       participation_id: participationId,
       user_id: user!.user_id,
       amount,
@@ -270,7 +327,7 @@ export async function releaseEscrowAction(participationId: string) {
       stripe_payment_intent_id: transferId,
     });
 
-    await supabase
+    await admin
       .from("participations")
       .update({
         status: "completed",
@@ -278,7 +335,7 @@ export async function releaseEscrowAction(participationId: string) {
       })
       .eq("id", participationId);
 
-    await supabase
+    await admin
       .from("campaigns")
       .update({ status: "completed" })
       .eq("id", participation.campaign_id);
@@ -334,9 +391,9 @@ export async function withdrawFundsAction(amount: number) {
  * fee), transfers the net to the creator's connected Stripe account, then
  * settles. On transfer failure the claim is released so the balance returns.
  *
- * Safety: request_withdrawal()/settle_withdrawal()/fail_withdrawal() are
- * auth.uid()-scoped, so this only ever touches the caller's own earnings, and
- * the earnings.payout_id claim makes double-withdrawal impossible.
+ * Safety: request_withdrawal() is auth.uid()-scoped, so this only ever touches
+ * the caller's own earnings. Stripe settlement/failure is service-role only and
+ * happens after the trusted server observes the transfer outcome.
  */
 /**
  * Classify a Stripe transfer error. A DEFINITIVE failure (the transfer was not
@@ -387,6 +444,8 @@ export async function requestWithdrawalAction() {
       };
     }
 
+    const admin = createAdminClient();
+
     // 1) Atomically claim approved+unclaimed earnings into a payout (advisory
     //    locked + claim-by-id-set in SQL; impossible to double-claim).
     const { data: claimData, error: claimErr } = await supabase.rpc("request_withdrawal", {
@@ -430,7 +489,7 @@ export async function requestWithdrawalAction() {
         { kind: "withdrawal", payoutId },
         idempotencyKey
       );
-      const { error: settleErr } = await supabase.rpc("settle_withdrawal", {
+      const { error: settleErr } = await admin.rpc("mark_payout_paid", {
         p_payout_id: payoutId,
         p_transfer_id: transfer.transferId,
       });
@@ -471,7 +530,7 @@ export async function requestWithdrawalAction() {
         };
       }
       // Definitive failure: nothing was transferred — safe to release & retry.
-      const { error: failErr } = await supabase.rpc("fail_withdrawal", { p_payout_id: payoutId });
+      const { error: failErr } = await admin.rpc("mark_payout_failed", { p_payout_id: payoutId });
       if (failErr) {
         apiLog("alert", "withdrawal.release_failed", {
           traceId,

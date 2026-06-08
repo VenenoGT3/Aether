@@ -1,12 +1,7 @@
 import "server-only";
-import { canUseServiceRoleInNextRuntime } from "@/lib/env";
-
 /**
  * Server-only secrets for the Next.js runtime (Vercel).
  * Never import from Client Components.
- *
- * Supabase service role lives in Supabase Edge Function secrets by default —
- * not in the Vercel app unless STRIPE_WEBHOOK_HANDLER=vercel.
  */
 
 export const SERVER_SECRET_NAMES = [
@@ -22,6 +17,7 @@ export const SERVER_SECRET_NAMES = [
   "RESEND_API_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "ENABLE_TEST_LOGIN",
+  "TEST_LOGIN_ACCESS_CODE",
   "TEST_BRAND_EMAIL",
   "TEST_BRAND_PASSWORD",
   "TEST_CREATOR_EMAIL",
@@ -57,13 +53,6 @@ export function getOptionalServiceRoleKey(): string | undefined {
 }
 
 export function getServiceRoleKey(): string {
-  if (!canUseServiceRoleInNextRuntime()) {
-    throw new Error(
-      "[Aether] SUPABASE_SERVICE_ROLE_KEY is not available in the Next.js runtime. " +
-        "Use STRIPE_WEBHOOK_HANDLER=supabase (default) and deploy supabase/functions/stripe-webhook. " +
-        "Set STRIPE_WEBHOOK_HANDLER=vercel only for local legacy testing."
-    );
-  }
   return requireServerSecret("SUPABASE_SERVICE_ROLE_KEY");
 }
 
@@ -113,8 +102,25 @@ export function isTestLoginEnabled(): boolean {
   return process.env.ENABLE_TEST_LOGIN?.trim().toLowerCase() === "true";
 }
 
+export function isDeployedRuntime(): boolean {
+  return (
+    process.env.VERCEL === "1" ||
+    !!process.env.VERCEL_ENV ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
+export function getTestLoginAccessCode(): string | undefined {
+  return optionalServerSecret("TEST_LOGIN_ACCESS_CODE");
+}
+
+export function isTestLoginAccessCodeRequired(): boolean {
+  return isDeployedRuntime();
+}
+
 export function getAvailableTestLoginRoles(): TestLoginRole[] {
   if (!isTestLoginEnabled()) return [];
+  if (isTestLoginAccessCodeRequired() && !getTestLoginAccessCode()) return [];
 
   const roles: TestLoginRole[] = [];
   if (process.env.TEST_BRAND_EMAIL?.trim() && process.env.TEST_BRAND_PASSWORD?.trim()) {

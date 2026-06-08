@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { CheckCircle2, Loader2, AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { updateClientProfile } from "@/lib/supabase/client";
 
 function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
 
   const action = searchParams.get("action");
   const role = searchParams.get("role") as "business" | "influencer" | null;
-  const accountId = searchParams.get("accountId");
+  const safeRole = role === "business" || role === "influencer" ? role : "creator";
+  const status = action === "return" ? "success" : "error";
+  const errorMsg =
+    action === "refresh"
+      ? "The onboarding session expired. Please restart the Stripe Connect setup flow."
+      : "Invalid action code received.";
 
   const appleSpring = {
     type: "spring" as const,
@@ -26,45 +28,12 @@ function CallbackContent() {
   };
 
   useEffect(() => {
-    async function handleOnboardingComplete() {
-      if (!role || !accountId) {
-        setStatus("error");
-        setErrorMsg("Missing required parameters for Stripe account link verification.");
-        return;
-      }
-
-      try {
-        const { error } = await updateClientProfile({
-          stripe_connect_id: accountId,
-          stripe_onboarding_completed: true,
-          onboarded: true,
-        });
-        if (error) throw error;
-
-        setStatus("success");
-        toast.success("Stripe Connect setup complete!", {
-          description: "Your platform wallet is now ready for payments and payouts."
-        });
-      } catch (err) {
-        console.error(err);
-        setStatus("error");
-        setErrorMsg(err instanceof Error ? err.message : "Failed to update profile status.");
-      }
-    }
-
     if (action === "return") {
-      handleOnboardingComplete();
-      return;
+      toast.success("Stripe Connect returned successfully.", {
+        description: "Aether is verifying your account status with Stripe."
+      });
     }
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- derive error state from URL action param
-    setStatus("error");
-    setErrorMsg(
-      action === "refresh"
-        ? "The onboarding session expired. Please restart the Stripe Connect setup flow."
-        : "Invalid action code received."
-    );
-  }, [action, role, accountId]);
+  }, [action]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 bg-secondary/10 min-h-[calc(100vh-4rem)] relative">
@@ -81,16 +50,6 @@ function CallbackContent() {
           stripe <span className="text-muted-foreground/60 font-medium">connect</span>
         </div>
 
-        {status === "loading" && (
-          <div className="py-8 flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin text-primary" size={40} />
-            <h2 className="text-lg font-bold tracking-tight">Verifying Link Status</h2>
-            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-              We are connecting with Stripe to verify your account onboarding progress. Please wait a moment.
-            </p>
-          </div>
-        )}
-
         {status === "success" && (
           <div className="py-6 flex flex-col items-center">
             <div className="w-16 h-16 rounded-full bg-[#34C759]/10 text-[#34C759] flex items-center justify-center mb-5">
@@ -98,10 +57,10 @@ function CallbackContent() {
             </div>
             <h2 className="text-xl font-bold tracking-tight">Account Linked Successfully</h2>
             <p className="text-xs text-muted-foreground mt-2 max-w-xs leading-relaxed">
-              Your Stripe Connect Express account is active. Payouts and escrows can now be processed dynamically.
+              We are verifying your Stripe Connect Express account server-side. Payouts and escrows unlock after Stripe confirms the account is ready.
             </p>
             <Button
-              onClick={() => router.push(`/${role}/dashboard`)}
+              onClick={() => router.push(`/${safeRole === "influencer" ? "creator" : safeRole}/dashboard`)}
               className="mt-8 w-full rounded-2xl py-5 font-semibold text-sm cursor-pointer shadow-sm gap-2"
             >
               Go to Dashboard <ArrowRight size={16} />

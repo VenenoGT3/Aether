@@ -1,7 +1,14 @@
 "use server";
 
-import { getServerUser, createClient } from "@/lib/supabase/server";
-import { toActionError, reportError, UnauthorizedError } from "@/lib/errors";
+import { cookies as getCookies } from "next/headers";
+import { z } from "zod";
+import { createClient, getServerUser } from "@/lib/supabase/server";
+import {
+  toActionError,
+  reportError,
+  ForbiddenError,
+  UnauthorizedError,
+} from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { OnboardingProgress } from "@/types/onboarding";
 
@@ -21,7 +28,6 @@ function assemble(
     ...partial,
     completedCount,
     totalCount: steps.length,
-    // Don't hide the checklist while a bonus is still waiting to be claimed.
     allComplete: completedCount === steps.length && !partial.firstClipBonus.claimable,
   };
 }
@@ -107,5 +113,68 @@ export async function claimFirstClipBonusAction(): Promise<{
     return { success: true, reward: res.amount };
   } catch (error) {
     return toActionError(error, { action: "claimFirstClipBonus" });
+  }
+}
+
+const SocialHandlesSchema = z.object({
+  instagram: z.string().trim().max(100).optional(),
+  tiktok: z.string().trim().max(100).optional(),
+  youtube: z.string().trim().max(100).optional(),
+});
+
+const RateCardSchema = z.object({
+  post: z.number().finite().nonnegative().max(1_000_000),
+  video: z.number().finite().nonnegative().max(1_000_000),
+  story: z.number().finite().nonnegative().max(1_000_000),
+});
+
+const CreatorOnboardingSchema = z.object({
+  bio: z.string().trim().min(1).max(500),
+  niche: z.string().trim().min(1).max(120),
+  followerCount: z.number().int().nonnegative().max(1_000_000_000),
+  engagementRate: z.number().finite().nonnegative().max(100),
+  socialHandles: SocialHandlesSchema,
+  rateCard: RateCardSchema,
+});
+
+export type CompleteCreatorOnboardingInput = z.input<typeof CreatorOnboardingSchema>;
+
+export async function completeCreatorOnboardingAction(
+  input: CompleteCreatorOnboardingInput
+) {
+  try {
+    const parsed = CreatorOnboardingSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: "Check your creator profile details and try again." };
+    }
+
+    const user = await getServerUser();
+    if (!user) throw new UnauthorizedError();
+    if (user.role !== "influencer") {
+      throw new ForbiddenError("Only creator accounts can complete creator onboarding.");
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("complete_creator_onboarding", {
+      p_bio: parsed.data.bio,
+      p_niches: [parsed.data.niche],
+      p_follower_count: parsed.data.followerCount,
+      p_engagement_rate: parsed.data.engagementRate,
+      p_social_handles: parsed.data.socialHandles,
+      p_rate_card: parsed.data.rateCard,
+    });
+
+    if (error) throw error;
+
+    const cookieStore = await getCookies();
+    cookieStore.set("aether-onboarded", "true", {
+      path: "/",
+      maxAge: 31536000,
+      sameSite: "lax",
+    });
+
+    return { success: true, profile: data };
+  } catch (error) {
+    return toActionError(error, { action: "completeCreatorOnboarding" });
   }
 }

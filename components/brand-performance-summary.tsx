@@ -43,13 +43,29 @@ export function BrandPerformanceSummary() {
   const [clips, setClips] = useState<BrandClipLite[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: camps }, { data: clipRows }] = await Promise.all([
-      supabase
-        .from("campaigns")
-        .select("id, title, status, budget_pool, available_pool, budget_reserved, budget_paid, campaign_category")
-        .eq("campaign_type", "performance"),
-      supabase.from("clips").select("campaign_id, status, current_views, creator_id"),
-    ]);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setCampaigns([]);
+      setClips([]);
+      return;
+    }
+
+    const { data: camps } = await supabase
+      .from("campaigns")
+      .select("id, title, status, budget_pool, available_pool, budget_reserved, budget_paid, campaign_category")
+      .eq("campaign_type", "performance")
+      .eq("business_id", user.id);
+
+    const campaignIds = ((camps ?? []) as PerfCampaign[]).map((campaign) => campaign.id);
+    const { data: clipRows } = campaignIds.length > 0
+      ? await supabase
+          .from("clips")
+          .select("campaign_id, status, current_views, creator_id")
+          .in("campaign_id", campaignIds)
+      : { data: [] };
+
     setCampaigns((camps ?? []) as PerfCampaign[]);
     setClips((clipRows ?? []) as BrandClipLite[]);
   }, []);

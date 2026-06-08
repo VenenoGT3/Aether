@@ -280,14 +280,24 @@ export async function runPayoutBatch(
         transferId,
       });
     } catch (err) {
-      await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
-      summary.payoutsFailed += 1;
-      log.error("payout.transfer.error", {
-        creatorId,
-        payoutId,
-        amount: amount.toFixed(2),
-        error: errMessage(err),
-      });
+      if (isUnknownTransferOutcome(err)) {
+        log.alert("payout.transfer.unknown", {
+          creatorId,
+          payoutId,
+          amount: amount.toFixed(2),
+          note: "leaving payout processing for idempotent reconciliation; claim was not released",
+          error: errMessage(err),
+        });
+      } else {
+        await supabase.rpc("mark_payout_failed", { p_payout_id: payoutId });
+        summary.payoutsFailed += 1;
+        log.error("payout.transfer.error", {
+          creatorId,
+          payoutId,
+          amount: amount.toFixed(2),
+          error: errMessage(err),
+        });
+      }
     }
   }
 

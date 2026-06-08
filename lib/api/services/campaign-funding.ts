@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   retrievePaymentIntentStatus,
   refundPoolPayment,
@@ -97,13 +98,11 @@ export async function reconcileFunding(
     return { ok: true, activated: false, paymentStatus: pi.status };
   }
 
-  const supabase = await createClient();
-  const { error: updErr } = await supabase
-    .from("campaigns")
-    .update({ status: "open", funded_at: new Date().toISOString() })
-    .eq("id", campaignId)
-    // Guard against racing the webhook: only activate while still draft.
-    .eq("status", "draft");
+  const admin = createAdminClient();
+  const { error: updErr } = await admin.rpc("settle_pool_funding_payment", {
+    p_payment_intent_id: campaign.funding_payment_intent_id!,
+    p_campaign_id: campaignId,
+  });
 
   if (updErr) {
     reportError(updErr, { service: "campaignFunding.reconcile", campaignId });
@@ -162,11 +161,9 @@ export async function cancelFundedDraft(
   }
 
   const supabase = await createClient();
-  const { error: updErr } = await supabase
-    .from("campaigns")
-    .update({ status: "cancelled" })
-    .eq("id", campaignId)
-    .eq("status", "draft");
+  const { error: updErr } = await supabase.rpc("cancel_draft_performance_campaign", {
+    p_campaign_id: campaignId,
+  });
 
   if (updErr) {
     reportError(updErr, { service: "campaignFunding.cancel", campaignId });

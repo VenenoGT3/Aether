@@ -41,6 +41,7 @@ type SocialAccountRow = {
   user_id: string;
   platform: string;
   provider: string;
+  external_account_id: string;
   access_token: string | null;
   refresh_token: string | null;
   scopes: string[] | null;
@@ -108,12 +109,22 @@ class YoutubeOfficialViewsProvider {
       return lastKnown(clip, this.name);
     }
 
+    const account = await loadYouTubeAccountForClip(clip);
+    if (!account) {
+      log.warn("views.youtube.account_missing", {
+        clipId: clip.id,
+        creatorId: clip.creator_id,
+        note: "creator must submit with a connected YouTube channel before payout-grade polling",
+      });
+      return lastKnown(clip, this.name);
+    }
+
     const params = new URLSearchParams({
-      part: "statistics",
+      part: "snippet,statistics",
       id: videoId,
       key: apiKey,
       fields:
-        "items(id,statistics(viewCount,likeCount,commentCount))",
+        "items(id,snippet(channelId),statistics(viewCount,likeCount,commentCount))",
     });
 
     try {
@@ -137,6 +148,9 @@ class YoutubeOfficialViewsProvider {
 
       const json = (await res.json()) as {
         items?: Array<{
+          snippet?: {
+            channelId?: string;
+          };
           statistics?: {
             viewCount?: string;
             likeCount?: string;
@@ -144,13 +158,24 @@ class YoutubeOfficialViewsProvider {
           };
         }>;
       };
-      const stats = json.items?.[0]?.statistics;
-      if (!stats) {
+      const item = json.items?.[0];
+      const stats = item?.statistics;
+      if (!item?.snippet?.channelId || !stats) {
         recordProviderError();
         log.warn("views.youtube.video_missing", {
           clipId: clip.id,
           videoId,
           note: "keeping last-known views",
+        });
+        return lastKnown(clip, this.name);
+      }
+      if (item.snippet.channelId !== account.external_account_id) {
+        recordProviderError();
+        log.alert("views.youtube.channel_mismatch", {
+          clipId: clip.id,
+          accountId: account.id,
+          expectedChannelId: account.external_account_id,
+          actualChannelId: item.snippet.channelId,
         });
         return lastKnown(clip, this.name);
       }
@@ -173,6 +198,33 @@ class YoutubeOfficialViewsProvider {
       return lastKnown(clip, this.name);
     }
   }
+}
+
+async function loadYouTubeAccountForClip(
+  clip: ClipRow
+): Promise<SocialAccountRow | null> {
+  if (!clip.creator_social_account_id) return null;
+
+  const { data, error } = await getServiceClient()
+    .from("creator_social_accounts")
+    .select("id, user_id, platform, provider, access_token, refresh_token, scopes, token_expires_at, refresh_expires_at, status, external_account_id")
+    .eq("id", clip.creator_social_account_id)
+    .eq("user_id", clip.creator_id)
+    .eq("platform", "youtube")
+    .eq("provider", "youtube_official")
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) {
+    log.warn("views.youtube.account_lookup_error", {
+      clipId: clip.id,
+      accountId: clip.creator_social_account_id,
+      error: error.message,
+    });
+    return null;
+  }
+
+  return (data as SocialAccountRow | null) ?? null;
 }
 
 class TikTokOfficialViewsProvider {
@@ -417,7 +469,7 @@ async function loadTikTokAccountForClip(
 ): Promise<SocialAccountRow | null> {
   const supabase = getServiceClient();
   const columns =
-    "id, user_id, platform, provider, access_token, refresh_token, scopes, token_expires_at, refresh_expires_at, status";
+    "id, user_id, platform, provider, external_account_id, access_token, refresh_token, scopes, token_expires_at, refresh_expires_at, status";
 
   if (clip.creator_social_account_id) {
     const { data, error } = await supabase

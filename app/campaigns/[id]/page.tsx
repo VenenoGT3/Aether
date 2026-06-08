@@ -742,6 +742,7 @@ export default function CampaignDetailPage() {
     }
     const c = campRes.campaign as {
       id: string;
+      business_id?: string | null;
       title: string;
       budget_total: number | string | null;
       budget_pool?: number | string | null;
@@ -937,8 +938,11 @@ export default function CampaignDetailPage() {
       };
     });
 
+    const isOwningBusiness =
+      activeUser.role === "business" && c.business_id === activeUser.user_id;
+
     setBusinessInsight(
-      activeUser.role === "business"
+      isOwningBusiness
         ? {
             campaign: {
               id: c.id,

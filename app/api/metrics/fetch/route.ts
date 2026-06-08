@@ -3,9 +3,8 @@ import { getSociavaultApiKey } from "@/lib/env.server";
 import { guardApiPost } from "@/lib/api/guard";
 import { MetricsFetchBodySchema } from "@/lib/api/schemas";
 import { isInternalCronCall } from "@/lib/api/auth";
-import { assertParticipationAccess } from "@/lib/api/participation-access";
 import { createClient } from "@/lib/supabase/server";
-import { forbiddenError, unauthorizedError } from "@/lib/api/response";
+import { forbiddenError } from "@/lib/api/response";
 import { methodNotAllowed } from "@/lib/api/guard";
 
 /**
@@ -45,21 +44,7 @@ export async function POST(request: Request) {
     const internalCron = isInternalCronCall(request);
 
     if (!internalCron) {
-      if (!guarded.ctx.auth) {
-        return unauthorizedError();
-      }
-      const actorUserId = guarded.ctx.auth.userId;
-
-      if (participation_id) {
-        const access = await assertParticipationAccess(
-          actorUserId,
-          participation_id,
-          "submit_post"
-        );
-        if (!access.ok) return access.response;
-      } else {
-        return forbiddenError("participation_id is required");
-      }
+      return forbiddenError("Manual social metrics refresh is disabled during the YouTube-only beta.");
     }
 
     if (!platform) {

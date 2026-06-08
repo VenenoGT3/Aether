@@ -80,6 +80,10 @@ export async function getCampaignsAction() {
 /** Get campaign by ID. */
 export async function getCampaignByIdAction(id: string) {
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from("campaigns")
       .select("*")
@@ -87,6 +91,23 @@ export async function getCampaignByIdAction(id: string) {
       .single();
 
     if (error) throw error;
+
+    const { data: userRow } = user
+      ? await supabase.from("users").select("role").eq("id", user.id).maybeSingle()
+      : { data: null };
+    const isCrossBrandBusiness =
+      userRow?.role === "business" && data.business_id !== user?.id;
+
+    if (isCrossBrandBusiness) {
+      const publicCampaign = { ...data };
+      delete publicCampaign.funding_payment_intent_id;
+      delete publicCampaign.budget_reserved;
+      delete publicCampaign.budget_paid;
+      delete publicCampaign.available_pool;
+      delete publicCampaign.funded_at;
+      return { success: true, campaign: publicCampaign };
+    }
+
     return { success: true, campaign: data };
   } catch (error) {
     console.error("Error in getCampaignByIdAction:", error);

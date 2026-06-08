@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { updateClientProfile } from "@/lib/supabase/client";
+import { completeCreatorOnboardingAction } from "@/lib/actions/onboarding";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
 import { CreatorOnboardingWelcome } from "@/components/creator-onboarding-welcome";
@@ -171,30 +171,25 @@ export default function InfluencerOnboarding() {
   const handleCompleteOnboarding = async () => {
     setLoading(true);
     try {
-      const socialHandle = instagram ? `@${instagram}` : tiktok ? `@${tiktok}` : youtube ? `@${youtube}` : "";
-
-      const { error } = await updateClientProfile({
+      const result = await completeCreatorOnboardingAction({
         bio,
         niche,
-        social_handle: socialHandle,
-        followers: Number(followerCount) || 0,
-        engagement_rate: Number(engagementRate) || 0,
-        social_links: {
+        followerCount: Number(followerCount) || 0,
+        engagementRate: Number(engagementRate) || 0,
+        socialHandles: {
           instagram: instagram || undefined,
           tiktok: tiktok || undefined,
           youtube: youtube || undefined
         },
-        rate_card: {
+        rateCard: {
           post: ratePost,
           video: rateVideo,
           story: rateStory
         },
-        portfolio: portfolioItems,
-        onboarded: true
       });
 
-      if (error) {
-        toast.error(error.message || t("Failed to save profile."));
+      if (!result.success) {
+        toast.error(result.error || t("Failed to save profile."));
         setLoading(false);
         return;
       }

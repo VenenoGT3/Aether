@@ -9,7 +9,6 @@ import {
   signInClient,
   signInWithGoogleClient,
   resendSignupConfirmation,
-  supabase,
 } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
@@ -33,15 +32,12 @@ type TestLoginRole = "business" | "influencer";
 type TestLoginConfigResponse = {
   success: true;
   roles: TestLoginRole[];
+  requiresAccessCode: boolean;
 };
 
 type TestLoginResponse = {
   success: true;
   redirectTo: string;
-  session: {
-    accessToken: string;
-    refreshToken: string;
-  };
 };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -75,6 +71,8 @@ function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [testLoginRoles, setTestLoginRoles] = useState<TestLoginRole[]>([]);
+  const [testLoginRequiresCode, setTestLoginRequiresCode] = useState(false);
+  const [testLoginAccessCode, setTestLoginAccessCode] = useState("");
   const [testLoading, setTestLoading] = useState<TestLoginRole | null>(null);
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const authNoticeHandled = useRef(false);
@@ -116,10 +114,16 @@ function LoginForm() {
     let active = true;
     apiGet<TestLoginConfigResponse>("/api/test-login")
       .then((data) => {
-        if (active) setTestLoginRoles(data.roles);
+        if (active) {
+          setTestLoginRoles(data.roles);
+          setTestLoginRequiresCode(data.requiresAccessCode);
+        }
       })
       .catch(() => {
-        if (active) setTestLoginRoles([]);
+        if (active) {
+          setTestLoginRoles([]);
+          setTestLoginRequiresCode(false);
+        }
       });
     return () => {
       active = false;
@@ -223,17 +227,17 @@ function LoginForm() {
   };
 
   const handleTestLogin = async (role: TestLoginRole) => {
+    if (testLoginRequiresCode && !testLoginAccessCode.trim()) {
+      toast.error(t("Enter the test login access code."));
+      return;
+    }
+
     setTestLoading(role);
     try {
-      const data = await apiPost<TestLoginResponse>("/api/test-login", { role });
-      const { error } = await supabase.auth.setSession({
-        access_token: data.session.accessToken,
-        refresh_token: data.session.refreshToken,
+      const data = await apiPost<TestLoginResponse>("/api/test-login", {
+        role,
+        accessCode: testLoginAccessCode.trim() || undefined,
       });
-
-      if (error) {
-        throw error;
-      }
 
       toast.success(t("Welcome back!"), {
         description: t("Secure authentication completed."),
@@ -463,6 +467,20 @@ function LoginForm() {
               </span>
               <span className="h-px flex-1 bg-white/10" />
             </div>
+            {testLoginRequiresCode && (
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
+                  <ShieldCheck size={15} />
+                </span>
+                <input
+                  type="password"
+                  value={testLoginAccessCode}
+                  onChange={(event) => setTestLoginAccessCode(event.target.value)}
+                  placeholder={t("Test access code")}
+                  className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.055] py-2 pl-10 pr-4 text-xs font-semibold text-white outline-none transition-colors placeholder:text-white/30 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {testLoginRoles.includes("business") && (
                 <Button

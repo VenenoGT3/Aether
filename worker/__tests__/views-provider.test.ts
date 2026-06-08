@@ -38,6 +38,7 @@ describe("worker/views-provider getViewsProvider", () => {
     vi.resetModules();
     vi.restoreAllMocks();
     vi.doUnmock("../fetch-utils");
+    vi.doUnmock("../supabase");
   });
 
   it("throws when no trusted view provider is configured", async () => {
@@ -57,6 +58,40 @@ describe("worker/views-provider getViewsProvider", () => {
 
   it("parses official YouTube statistics into trusted ViewData", async () => {
     process.env.YOUTUBE_DATA_API_KEY = "youtube-key";
+    vi.doMock("../supabase", () => ({
+      getServiceClient: () => ({
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      maybeSingle: async () => ({
+                        data: {
+                          id: "account1",
+                          user_id: "creator1",
+                          platform: "youtube",
+                          provider: "youtube_official",
+                          external_account_id: "channel1",
+                          access_token: null,
+                          refresh_token: null,
+                          scopes: [],
+                          token_expires_at: null,
+                          refresh_expires_at: null,
+                          status: "active",
+                        },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    }));
     vi.doMock("../fetch-utils", () => ({
       fetchWithRetry: vi.fn(async () => ({
         ok: true,
@@ -64,6 +99,9 @@ describe("worker/views-provider getViewsProvider", () => {
         json: async () => ({
           items: [
             {
+              snippet: {
+                channelId: "channel1",
+              },
               statistics: {
                 viewCount: "12345",
                 likeCount: "678",
@@ -81,6 +119,7 @@ describe("worker/views-provider getViewsProvider", () => {
       platform: "youtube",
       post_url: "https://www.youtube.com/shorts/abc123xyz99",
       external_post_id: "abc123xyz99",
+      creator_social_account_id: "account1",
       view_provider: "youtube_official",
     });
 
