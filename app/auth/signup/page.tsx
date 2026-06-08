@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { resendSignupConfirmation, signUpClient } from "@/lib/supabase/client";
+import {
+  resendSignupConfirmation,
+  signInWithGoogleClient,
+  signUpClient,
+} from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Sparkles, ArrowRight, ArrowLeft, Mail, KeyRound, User, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -18,6 +22,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [referralRef, setReferralRef] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
@@ -33,6 +38,34 @@ export default function SignupPage() {
     if (ref) setReferralRef(ref);
   }, []);
 
+  const onboardingDestination = () => {
+    const segment = role === "influencer" ? "creator" : "business";
+    return segment === "creator" && referralRef
+      ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
+      : `/${segment}/onboarding`;
+  };
+
+  const handleGoogleSignUp = async () => {
+    setGoogleLoading(true);
+    try {
+      const { data, error } = await signInWithGoogleClient(onboardingDestination());
+      if (error) {
+        toast.error(error.message || t("Google sign in failed."));
+        setGoogleLoading(false);
+        return;
+      }
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      toast.error(t("Google sign in failed."));
+    } catch {
+      toast.error(t("Google sign in failed."));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !email || !password) {
@@ -45,11 +78,7 @@ export default function SignupPage() {
     try {
       // Redirect to the onboarding wizard. Role "influencer" maps to the
       // "/creator" URL segment; carry any referral code through to onboarding.
-      const segment = role === "influencer" ? "creator" : "business";
-      const dest =
-        segment === "creator" && referralRef
-          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
-          : `/${segment}/onboarding`;
+      const dest = onboardingDestination();
 
       const { error, needsEmailConfirmation } = await signUpClient(
         email,
@@ -97,11 +126,7 @@ export default function SignupPage() {
 
     setResending(true);
     try {
-      const segment = role === "influencer" ? "creator" : "business";
-      const dest =
-        segment === "creator" && referralRef
-          ? `/creator/onboarding?ref=${encodeURIComponent(referralRef)}`
-          : `/${segment}/onboarding`;
+      const dest = onboardingDestination();
       const { error } = await resendSignupConfirmation(targetEmail, dest);
 
       if (error) {
@@ -156,6 +181,35 @@ export default function SignupPage() {
           <p className="text-muted-foreground text-sm mt-1.5">
             {t("Join the premium marketing ecosystem.")}
           </p>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="mb-5 w-full rounded-2xl py-6 text-sm font-semibold"
+          disabled={loading || googleLoading}
+          onClick={() => void handleGoogleSignUp()}
+        >
+          {googleLoading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" /> {t("Redirecting to Google...")}
+            </>
+          ) : (
+            <>
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-foreground text-xs font-black text-background">
+                G
+              </span>
+              {t("Continue with Google")}
+            </>
+          )}
+        </Button>
+
+        <div className="mb-5 flex items-center gap-3">
+          <span className="h-px flex-1 bg-border/50" />
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            {t("or")}
+          </span>
+          <span className="h-px flex-1 bg-border/50" />
         </div>
 
         {/* Form */}

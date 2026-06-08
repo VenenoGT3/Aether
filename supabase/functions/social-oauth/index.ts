@@ -4,15 +4,15 @@
  * Start:
  *   POST /functions/v1/social-oauth/start
  *   Authorization: Bearer <creator session JWT>
- *   body: { "provider": "tiktok_official" | "youtube_official" }
+ *   body: { "provider": "youtube_official" }
  *
  * Callback:
  *   GET /functions/v1/social-oauth/callback?code=...&state=...
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-type Provider = "tiktok_official" | "youtube_official";
-type Platform = "tiktok" | "youtube";
+type Provider = "youtube_official";
+type Platform = "youtube";
 
 type OAuthState = {
   state: string;
@@ -25,11 +25,10 @@ type OAuthState = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const tiktokClientKey = Deno.env.get("TIKTOK_CLIENT_KEY");
-const tiktokClientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET");
 const youtubeClientId = Deno.env.get("YOUTUBE_OAUTH_CLIENT_ID");
 const youtubeClientSecret = Deno.env.get("YOUTUBE_OAUTH_CLIENT_SECRET");
 const configuredFunctionUrl = Deno.env.get("SOCIAL_OAUTH_FUNCTION_URL");
+const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -53,14 +52,12 @@ function serviceClient() {
   });
 }
 
-function providerToPlatform(provider: Provider): Platform {
-  return provider === "youtube_official" ? "youtube" : "tiktok";
+function providerToPlatform(): Platform {
+  return "youtube";
 }
 
 function parseProvider(value: unknown): Provider | null {
-  return value === "tiktok_official" || value === "youtube_official"
-    ? value
-    : null;
+  return value === "youtube_official" ? value : null;
 }
 
 function stateToken(): string {
@@ -97,9 +94,6 @@ async function start(req: Request): Promise<Response> {
   const provider = parseProvider(body.provider);
   if (!provider) return json({ error: "Unsupported provider." }, 400);
 
-  if (provider === "tiktok_official" && (!tiktokClientKey || !tiktokClientSecret)) {
-    return json({ error: "TikTok OAuth is not configured." }, 503);
-  }
   if (provider === "youtube_official" && (!youtubeClientId || !youtubeClientSecret)) {
     return json({ error: "YouTube OAuth is not configured." }, 503);
   }
@@ -107,7 +101,7 @@ async function start(req: Request): Promise<Response> {
   const origin = req.headers.get("origin") ?? "";
   if (!origin) return json({ error: "Missing request origin." }, 400);
 
-  const platform = providerToPlatform(provider);
+  const platform = providerToPlatform();
   const state = stateToken();
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   const supabase = serviceClient();
@@ -143,59 +137,11 @@ async function start(req: Request): Promise<Response> {
     response_type: "code",
     access_type: "offline",
     prompt: "consent",
-    scope: "https://www.googleapis.com/auth/youtube.readonly",
+    scope: YOUTUBE_READONLY_SCOPE,
     redirect_uri: redirectUri,
     state,
   });
   return json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
-}
-
-async function exchangeTikTok(code: string, redirectUri: string) {
-  const tokenRes = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Cache-Control": "no-cache",
-    },
-    body: new URLSearchParams({
-      client_key: tiktokClientKey!,
-      client_secret: tiktokClientSecret!,
-      code,
-      grant_type: "authorization_code",
-      redirect_uri: redirectUri,
-    }),
-  });
-  const token = await tokenRes.json();
-  if (!tokenRes.ok || !token.access_token) {
-    throw new Error(token.error_description ?? "TikTok token exchange failed.");
-  }
-
-  const infoRes = await fetch(
-    "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,profile_deep_link",
-    { headers: { Authorization: `Bearer ${token.access_token}` } }
-  );
-  const info = await infoRes.json();
-  const user = info.data?.user;
-  if (!infoRes.ok || !user?.open_id) {
-    throw new Error(info.error?.message ?? "TikTok account lookup failed.");
-  }
-
-  return {
-    externalAccountId: String(user.open_id),
-    handle: null,
-    displayName: user.display_name ? String(user.display_name) : null,
-    profileUrl: user.profile_deep_link ? String(user.profile_deep_link) : null,
-    accessToken: String(token.access_token),
-    refreshToken: token.refresh_token ? String(token.refresh_token) : null,
-    scopes: token.scope ? String(token.scope).split(",").map((s) => s.trim()) : ["video.list"],
-    tokenExpiresAt: token.expires_in
-      ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString()
-      : null,
-    refreshExpiresAt: token.refresh_expires_in
-      ? new Date(Date.now() + Number(token.refresh_expires_in) * 1000).toISOString()
-      : null,
-    metadata: { union_id: user.union_id ?? null, avatar_url: user.avatar_url ?? null },
-  };
 }
 
 async function exchangeYouTube(code: string, redirectUri: string) {
@@ -213,6 +159,12 @@ async function exchangeYouTube(code: string, redirectUri: string) {
   const token = await tokenRes.json();
   if (!tokenRes.ok || !token.access_token) {
     throw new Error(token.error_description ?? "YouTube token exchange failed.");
+  }
+  const scopes = token.scope
+    ? String(token.scope).split(/\s+/).filter(Boolean)
+    : [YOUTUBE_READONLY_SCOPE];
+  if (!scopes.includes(YOUTUBE_READONLY_SCOPE)) {
+    throw new Error("YouTube readonly scope was not granted.");
   }
 
   const channelRes = await fetch(
@@ -232,7 +184,7 @@ async function exchangeYouTube(code: string, redirectUri: string) {
     profileUrl: `https://www.youtube.com/channel/${channel.id}`,
     accessToken: String(token.access_token),
     refreshToken: token.refresh_token ? String(token.refresh_token) : null,
-    scopes: token.scope ? String(token.scope).split(/\s+/).filter(Boolean) : ["youtube.readonly"],
+    scopes,
     tokenExpiresAt: token.expires_in
       ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString()
       : null,
@@ -257,6 +209,10 @@ async function callback(req: Request): Promise<Response> {
   if (stateErr || !stateRow) return json({ error: "Invalid OAuth state." }, 400);
   const oauthState = stateRow as OAuthState;
   const redirectOrigin = oauthState.redirect_origin;
+  if (oauthState.provider !== "youtube_official") {
+    await supabase.from("creator_social_oauth_states").delete().eq("state", state);
+    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=unsupported`, 303);
+  }
   if (new Date(oauthState.expires_at).getTime() < Date.now()) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
     return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=expired`, 303);
@@ -264,10 +220,7 @@ async function callback(req: Request): Promise<Response> {
 
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   try {
-    const linked =
-      oauthState.provider === "tiktok_official"
-        ? await exchangeTikTok(code, redirectUri)
-        : await exchangeYouTube(code, redirectUri);
+    const linked = await exchangeYouTube(code, redirectUri);
 
     const { error } = await supabase.from("creator_social_accounts").upsert(
       {

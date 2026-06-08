@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./client";
 import { apiPost } from "@/lib/api/client";
+import { payoutForViews } from "@/lib/earnings";
 import { requestWithdrawalAction } from "@/lib/stripe/actions";
 
 export interface WithdrawResult {
@@ -209,7 +210,7 @@ export function useCreatorClips() {
           post_url: r.post_url,
           status: r.status,
           current_views: views,
-          estimated_earnings: Math.round(((views * cpm) / 1000) * 100) / 100,
+          estimated_earnings: payoutForViews(views, cpm),
           creator_cpm: cpm,
           submitted_at: r.submitted_at ?? r.created_at,
           approval_deadline: r.approval_deadline,

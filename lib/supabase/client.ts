@@ -60,11 +60,51 @@ export function signInWithGoogleClient(nextPath = "/dashboard") {
     provider: "google",
     options: {
       redirectTo: authCallbackUrl(nextPath),
+      scopes: "openid email profile",
       queryParams: {
         prompt: "select_account",
       },
     },
   });
+}
+
+export async function syncAuthUxCookies(roleHint?: UserRole) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  if (roleHint) {
+    await supabase.rpc("claim_initial_user_role", { p_role: roleHint });
+  }
+
+  const fallbackRole =
+    roleHint ||
+    (user.app_metadata?.role as UserRole) ||
+    (user.user_metadata?.role as UserRole) ||
+    "influencer";
+
+  setUxCookie("aether-role", fallbackRole);
+  setUxCookie("aether-session", "session-active");
+  setUxCookie("aether-onboarded", "false");
+
+  const [{ data: profile }, { data: userRow }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("onboarded")
+      .eq(PROFILE_PK_COLUMN, user.id)
+      .maybeSingle(),
+    supabase.from("users").select("role").eq("id", user.id).maybeSingle(),
+  ]);
+
+  const userRole = (userRow?.role as UserRole) || fallbackRole;
+  const isOnboarded = profile?.onboarded ?? false;
+
+  setUxCookie("aether-role", userRole);
+  setUxCookie("aether-onboarded", isOnboarded ? "true" : "false");
+  window.dispatchEvent(new Event("role-change"));
+
+  return { role: userRole, onboarded: isOnboarded };
 }
 
 export async function signUpClient(
@@ -116,28 +156,7 @@ export async function signInClient(email: string, password: string) {
       (data.user.user_metadata?.role as UserRole) ||
       "influencer";
 
-    setUxCookie("aether-role", fallbackRole);
-    setUxCookie("aether-session", "session-active");
-    setUxCookie("aether-onboarded", "false");
-
-    void withClientTimeout(
-      Promise.all([
-        supabase
-          .from("profiles")
-          .select("onboarded")
-          .eq(PROFILE_PK_COLUMN, data.user.id)
-          .maybeSingle(),
-        supabase.from("users").select("role").eq("id", data.user.id).maybeSingle(),
-      ]),
-      5000
-    )
-      .then(([{ data: profile }, { data: userRow }]) => {
-        const userRole = (userRow?.role as UserRole) || fallbackRole;
-        const isOnboarded = profile?.onboarded ?? false;
-
-        setUxCookie("aether-role", userRole);
-        setUxCookie("aether-onboarded", isOnboarded ? "true" : "false");
-      })
+    void withClientTimeout(syncAuthUxCookies(fallbackRole), 5000)
       .catch(() => {
         // The server-side route guard performs the authoritative profile lookup.
       });

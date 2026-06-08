@@ -57,6 +57,7 @@ async function handleSearch(request: Request): Promise<Response> {
       )
       .eq("status", "open")
       .eq("campaign_type", "performance")
+      .contains("platforms", ["youtube"])
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

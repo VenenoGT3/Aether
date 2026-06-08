@@ -398,11 +398,7 @@ class RoutingViewsProvider implements ViewsProvider {
           ? "tiktok_official"
           : null;
 
-    const orderedNames = [
-      preferred,
-      platformDefault,
-      "ayrshare" as const,
-    ].filter(Boolean) as ViewProviderName[];
+    const orderedNames = [preferred, platformDefault].filter(Boolean) as ViewProviderName[];
 
     const ordered = new Set<ViewProviderName>(orderedNames);
     return providers
@@ -598,7 +594,7 @@ export function getViewsProvider(): ViewsProvider {
 
   if (!isTrustedViewSourceConfigured()) {
     throw new Error(
-      "[worker] Configure at least one trusted view provider (YOUTUBE_DATA_API_KEY, TikTok OAuth credentials, or AYRSHARE_API_KEY) before running the earnings pipeline."
+      "[worker] Configure YOUTUBE_DATA_API_KEY before running the YouTube-only earnings pipeline."
     );
   }
 

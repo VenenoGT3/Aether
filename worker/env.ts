@@ -67,8 +67,6 @@ export function isTiktokConfigured(): boolean {
 export function getConfiguredViewProviderNames(): ViewProviderName[] {
   const providers: ViewProviderName[] = [];
   if (isYoutubeConfigured()) providers.push("youtube_official");
-  if (isTiktokConfigured()) providers.push("tiktok_official");
-  if (isAyrshareConfigured()) providers.push("ayrshare");
   return providers;
 }
 
@@ -110,17 +108,9 @@ export function validateWorkerEnv(): EnvValidation {
     errors.push("SUPABASE_SERVICE_ROLE_KEY is required (service-role key; bypasses RLS).");
   }
 
-  const hasTikTokKey = !!getTiktokClientKey();
-  const hasTikTokSecret = !!getTiktokClientSecret();
-  if (hasTikTokKey !== hasTikTokSecret) {
-    errors.push(
-      "TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET must be set together for TikTok official view tracking."
-    );
-  }
-
   if (!isTrustedViewSourceConfigured()) {
     errors.push(
-      "At least one trusted view provider is required: set YOUTUBE_DATA_API_KEY, TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET, or AYRSHARE_API_KEY. The worker refuses to accrue earnings or pay creators on unverified views."
+      "YouTube-only beta requires YOUTUBE_DATA_API_KEY. The worker refuses to accrue earnings or pay creators on unverified views."
     );
   }
   if (!process.env.REDIS_URL?.trim()) {

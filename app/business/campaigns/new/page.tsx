@@ -89,9 +89,7 @@ const platformOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-  { id: "tiktok", label: "TikTok", description: "Short-form velocity", icon: Zap },
-  { id: "instagram", label: "Instagram", description: "Reels distribution", icon: Eye },
-  { id: "youtube", label: "YouTube", description: "Shorts reach", icon: Globe2 },
+  { id: "youtube", label: "YouTube Shorts", description: "Beta view tracking", icon: Globe2 },
 ];
 
 type Deliverable = {
@@ -273,7 +271,7 @@ export default function NewCampaignWizard() {
   const [cpmRate, setCpmRate] = useState(2.5);
   const [minPayoutThreshold, setMinPayoutThreshold] = useState(10);
   const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState(0);
-  const [platforms, setPlatforms] = useState<string[]>(["tiktok", "instagram"]);
+  const [platforms, setPlatforms] = useState<string[]>(["youtube"]);
   const [viewHoldbackHours, setViewHoldbackHours] = useState(48);
   const [contentRules, setContentRules] = useState("");
   const [campaignCategory, setCampaignCategory] = useState<CampaignCategory>("clipping");
@@ -382,9 +380,7 @@ export default function NewCampaignWizard() {
   }, [niches]);
 
   const togglePlatform = (platform: string) => {
-    setPlatforms((prev) =>
-      prev.includes(platform) ? prev.filter((item) => item !== platform) : [...prev, platform]
-    );
+    if (platform === "youtube") setPlatforms(["youtube"]);
   };
 
   const handleNicheToggle = (niche: string) => {
@@ -543,7 +539,7 @@ export default function NewCampaignWizard() {
         budget_pool: budgetTotal,
         min_payout_threshold: minPayoutThreshold,
         max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
-        platforms,
+        platforms: ["youtube"],
         view_holdback_hours: viewHoldbackHours,
         content_rules: contentRules.trim() ? { notes: contentRules.trim() } : {},
       };

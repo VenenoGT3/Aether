@@ -4,6 +4,7 @@ import type { ClipSubmitBody } from "@/lib/api/schemas";
 import { budgetUsage, isNearlyFull, isPoolExhausted } from "@/lib/campaign-budget";
 import { apiLog } from "@/lib/api/trace-log";
 import {
+  BETA_CLIP_PLATFORM,
   defaultViewProviderForPlatform,
   detectSocialPlatform,
   extractPlatformPostId,
@@ -80,6 +81,14 @@ export async function submitClip(
   const externalPostId = extractPlatformPostId(platform, body.post_url);
   const viewProvider = defaultViewProviderForPlatform(platform);
 
+  if (platform !== BETA_CLIP_PLATFORM || !externalPostId || viewProvider !== "youtube_official") {
+    return {
+      ok: false,
+      error: "Aether beta currently accepts YouTube Shorts links only.",
+      status: 400,
+    };
+  }
+
   if (campaign) {
     const usage =
       campaign.campaign_type === "performance" ? budgetUsage(campaign) : null;
@@ -121,18 +130,18 @@ export async function submitClip(
     if (
       campaign.campaign_type === "performance" &&
       allowedPlatforms.length > 0 &&
-      !allowedPlatforms.includes(platform)
+      !allowedPlatforms.includes(BETA_CLIP_PLATFORM)
     ) {
       apiLog("warn", "clip.submit.platform_rejected", {
         traceId,
         campaignId: body.campaign_id,
-        platform,
+        platform: BETA_CLIP_PLATFORM,
         allowed: allowedPlatforms,
         category: campaign.campaign_category,
       });
       return {
         ok: false,
-        error: `This campaign only accepts clips on: ${allowedPlatforms.join(", ")}.`,
+        error: "This campaign is not configured for YouTube Shorts submissions.",
         status: 409,
       };
     }

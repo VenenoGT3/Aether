@@ -29,6 +29,7 @@ import {
 } from "@/components/creator/creator-ui";
 import { Button } from "@/components/ui/button";
 import { approvalCountdownLabel } from "@/lib/approval";
+import { isYoutubePostUrl } from "@/lib/social-post";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
 import {
   useCreatorClips,
@@ -42,6 +43,7 @@ interface PerfCampaign {
   id: string;
   title: string;
   cpm_rate?: number | null;
+  platforms?: string[] | null;
 }
 
 const STATUS_STYLES: Record<ClipStatus, { label: string; tone: CreatorTone }> = {
@@ -76,10 +78,13 @@ export default function CreatorClipsPage() {
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase
       .from("campaigns")
-      .select("id, title, cpm_rate")
+      .select("id, title, cpm_rate, platforms")
       .eq("campaign_type", "performance")
-      .in("status", ["open", "in_progress"]);
-    const list = (data ?? []) as PerfCampaign[];
+      .in("status", ["open", "in_progress"])
+      .contains("platforms", ["youtube"]);
+    const list = ((data ?? []) as PerfCampaign[]).filter((campaign) =>
+      (campaign.platforms ?? []).includes("youtube")
+    );
     setCampaigns(list);
     if (list.length > 0) setSelectedCampaign((current) => current || list[0].id);
   }, []);
@@ -122,6 +127,10 @@ export default function CreatorClipsPage() {
     }
     if (!postUrl.trim()) {
       toast.error(t("Paste your clip URL."));
+      return;
+    }
+    if (!isYoutubePostUrl(postUrl.trim())) {
+      toast.error(t("Aether beta currently accepts YouTube Shorts links only."));
       return;
     }
     setSubmitting(true);

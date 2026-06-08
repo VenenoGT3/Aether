@@ -60,6 +60,7 @@ interface Campaign {
   campaign_type?: "fixed" | "performance";
   campaign_category?: "ugc" | "clipping" | null;
   cpm_rate?: number | null;
+  platforms?: string[] | null;
 }
 
 interface RawSearchCampaign {
@@ -74,6 +75,7 @@ interface RawSearchCampaign {
   campaign_category?: "ugc" | "clipping" | null;
   brand_cpm_rate?: number | null;
   cpm_rate?: number | null;
+  platforms?: string[] | null;
 }
 
 type CreatorProfileForAi = Profile & {
@@ -136,7 +138,9 @@ export default function DiscoverPage() {
       const searchData = await apiGet<{ campaigns: RawSearchCampaign[] }>(
         "/api/campaigns/search?page=1&limit=50"
       );
-      const rawCamps = (searchData.campaigns || []).map((c) => ({
+      const rawCamps = (searchData.campaigns || [])
+        .filter((c) => (c.platforms ?? []).includes("youtube"))
+        .map((c) => ({
         id: c.id,
         title: c.title,
         description: c.description || "",
@@ -154,6 +158,7 @@ export default function DiscoverPage() {
             : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=900&q=80",
         campaign_type: c.campaign_type,
         campaign_category: c.campaign_category,
+        platforms: c.platforms,
         cpm_rate:
           c.brand_cpm_rate != null
             ? Number(c.brand_cpm_rate)
@@ -534,10 +539,7 @@ export default function DiscoverPage() {
                   </select>
                   <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
                     <option value="All">{t("All Deliverables")}</option>
-                    <option value="reel">{t("Instagram Reel")}</option>
-                    <option value="tiktok">{t("TikTok Video")}</option>
-                    <option value="youtube">{t("YouTube Sponsor")}</option>
-                    <option value="story">{t("Instagram Story")}</option>
+                    <option value="youtube">{t("YouTube Shorts")}</option>
                   </select>
                   {filtersActive ? (
                     <button

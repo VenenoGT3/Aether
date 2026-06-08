@@ -3,6 +3,7 @@ import {
   defaultViewProviderForPlatform,
   detectSocialPlatform,
   extractPlatformPostId,
+  isYoutubePostUrl,
 } from "../social-post";
 
 describe("social post helpers", () => {
@@ -47,5 +48,11 @@ describe("social post helpers", () => {
     expect(defaultViewProviderForPlatform("youtube")).toBe("youtube_official");
     expect(defaultViewProviderForPlatform("tiktok")).toBe("tiktok_official");
     expect(defaultViewProviderForPlatform("instagram")).toBeNull();
+  });
+
+  it("identifies only parseable YouTube links for beta clip submissions", () => {
+    expect(isYoutubePostUrl("https://www.youtube.com/shorts/abc123xyz99")).toBe(true);
+    expect(isYoutubePostUrl("https://www.tiktok.com/@a/video/12345678")).toBe(false);
+    expect(isYoutubePostUrl("https://www.youtube.com/shorts/")).toBe(false);
   });
 });

@@ -164,7 +164,7 @@ export async function runPayoutBatch(
   if (payoutSafetyBlocked()) {
     log.alert("payout.blocked.no_view_source", {
       reason: "no trusted view provider configured — refusing to run real payouts on unverified views",
-      hint: "configure YOUTUBE_DATA_API_KEY, TikTok OAuth credentials, or AYRSHARE_API_KEY to restore live view tracking",
+      hint: "configure YOUTUBE_DATA_API_KEY to restore YouTube-only live view tracking",
     });
     return summary; // all zeros — nothing promoted, claimed, or transferred
   }

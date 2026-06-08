@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CirclePlay, Link2, Music2, RefreshCw, ShieldCheck, Unlink } from "lucide-react";
+import { CirclePlay, Link2, RefreshCw, ShieldCheck, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api/client";
@@ -9,7 +9,7 @@ import { getSupabaseUrl } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
 
-type Provider = "tiktok_official" | "youtube_official";
+type Provider = "youtube_official";
 
 type SocialAccountStatus = {
   id: string;
@@ -32,16 +32,10 @@ type AccountsResponse = {
 
 const LINKABLE_PROVIDERS: Array<{
   provider: Provider;
-  platform: "tiktok" | "youtube";
+  platform: "youtube";
   label: string;
-  Icon: typeof Music2;
+  Icon: typeof CirclePlay;
 }> = [
-  {
-    provider: "tiktok_official",
-    platform: "tiktok",
-    label: "TikTok",
-    Icon: Music2,
-  },
   {
     provider: "youtube_official",
     platform: "youtube",
@@ -164,7 +158,7 @@ export function AyrshareLinkPlaceholder() {
 
       <p className="text-[11px] text-muted-foreground leading-relaxed mb-4">
         {t(
-          "Connect TikTok or YouTube so eligible clips can be verified through official view providers."
+          "Connect YouTube so eligible Shorts can be verified through the official YouTube Data API."
         )}
       </p>
 

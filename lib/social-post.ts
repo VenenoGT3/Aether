@@ -5,6 +5,9 @@ export type TrustedViewProviderName =
   | "tiktok_official"
   | "ayrshare";
 
+export const BETA_CLIP_PLATFORM: SocialPlatform = "youtube";
+export const PAYOUT_VIEW_BLOCK_SIZE = 1000;
+
 const YOUTUBE_HOSTS = new Set([
   "youtube.com",
   "www.youtube.com",
@@ -23,6 +26,11 @@ export function detectSocialPlatform(
   if (lower.includes("tiktok.com")) return "tiktok";
   if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
   return "instagram";
+}
+
+export function isYoutubePostUrl(postUrl: string): boolean {
+  return detectSocialPlatform(postUrl) === BETA_CLIP_PLATFORM &&
+    extractYoutubeVideoId(postUrl) !== null;
 }
 
 export function defaultViewProviderForPlatform(

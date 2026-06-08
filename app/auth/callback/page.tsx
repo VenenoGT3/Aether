@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import type { EmailOtpType } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, syncAuthUxCookies } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
+import type { UserRole } from "@/types";
 
 const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   "signup",
@@ -33,6 +34,12 @@ function loginUrl(params: Record<string, string>): string {
   const url = new URL("/auth/login", window.location.origin);
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
   return `${url.pathname}${url.search}`;
+}
+
+function roleHintFromNextPath(nextPath: string): UserRole | undefined {
+  if (nextPath.startsWith("/business")) return "business";
+  if (nextPath.startsWith("/creator")) return "influencer";
+  return undefined;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -132,6 +139,12 @@ export default function AuthCallbackPage() {
           router.replace(loginUrl({ confirmed: "1" }));
           return;
         }
+
+        await withTimeout(
+          syncAuthUxCookies(roleHintFromNextPath(nextPath)),
+          20000,
+          t("Authentication timed out. Please try signing in again.")
+        );
 
         router.replace(nextPath);
         router.refresh();

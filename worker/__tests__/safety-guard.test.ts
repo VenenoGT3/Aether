@@ -45,12 +45,12 @@ describe("worker/env payout safety guard", () => {
     expect(env.payoutSafetyBlocked()).toBe(false);
   });
 
-  it("does NOT block when Ayrshare is configured as fallback", async () => {
+  it("still blocks when only Ayrshare is configured during YouTube-only beta", async () => {
     process.env.AYRSHARE_API_KEY = "real-key";
     const env = await loadEnv();
     expect(env.isAyrshareConfigured()).toBe(true);
-    expect(env.getConfiguredViewProviderNames()).toEqual(["ayrshare"]);
-    expect(env.payoutSafetyBlocked()).toBe(false);
+    expect(env.getConfiguredViewProviderNames()).toEqual([]);
+    expect(env.payoutSafetyBlocked()).toBe(true);
   });
 
   it("treats blank/whitespace provider keys as missing (still blocks)", async () => {
@@ -69,17 +69,18 @@ describe("worker/env payout safety guard", () => {
     delete process.env.YOUTUBE_DATA_API_KEY;
     const env = await loadEnv();
     const { errors } = env.validateWorkerEnv();
-    expect(errors.some((e) => /trusted view provider/.test(e))).toBe(true);
+    expect(errors.some((e) => /YOUTUBE_DATA_API_KEY/.test(e))).toBe(true);
   });
 
-  it("validateWorkerEnv requires TikTok credentials to be paired", async () => {
+  it("validateWorkerEnv ignores TikTok credentials during YouTube-only beta", async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "svc";
     process.env.TIKTOK_CLIENT_KEY = "client-key";
     delete process.env.TIKTOK_CLIENT_SECRET;
+    process.env.YOUTUBE_DATA_API_KEY = "youtube-key";
     const env = await loadEnv();
     const { errors } = env.validateWorkerEnv();
-    expect(errors.some((e) => /TIKTOK_CLIENT_KEY/.test(e))).toBe(true);
+    expect(errors).toHaveLength(0);
   });
 
   it("validateWorkerEnv has no errors when fully configured", async () => {

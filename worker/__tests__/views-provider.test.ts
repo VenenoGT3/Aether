@@ -46,7 +46,7 @@ describe("worker/views-provider getViewsProvider", () => {
     delete process.env.TIKTOK_CLIENT_KEY;
     delete process.env.TIKTOK_CLIENT_SECRET;
     const { getViewsProvider } = await import("../views-provider");
-    expect(() => getViewsProvider()).toThrow(/trusted view provider/);
+    expect(() => getViewsProvider()).toThrow(/YOUTUBE_DATA_API_KEY/);
   });
 
   it("returns the routing provider when an official key is configured", async () => {
@@ -92,53 +92,9 @@ describe("worker/views-provider getViewsProvider", () => {
     expect(data.shares).toBe(0);
   });
 
-  it("parses live Ayrshare analytics into ViewData", async () => {
+  it("does not treat Ayrshare alone as trusted during YouTube-only beta", async () => {
     process.env.AYRSHARE_API_KEY = "real-key";
-    // Mock the external Ayrshare HTTP call only — the parsing/mapping is real.
-    vi.doMock("../fetch-utils", () => ({
-      fetchWithRetry: vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tiktok: {
-            analytics: {
-              views: 12_345,
-              likeCount: 678,
-              commentsCount: 90,
-              shareCount: 12,
-            },
-          },
-        }),
-      })),
-    }));
-
     const { getViewsProvider } = await import("../views-provider");
-    const data = await getViewsProvider().fetchViews(clip);
-
-    expect(data.source).toBe("ayrshare");
-    expect(data.trusted).toBe(true);
-    expect(data.views).toBe(12_345);
-    expect(data.likes).toBe(678);
-    expect(data.comments).toBe(90);
-    expect(data.shares).toBe(12);
-  });
-
-  it("keeps the last-known view count when Ayrshare returns a non-OK response", async () => {
-    process.env.AYRSHARE_API_KEY = "real-key";
-    vi.doMock("../fetch-utils", () => ({
-      fetchWithRetry: vi.fn(async () => ({
-        ok: false,
-        status: 429,
-        json: async () => ({}),
-      })),
-    }));
-
-    const { getViewsProvider } = await import("../views-provider");
-    const data = await getViewsProvider().fetchViews(clip);
-
-    // Degrades safely: no fabricated growth, no earnings accrual.
-    expect(data.source).toBe("ayrshare");
-    expect(data.trusted).toBe(false);
-    expect(data.views).toBe(clip.current_views);
+    expect(() => getViewsProvider()).toThrow(/YOUTUBE_DATA_API_KEY|trusted view provider/);
   });
 });

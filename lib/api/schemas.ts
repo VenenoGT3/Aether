@@ -4,6 +4,7 @@ import {
   isSuspiciousSearchQuery,
   sanitizeSearchQuery,
 } from "@/lib/api/abuse";
+import { isYoutubePostUrl } from "@/lib/social-post";
 
 export const uuid = z.string().uuid({ message: "Invalid ID format." });
 
@@ -194,8 +195,10 @@ export const CampaignFundingBodySchema = z.object({
 
 export const ClipSubmitBodySchema = z.object({
   campaign_id: uuid,
-  post_url: socialPostUrl,
-  platform: z.enum(["instagram", "tiktok", "youtube"]).optional(),
+  post_url: socialPostUrl.refine(isYoutubePostUrl, {
+    message: "Beta clip submissions currently support YouTube Shorts links only.",
+  }),
+  platform: z.literal("youtube").optional(),
   _hp: honeypot,
 });
 

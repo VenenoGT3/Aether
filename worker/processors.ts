@@ -492,7 +492,7 @@ export async function runEarningsCalc(
       views,
       source,
       reason: "no trusted view provider configured — refusing to accrue earnings on unverified views",
-      hint: "configure YOUTUBE_DATA_API_KEY, TikTok OAuth credentials, or AYRSHARE_API_KEY to restore live view tracking",
+      hint: "configure YOUTUBE_DATA_API_KEY to restore YouTube-only live view tracking",
     });
     return 0;
   }
