@@ -35,6 +35,21 @@ function loginUrl(params: Record<string, string>): string {
   return `${url.pathname}${url.search}`;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -68,33 +83,49 @@ export default function AuthCallbackPage() {
       try {
         const tokenHash = currentUrl.searchParams.get("token_hash");
         if (tokenHash) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: emailOtpType(currentUrl.searchParams.get("type")),
-          });
+          const { error } = await withTimeout(
+            supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: emailOtpType(currentUrl.searchParams.get("type")),
+            }),
+            20000,
+            t("Authentication timed out. Please try signing in again.")
+          );
           if (error) throw error;
         }
 
         const code = currentUrl.searchParams.get("code");
         if (!tokenHash && code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { error } = await withTimeout(
+            supabase.auth.exchangeCodeForSession(code),
+            20000,
+            t("Authentication timed out. Please try signing in again.")
+          );
           if (error) throw error;
         }
 
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
         if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+          const { error } = await withTimeout(
+            supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            20000,
+            t("Authentication timed out. Please try signing in again.")
+          );
           if (error) throw error;
         }
 
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession();
+        } = await withTimeout(
+          supabase.auth.getSession(),
+          20000,
+          t("Authentication timed out. Please try signing in again.")
+        );
         if (error) throw error;
 
         if (!session) {

@@ -174,10 +174,16 @@ SIGTERM-driven graceful shutdown, and a health endpoint on `:8080`.
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role (bypasses RLS) — server-side only |
-| `AYRSHARE_API_KEY` | ✅ | Live view tracking; the worker hard-fails without it and never pays on unverified views |
+| `YOUTUBE_DATA_API_KEY` | ▲ | Official YouTube video statistics. Required for YouTube-only beta tracking. |
+| `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | ▲ | TikTok direct polling; creators must also connect TikTok with `video.list`. |
+| `AYRSHARE_API_KEY` | ▲ | Optional fallback/aggregator for live view tracking. |
 | `REDIS_URL` | ▲ | BullMQ connection; defaults to `redis://localhost:6379` |
 | `STRIPE_SECRET_KEY` | ▲ | Required for creator payouts / withdrawal reconciliation |
 | `WORKER_HEALTH_PORT` | optional | Health port (default `8080`; `0` disables) |
+
+At least one trusted view provider is required. For current YouTube-only testing,
+put `YOUTUBE_DATA_API_KEY` on the worker host; adding it only to Vercel is not
+enough because the background worker performs view sync.
 
 ### Deploy (Docker Compose — single VPS, co-located Redis)
 ```bash

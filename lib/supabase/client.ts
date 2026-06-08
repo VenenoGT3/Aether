@@ -55,6 +55,18 @@ export function authCallbackUrl(nextPath = "/dashboard"): string {
   );
 }
 
+export function signInWithGoogleClient(nextPath = "/dashboard") {
+  return supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: authCallbackUrl(nextPath),
+      queryParams: {
+        prompt: "select_account",
+      },
+    },
+  });
+}
+
 export async function signUpClient(
   email: string,
   password: string,

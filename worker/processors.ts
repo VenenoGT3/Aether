@@ -47,7 +47,7 @@ export async function autoApproveOverdueClips(
   return count;
 }
 
-/** Ids of 'tracking' clips due for a refresh (oldest sync first). */
+/** Ids of tracking/syncable clips due for a refresh (oldest sync first). */
 export async function fetchTrackingClipIds(
   limit = getViewSyncBatchSize(),
   client?: SupabaseClient
@@ -56,7 +56,7 @@ export async function fetchTrackingClipIds(
   const { data, error } = await supabase
     .from("clips")
     .select("id")
-    .eq("status", "tracking")
+    .in("status", ["tracking", "approved"])
     .order("last_synced_at", { ascending: true, nullsFirst: true })
     .limit(limit);
 
@@ -157,9 +157,30 @@ export async function runViewSyncForClip(
   if (clipErr) {
     throw new Error(`[view-sync] failed to load clip ${clipId}: ${clipErr.message}`);
   }
-  const clip = clipData as ClipRow | null;
+  let clip = clipData as ClipRow | null;
   if (!clip) {
     return { status: "skipped", clipId, reason: "clip not found" };
+  }
+  if (clip.status === "approved" && clip.quality_status === "approved") {
+    const nowIso = new Date().toISOString();
+    const { error: promoteErr } = await supabase
+      .from("clips")
+      .update({ status: "tracking", updated_at: nowIso })
+      .eq("id", clipId)
+      .eq("status", "approved")
+      .eq("quality_status", "approved");
+    if (promoteErr) {
+      throw new Error(
+        `[view-sync] failed to normalize approved clip ${clipId}: ${promoteErr.message}`
+      );
+    }
+    clip = { ...clip, status: "tracking" };
+    log.warn("viewsync.normalized_approved_clip", {
+      traceId,
+      clipId,
+      campaignId: clip.campaign_id,
+      reason: "legacy approved status promoted to tracking before sync",
+    });
   }
   if (clip.status !== "tracking") {
     return { status: "skipped", clipId, reason: `status=${clip.status}` };

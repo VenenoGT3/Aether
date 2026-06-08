@@ -1,8 +1,9 @@
 # Local testing for the Aether background worker (worker + Redis).
 #
 #   1. Create a .env with the worker secrets (see PRODUCTION-README.md §1 "Worker"):
-#        NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, AYRSHARE_API_KEY  (required)
-#        STRIPE_SECRET_KEY                                                       (payouts)
+#        NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY
+#        and at least one trusted view provider:
+#        YOUTUBE_DATA_API_KEY, TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET, or AYRSHARE_API_KEY.
 #   2. docker compose up --build
 #   3. curl http://localhost:8080/health        # → {"status":"ok",...}
 #      docker compose logs -f worker

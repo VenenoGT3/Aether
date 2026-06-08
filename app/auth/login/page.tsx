@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LanguageToggle } from "@/components/language-toggle";
 import {
   signInClient,
+  signInWithGoogleClient,
   resendSignupConfirmation,
   supabase,
 } from "@/lib/supabase/client";
@@ -71,6 +72,7 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [testLoginRoles, setTestLoginRoles] = useState<TestLoginRole[]>([]);
   const [testLoading, setTestLoading] = useState<TestLoginRole | null>(null);
@@ -161,6 +163,36 @@ function LoginForm() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const { data, error } = await withTimeout(
+        signInWithGoogleClient(redirectTo),
+        20000,
+        t("Google sign in timed out. Please try again.")
+      );
+
+      if (error) {
+        toast.error(error.message || t("Google sign in failed."));
+        setGoogleLoading(false);
+        return;
+      }
+
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+
+      toast.error(t("Google sign in failed."));
+      setGoogleLoading(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("Google sign in failed.")
+      );
+      setGoogleLoading(false);
     }
   };
 
@@ -293,62 +325,87 @@ function LoginForm() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="block text-xs font-bold text-[#c2c6d6]">
-                {t("Email Address")}
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
-                  <Mail size={16} />
-                </span>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
-                  required
-                />
-              </div>
-            </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="mb-5 h-12 w-full rounded-2xl border-white/10 bg-white/[0.055] text-sm font-black text-white hover:bg-white/[0.09]"
+            disabled={loading || googleLoading || testLoading !== null}
+            onClick={() => void handleGoogleSignIn()}
+          >
+            {googleLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-white text-xs font-black text-[#07101f]">
+                G
+              </span>
+            )}
+            {googleLoading ? t("Redirecting to Google...") : t("Continue with Google")}
+          </Button>
 
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label htmlFor="password" className="block text-xs font-bold text-[#c2c6d6]">
-                  {t("Password")}
+          <div className="mb-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-white/10" />
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c2c6d6]">
+              {t("or")}
+            </span>
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="block text-xs font-bold text-[#c2c6d6]">
+                  {t("Email Address")}
                 </label>
-                <Link
-                  href="#"
-                  className="text-xs font-semibold text-[#adc6ff] hover:text-white"
-                  onClick={() => toast.info(t("Password reset is coming soon."), { description: t("Please contact support to reset your password.") })}
-                >
-                  {t("Forgot password?")}
-                </Link>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
+                    <Mail size={16} />
+                  </span>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
+                    required
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
-                  <KeyRound size={16} />
-                </span>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
-                  required
-                />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="block text-xs font-bold text-[#c2c6d6]">
+                    {t("Password")}
+                  </label>
+                  <Link
+                    href="#"
+                    className="text-xs font-semibold text-[#adc6ff] hover:text-white"
+                    onClick={() => toast.info(t("Password reset is coming soon."), { description: t("Please contact support to reset your password.") })}
+                  >
+                    {t("Forgot password?")}
+                  </Link>
+                </div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
+                    <KeyRound size={16} />
+                  </span>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
+                    required
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
           <Button
             type="submit"
             className="mt-2 h-12 w-full rounded-2xl bg-gradient-to-r from-[#adc6ff] to-[#54a2ff] text-sm font-black text-[#07101f] shadow-[0_0_28px_rgba(173,198,255,0.20)] hover:brightness-105"
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? (
               <>

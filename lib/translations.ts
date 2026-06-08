@@ -23,6 +23,11 @@ export const dictionary: Record<string, string> = {
   "Forgot password?": "Password dimenticata?",
   "Password reset is coming soon.": "Il ripristino della password sarà presto disponibile.",
   "Please contact support to reset your password.": "Contatta l'assistenza per reimpostare la password.",
+  "Continue with Google": "Continua con Google",
+  "Redirecting to Google...": "Reindirizzamento a Google...",
+  "Google sign in failed.": "Accesso con Google non riuscito.",
+  "Google sign in timed out. Please try again.": "Accesso con Google scaduto. Riprova.",
+  "or": "oppure",
   "Signing In...": "Accesso in corso...",
   "Don't have an account?": "Non hai un account?",
   "Sign up now": "Registrati ora",
@@ -51,6 +56,7 @@ export const dictionary: Record<string, string> = {
   "Confirming your account": "Conferma dell'account in corso",
   "Please wait while Aether verifies your email and prepares your workspace.": "Attendi mentre Aether verifica la tua email e prepara il tuo workspace.",
   "Back to sign in": "Torna all'accesso",
+  "Authentication timed out. Please try signing in again.": "Autenticazione scaduta. Prova ad accedere di nuovo.",
   "This confirmation link was opened outside the browser that started signup. Please request a new confirmation email and open the new link.": "Questo link di conferma e stato aperto fuori dal browser usato per iniziare la registrazione. Richiedi una nuova email di conferma e apri il nuovo link.",
   
   // Landing Page
