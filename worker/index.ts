@@ -156,7 +156,7 @@ function startViewSyncWorker(): Worker {
                   // view_snapshots and corrupt the fraud trend/uniformity (CV/spike)
                   // signals. Retries reuse this id (they serialize), and the id frees
                   // on terminal state so the next fan-out re-syncs normally.
-                  jobId: `${JOB_NAMES.syncClip}:${clipId}`,
+                  jobId: `${JOB_NAMES.syncClip}-${clipId}`,
                   removeOnComplete: true,
                   removeOnFail: true,
                 },
