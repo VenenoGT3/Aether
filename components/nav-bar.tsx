@@ -159,7 +159,7 @@ export function NavBar() {
                   href={href}
                   className="rounded-xl px-3 py-2 transition-all hover:bg-white/[0.06] hover:text-foreground"
                 >
-                  {label}
+                  {t(label)}
                 </Link>
               ))}
             </nav>

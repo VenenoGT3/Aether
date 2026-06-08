@@ -172,11 +172,13 @@ function QueueRow({
   clip,
   active,
   busy,
+  pendingLabel,
   onSelect,
 }: {
   clip: ModerationClip;
   active: boolean;
   busy: boolean;
+  pendingLabel: string;
   onSelect: () => void;
 }) {
   const dueTone = deadlineTone(clip.approval_deadline);
@@ -195,7 +197,7 @@ function QueueRow({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <BusinessStatusPill tone="warning">Pending</BusinessStatusPill>
+            <BusinessStatusPill tone="warning">{pendingLabel}</BusinessStatusPill>
             <BusinessStatusPill tone="info">{platformLabel(clip.platform)}</BusinessStatusPill>
             <BusinessStatusPill tone={clip.campaignCategory === "ugc" ? "secondary" : "accent"}>
               {categoryLabel(clip.campaignCategory)}
@@ -559,6 +561,7 @@ export default function BrandModerationPage() {
                     clip={clip}
                     active={selectedClip?.id === clip.id}
                     busy={busyId === clip.id}
+                    pendingLabel={t("Pending")}
                     onSelect={() => setSelectedClipId(clip.id)}
                   />
                 </motion.div>
