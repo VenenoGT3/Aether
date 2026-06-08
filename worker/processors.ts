@@ -246,6 +246,56 @@ export async function runViewSyncForClip(
     .map((s) => Number((s as { views: number }).views))
     .reverse(); // oldest → newest
 
+  if (
+    priorViews.length === 0 &&
+    clip.current_views === 0 &&
+    clip.counted_views === 0
+  ) {
+    const nowIso = new Date().toISOString();
+    const baselineViews = Math.max(metrics.views, 0);
+    const { error: snapErr } = await supabase.from("view_snapshots").insert({
+      clip_id: clipId,
+      views: baselineViews,
+      likes: metrics.likes,
+      comments: metrics.comments,
+      shares: metrics.shares,
+      source: metrics.source,
+    });
+    if (snapErr) {
+      throw new Error(
+        `[view-sync] baseline snapshot insert failed for ${clipId}: ${snapErr.message}`
+      );
+    }
+
+    const { error: updErr } = await supabase
+      .from("clips")
+      .update({
+        current_views: baselineViews,
+        counted_views: baselineViews,
+        fraud_score: 0,
+        fraud_flagged: false,
+        fraud_reasons: [],
+        fraud_score_updated_at: nowIso,
+        last_synced_at: nowIso,
+      })
+      .eq("id", clipId);
+    if (updErr) {
+      throw new Error(
+        `[view-sync] baseline clip update failed for ${clipId}: ${updErr.message}`
+      );
+    }
+
+    log.info("viewsync.baselined", {
+      traceId,
+      clipId,
+      campaignId: clip.campaign_id,
+      views: baselineViews,
+      source: metrics.source,
+      reason: "first trusted snapshot sets non-billable starting point",
+    });
+    return { status: "synced", clipId, views: baselineViews, source: metrics.source };
+  }
+
   // Duplicate content: same post URL OR external id active in another campaign
   // (best-effort). Either match is treated as a cross-campaign duplicate.
   let duplicateContent = false;
