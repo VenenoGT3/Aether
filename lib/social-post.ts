@@ -5,7 +5,6 @@ export type TrustedViewProviderName =
   | "tiktok_official"
   | "ayrshare";
 
-export const BETA_CLIP_PLATFORM: SocialPlatform = "youtube";
 export const PAYOUT_VIEW_BLOCK_SIZE = 1000;
 
 const YOUTUBE_HOSTS = new Set([
@@ -29,7 +28,7 @@ export function detectSocialPlatform(
 }
 
 export function isYoutubePostUrl(postUrl: string): boolean {
-  return detectSocialPlatform(postUrl) === BETA_CLIP_PLATFORM &&
+  return detectSocialPlatform(postUrl) === "youtube" &&
     extractYoutubeVideoId(postUrl) !== null;
 }
 

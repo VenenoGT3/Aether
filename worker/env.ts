@@ -8,6 +8,7 @@
  */
 
 import { defaultFraudConfig, type FraudConfig } from "./fraud";
+import { getBetaPlatforms } from "../lib/beta";
 import type { ViewProviderName } from "./types";
 
 /** Redis connection string for BullMQ (e.g. redis://localhost:6379). */
@@ -73,9 +74,12 @@ export function getSocialTokenEncryptionKey(): string | undefined {
   return process.env.SOCIAL_TOKEN_ENCRYPTION_KEY?.trim() || undefined;
 }
 
+/** Trusted providers that are BOTH in the beta platform set and configured. */
 export function getConfiguredViewProviderNames(): ViewProviderName[] {
+  const beta = getBetaPlatforms();
   const providers: ViewProviderName[] = [];
-  if (isYoutubeConfigured()) providers.push("youtube_official");
+  if (beta.includes("youtube") && isYoutubeConfigured()) providers.push("youtube_official");
+  if (beta.includes("tiktok") && isTiktokConfigured()) providers.push("tiktok_official");
   return providers;
 }
 
@@ -119,7 +123,7 @@ export function validateWorkerEnv(): EnvValidation {
 
   if (!isTrustedViewSourceConfigured()) {
     errors.push(
-      "YouTube-only beta requires YOUTUBE_DATA_API_KEY. The worker refuses to accrue earnings or pay creators on unverified views."
+      `Beta platforms (${getBetaPlatforms().join(", ")}) need a trusted view source: YOUTUBE_DATA_API_KEY for youtube, TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET for tiktok. The worker refuses to accrue earnings or pay creators on unverified views.`
     );
   }
   if (!process.env.REDIS_URL?.trim()) {

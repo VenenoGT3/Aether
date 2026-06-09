@@ -4,11 +4,11 @@ import type { ClipSubmitBody } from "@/lib/api/schemas";
 import { budgetUsage, isNearlyFull, isPoolExhausted } from "@/lib/campaign-budget";
 import { apiLog } from "@/lib/api/trace-log";
 import {
-  BETA_CLIP_PLATFORM,
   defaultViewProviderForPlatform,
   detectSocialPlatform,
   extractPlatformPostId,
 } from "@/lib/social-post";
+import { PLATFORM_LABELS, betaPlatformsLabel, isPlatformInBeta } from "@/lib/beta";
 import { getYoutubeDataApiKey } from "@/lib/env.server";
 import { fetchYouTubeVideoMetadata } from "@/lib/youtube/metadata";
 
@@ -83,10 +83,21 @@ export async function submitClip(
   const externalPostId = extractPlatformPostId(platform, body.post_url);
   const viewProvider = defaultViewProviderForPlatform(platform);
 
-  if (platform !== BETA_CLIP_PLATFORM || !externalPostId || viewProvider !== "youtube_official") {
+  if (!isPlatformInBeta(platform) || !externalPostId || !viewProvider) {
     return {
       ok: false,
-      error: "Aether beta currently accepts YouTube Shorts links only.",
+      error: `Aether beta currently accepts ${betaPlatformsLabel()} links only.`,
+      status: 400,
+    };
+  }
+
+  // Ownership verification is per-platform; only YouTube has one today. A
+  // platform added to BETA_PLATFORMS without a verifier stays rejected here
+  // rather than accepting clips whose channel ownership can't be proven.
+  if (platform !== "youtube" || viewProvider !== "youtube_official") {
+    return {
+      ok: false,
+      error: `${PLATFORM_LABELS[platform]} submissions are not yet supported.`,
       status: 400,
     };
   }
@@ -176,18 +187,18 @@ export async function submitClip(
     if (
       campaign.campaign_type === "performance" &&
       allowedPlatforms.length > 0 &&
-      !allowedPlatforms.includes(BETA_CLIP_PLATFORM)
+      !allowedPlatforms.includes(platform)
     ) {
       apiLog("warn", "clip.submit.platform_rejected", {
         traceId,
         campaignId: body.campaign_id,
-        platform: BETA_CLIP_PLATFORM,
+        platform,
         allowed: allowedPlatforms,
         category: campaign.campaign_category,
       });
       return {
         ok: false,
-        error: "This campaign is not configured for YouTube Shorts submissions.",
+        error: `This campaign is not configured for ${PLATFORM_LABELS[platform]} submissions.`,
         status: 409,
       };
     }
