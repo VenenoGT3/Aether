@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 import { guardApiGet, guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError, jsonSuccess } from "@/lib/api/response";
 import { endRequest } from "@/lib/logger";
@@ -56,6 +57,42 @@ export async function GET(request: Request): Promise<Response> {
   return jsonSuccess({ accounts: (data ?? []) as SocialAccountStatusRow[] });
 }
 
+/**
+ * Disconnect via the social-oauth edge function so the Google grant is revoked
+ * upstream (only that runtime holds the token-decryption key). Returns null
+ * when the function is unreachable/undeployed — the caller falls back to the
+ * local RPC, which clears tokens but cannot revoke at the provider.
+ */
+async function disconnectViaEdgeFunction(
+  accessToken: string,
+  accountId: string
+): Promise<Response | null> {
+  let res: globalThis.Response;
+  try {
+    res = await fetch(`${getSupabaseUrl()}/functions/v1/social-oauth/disconnect`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: getSupabaseAnonKey(),
+      },
+      body: JSON.stringify({ accountId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return null;
+  }
+
+  if (res.ok) {
+    return jsonSuccess({ disconnected: true });
+  }
+  const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (res.status === 404 && payload?.error === "Linked account not found.") {
+    return jsonError("Linked account not found.", 404);
+  }
+  return null;
+}
+
 export async function POST(request: Request): Promise<Response> {
   const guarded = await guardApiPost(request, {
     schema: DisconnectBodySchema,
@@ -67,6 +104,25 @@ export async function POST(request: Request): Promise<Response> {
   const { log, startTime, data } = guarded.ctx;
 
   const supabase = await createClient();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    const edgeResponse = await disconnectViaEdgeFunction(
+      session.access_token,
+      data.accountId
+    );
+    if (edgeResponse) {
+      endRequest(log, { statusCode: edgeResponse.status, startTime });
+      return edgeResponse;
+    }
+    log.warn(
+      { event: "social.disconnect.edge_unavailable" },
+      "social-oauth disconnect unreachable — falling back to local token clear (no upstream revoke)"
+    );
+  }
+
   const { data: ok, error } = await supabase.rpc(
     "disconnect_creator_social_account",
     { p_account_id: data.accountId }

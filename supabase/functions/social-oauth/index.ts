@@ -10,7 +10,7 @@
  *   GET /functions/v1/social-oauth/callback?code=...&state=...
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { encryptToken } from "../_shared/token-crypto.ts";
+import { decryptToken, encryptToken } from "../_shared/token-crypto.ts";
 
 type Provider = "youtube_official";
 type Platform = "youtube";
@@ -286,6 +286,64 @@ async function exchangeYouTube(code: string, redirectUri: string) {
   };
 }
 
+/** Best-effort: tell Google to invalidate the grant. Revoking either token of a pair kills both. */
+async function revokeGoogleToken(storedToken: string | null): Promise<boolean> {
+  if (!storedToken) return false;
+  try {
+    const token = await decryptToken(storedToken, tokenEncryptionKey);
+    const res = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("social oauth revoke:", err);
+    return false;
+  }
+}
+
+async function disconnect(req: Request): Promise<Response> {
+  const userId = await authenticatedUserId(req);
+  if (!userId) return json(req, { error: "Authentication required." }, 401);
+
+  const body = (await req.json().catch(() => ({}))) as { accountId?: unknown };
+  const accountId = typeof body.accountId === "string" ? body.accountId.trim() : "";
+  if (!accountId) return json(req, { error: "accountId is required." }, 400);
+
+  const supabase = serviceClient();
+  const { data: account, error } = await supabase
+    .from("creator_social_accounts")
+    .select("id, user_id, access_token, refresh_token")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) return json(req, { error: "Could not load this account." }, 500);
+  if (!account) return json(req, { error: "Linked account not found." }, 404);
+
+  // Upstream revocation is best-effort: the local disconnect must succeed even
+  // when Google is unreachable, otherwise creators can never unlink.
+  const upstreamRevoked = await revokeGoogleToken(
+    account.refresh_token ?? account.access_token
+  );
+
+  const { error: updateErr } = await supabase
+    .from("creator_social_accounts")
+    .update({
+      status: "revoked",
+      access_token: null,
+      refresh_token: null,
+      token_expires_at: null,
+      refresh_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", account.id)
+    .eq("user_id", userId);
+  if (updateErr) return json(req, { error: "Could not disconnect this account." }, 500);
+
+  return json(req, { disconnected: true, upstreamRevoked }, 200);
+}
+
 async function callback(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const state = url.searchParams.get("state") ?? "";
@@ -417,6 +475,10 @@ Deno.serve(async (req) => {
     if (pathname.endsWith("/callback")) {
       if (req.method !== "GET") return json(req, { error: "Method not allowed." }, 405);
       return await callback(req);
+    }
+    if (pathname.endsWith("/disconnect")) {
+      if (req.method !== "POST") return json(req, { error: "Method not allowed." }, 405);
+      return await disconnect(req);
     }
     return json(req, { error: "Not found." }, 404);
   } catch (err) {
