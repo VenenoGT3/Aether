@@ -1612,7 +1612,15 @@ export const dictionary: Record<string, string> = {
   "You can submit multiple clips. Each is reviewed, then tracked for verified views.": "Puoi inviare piu clip. Ognuna viene revisionata e poi tracciata per visualizzazioni verificate.",
   "Only cleared earnings can be withdrawn. Holdback earnings become available automatically.": "Solo i guadagni sbloccati possono essere prelevati. I guadagni in holdback diventano disponibili automaticamente.",
   "Recent performance payouts": "Payout performance recenti",
-  "No payouts yet.": "Nessun payout ancora."
+  "No payouts yet.": "Nessun payout ancora.",
+
+  // View-verification freshness + EU submission rules
+  "Views verified just now": "Visualizzazioni verificate proprio ora",
+  "Views verified": "Visualizzazioni verificate",
+  "ago": "fa",
+  "Awaiting first verification": "In attesa della prima verifica",
+  "Views your video earned before submission are recorded as a non-billable baseline — only growth from submission onward is paid. Submit soon after posting.": "Le visualizzazioni ottenute prima dell'invio sono registrate come base non retribuita: viene pagata solo la crescita successiva all'invio. Invia la clip subito dopo la pubblicazione.",
+  "EU advertising rules: clearly disclose the paid partnership in the video or caption (e.g. #ad / #sponsorizzato) before any 'more' fold.": "Norme UE sulla pubblicità: dichiara chiaramente la collaborazione a pagamento nel video o nella didascalia (es. #ad / #sponsorizzato) prima di qualsiasi taglio 'altro'."
 };
 
 // Helper function to read cookie value

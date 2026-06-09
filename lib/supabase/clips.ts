@@ -55,6 +55,8 @@ export interface CreatorClip {
   quality_status?: QualityStatus;
   quality_notes?: string | null;
   quality_score?: number | null;
+  /** When the platform last verified this clip's views (view-sync worker). */
+  last_synced_at?: string | null;
 }
 
 export interface EarningsBreakdown {
@@ -172,7 +174,7 @@ export function useCreatorClips() {
     const { data } = await supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, campaign:campaign_id(title, cpm_rate)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id(title, cpm_rate)"
       )
       .eq("creator_id", user.id)
       .order("created_at", { ascending: false });
@@ -191,6 +193,7 @@ export function useCreatorClips() {
       quality_status: QualityStatus | null;
       quality_notes: string | null;
       quality_score: number | null;
+      last_synced_at: string | null;
       campaign: {
         title?: string;
         cpm_rate?: number | null;
@@ -218,6 +221,7 @@ export function useCreatorClips() {
           quality_status: r.quality_status ?? "pending_review",
           quality_notes: r.quality_notes,
           quality_score: r.quality_score,
+          last_synced_at: r.last_synced_at,
         };
       })
     );

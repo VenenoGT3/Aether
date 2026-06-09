@@ -38,6 +38,7 @@ import {
   type ClipStatus,
 } from "@/lib/supabase/clips";
 import { useTranslation } from "@/lib/translations";
+import { formatMoney, formatMoneyCompact } from "@/lib/currency";
 
 interface PerfCampaign {
   id: string;
@@ -55,7 +56,20 @@ const STATUS_STYLES: Record<ClipStatus, { label: string; tone: CreatorTone }> = 
 };
 
 function money(value: number) {
-  return `$${Math.round(value).toLocaleString()}`;
+  return formatMoneyCompact(value);
+}
+
+/** Coarse relative label for view-verification freshness. */
+function verifiedAgoLabel(iso: string | null | undefined, t: (s: string) => string): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return t("Views verified just now");
+  if (minutes < 60) return `${t("Views verified")} ${minutes} min ${t("ago")}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${t("Views verified")} ${hours} h ${t("ago")}`;
+  return `${t("Views verified")} ${Math.floor(hours / 24)} d ${t("ago")}`;
 }
 
 export default function CreatorClipsPage() {
@@ -308,6 +322,11 @@ export default function CreatorClipsPage() {
                               <Eye size={11} /> {t("Views")}
                             </span>
                             <p className="mt-1 text-sm font-bold text-white">{clip.current_views.toLocaleString()}</p>
+                            {clip.status === "tracking" ? (
+                              <span className="mt-0.5 block text-[9px] text-white/35">
+                                {verifiedAgoLabel(clip.last_synced_at, t) ?? t("Awaiting first verification")}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
                             <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
@@ -318,7 +337,7 @@ export default function CreatorClipsPage() {
                             </p>
                             {clip.creator_cpm != null ? (
                               <span className="mt-0.5 block text-[9px] text-white/35">
-                                @ ${Number(clip.creator_cpm).toFixed(2)} {t("CPM")}
+                                @ {formatMoney(Number(clip.creator_cpm))} {t("CPM")}
                               </span>
                             ) : null}
                           </div>
@@ -417,6 +436,12 @@ export default function CreatorClipsPage() {
                   </Button>
                   <p className="text-xs leading-5 text-white/45">
                     {t("You can submit multiple clips. Each is reviewed, then tracked for verified views.")}
+                  </p>
+                  <p className="text-xs leading-5 text-white/45">
+                    {t("Views your video earned before submission are recorded as a non-billable baseline — only growth from submission onward is paid. Submit soon after posting.")}
+                  </p>
+                  <p className="text-xs leading-5 text-white/45">
+                    {t("EU advertising rules: clearly disclose the paid partnership in the video or caption (e.g. #ad / #sponsorizzato) before any 'more' fold.")}
                   </p>
                 </div>
               )}
