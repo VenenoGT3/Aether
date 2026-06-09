@@ -39,7 +39,7 @@ export function mergeProfileWithUser(
     stripe_onboarding_completed:
       profile.stripe_onboarding_completed ?? undefined,
     bio: profile.bio ?? undefined,
-    niche: undefined,
+    niche: profile.niches?.[0],
     followers: profile.follower_count,
     engagement_rate: profile.engagement_rate
       ? Number(profile.engagement_rate)

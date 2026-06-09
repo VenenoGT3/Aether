@@ -20,6 +20,7 @@ type OAuthState = {
   platform: Platform;
   provider: Provider;
   redirect_origin: string;
+  return_path: string | null;
   verifier_hash: string | null;
   consumed_at: string | null;
   expires_at: string;
@@ -103,6 +104,20 @@ function parseProvider(value: unknown): Provider | null {
   return value === "youtube_official" ? value : null;
 }
 
+function safeReturnPath(value: unknown): string {
+  if (typeof value !== "string") return "/creator/settings";
+  const trimmed = value.trim();
+  if (
+    trimmed.length === 0 ||
+    trimmed.length > 256 ||
+    !trimmed.startsWith("/creator/") ||
+    trimmed.startsWith("//")
+  ) {
+    return "/creator/settings";
+  }
+  return trimmed;
+}
+
 function stateToken(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -155,9 +170,10 @@ async function start(req: Request): Promise<Response> {
   const userId = await authenticatedUserId(req);
   if (!userId) return json(req, { error: "Authentication required." }, 401);
 
-  const body = (await req.json().catch(() => ({}))) as { provider?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { provider?: unknown; returnTo?: unknown };
   const provider = parseProvider(body.provider);
   if (!provider) return json(req, { error: "Unsupported provider." }, 400);
+  const returnPath = safeReturnPath(body.returnTo);
 
   if (provider === "youtube_official" && (!youtubeClientId || !youtubeClientSecret)) {
     return json(req, { error: "YouTube OAuth is not configured." }, 503);
@@ -186,6 +202,7 @@ async function start(req: Request): Promise<Response> {
     platform,
     provider,
     redirect_origin: new URL(origin).origin,
+    return_path: returnPath,
     verifier_hash: verifierHash,
     expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
   });
@@ -263,35 +280,37 @@ async function callback(req: Request): Promise<Response> {
   const supabase = serviceClient();
   const { data: stateRow, error: stateErr } = await supabase
     .from("creator_social_oauth_states")
-    .select("state, user_id, platform, provider, redirect_origin, verifier_hash, consumed_at, expires_at")
+    .select("state, user_id, platform, provider, redirect_origin, return_path, verifier_hash, consumed_at, expires_at")
     .eq("state", state)
     .maybeSingle();
 
   if (stateErr || !stateRow) return json(req, { error: "Invalid OAuth state." }, 400);
   const oauthState = stateRow as OAuthState;
   const redirectOrigin = oauthState.redirect_origin;
+  const redirectPath = safeReturnPath(oauthState.return_path);
+  const redirectTo = (params: string) => `${redirectOrigin}${redirectPath}${params}`;
   if (!originAllowed(redirectOrigin)) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
     return json(req, { error: "Invalid OAuth redirect origin." }, 400);
   }
   if (oauthState.provider !== "youtube_official") {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=unsupported`, 303);
+    return Response.redirect(redirectTo("?social_link_error=unsupported"), 303);
   }
   if (oauthState.consumed_at) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=consumed`, 303);
+    return Response.redirect(redirectTo("?social_link_error=consumed"), 303);
   }
   if (new Date(oauthState.expires_at).getTime() < Date.now()) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=expired`, 303);
+    return Response.redirect(redirectTo("?social_link_error=expired"), 303);
   }
 
   const verifier = readCookie(req, oauthCookieName(state));
   const verifierHash = verifier ? await sha256Base64Url(verifier) : null;
   if (!oauthState.verifier_hash || verifierHash !== oauthState.verifier_hash) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=state`, 303);
+    return Response.redirect(redirectTo("?social_link_error=state"), 303);
   }
 
   const { data: consumedState } = await supabase
@@ -303,7 +322,7 @@ async function callback(req: Request): Promise<Response> {
     .maybeSingle();
   if (!consumedState) {
     await supabase.from("creator_social_oauth_states").delete().eq("state", state);
-    return Response.redirect(`${redirectOrigin}/creator/clips?social_link_error=consumed`, 303);
+    return Response.redirect(redirectTo("?social_link_error=consumed"), 303);
   }
 
   const redirectUri = `${functionBaseUrl(req)}/callback`;
@@ -347,7 +366,7 @@ async function callback(req: Request): Promise<Response> {
     return new Response(null, {
       status: 303,
       headers: {
-        Location: `${redirectOrigin}/creator/clips?social_linked=${oauthState.platform}`,
+        Location: redirectTo(`?social_linked=${oauthState.platform}`),
         "Set-Cookie": `${oauthCookieName(state)}=; Path=/functions/v1/social-oauth; Max-Age=0; HttpOnly; Secure; SameSite=None`,
       },
     });
@@ -357,7 +376,7 @@ async function callback(req: Request): Promise<Response> {
     return new Response(null, {
       status: 303,
       headers: {
-        Location: `${redirectOrigin}/creator/clips?social_link_error=${oauthState.platform}`,
+        Location: redirectTo(`?social_link_error=${oauthState.platform}`),
         "Set-Cookie": `${oauthCookieName(state)}=; Path=/functions/v1/social-oauth; Max-Age=0; HttpOnly; Secure; SameSite=None`,
       },
     });

@@ -12,6 +12,7 @@ import {
   Megaphone,
   Plus,
   Settings2,
+  UserCog,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -60,10 +61,10 @@ const businessNavItems = [
     match: (pathname: string) => pathname === "/business/payments",
   },
   {
-    label: "Setup",
-    href: "/business/onboarding",
-    icon: Settings2,
-    match: (pathname: string) => pathname === "/business/onboarding",
+    label: "Settings",
+    href: "/business/settings",
+    icon: UserCog,
+    match: (pathname: string) => pathname === "/business/settings",
   },
 ];
 
@@ -203,10 +204,10 @@ function BusinessProfileMenu({ user }: { user: Profile | null }) {
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-lg py-2 text-[var(--business-text)] focus:bg-white/[0.08]"
-          onClick={() => router.push("/business/onboarding")}
+          onClick={() => router.push("/business/settings")}
         >
           <Settings2 size={14} />
-          <span>{t("Workspace Setup")}</span>
+          <span>{t("Account Settings")}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-1 border-white/10" />
         <DropdownMenuItem

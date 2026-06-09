@@ -12,6 +12,7 @@ import {
   LogOut,
   Settings2,
   Sparkles,
+  UserCog,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -58,6 +59,12 @@ const creatorNavItems = [
     href: "/creator/clips",
     icon: Wallet,
     match: (pathname: string) => pathname === "/creator/clips",
+  },
+  {
+    label: "Settings",
+    href: "/creator/settings",
+    icon: UserCog,
+    match: (pathname: string) => pathname === "/creator/settings",
   },
 ];
 
@@ -193,10 +200,10 @@ function CreatorProfileMenu({ user }: { user: Profile | null }) {
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-lg py-2 text-white focus:bg-white/[0.08]"
-          onClick={() => router.push("/creator/onboarding")}
+          onClick={() => router.push("/creator/settings")}
         >
           <Settings2 size={14} />
-          <span>{t("Creator Setup")}</span>
+          <span>{t("Account Settings")}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-1 border-white/10" />
         <DropdownMenuItem
