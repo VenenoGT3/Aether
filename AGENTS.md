@@ -4,6 +4,14 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# Merging branches
+
+Before merging any branch, check the repo root for a `MERGE-NOTES-<branch>.md`
+file (e.g. `MERGE-NOTES-FABLE.md`). It lists exactly what that branch needs at
+merge/deploy time — migrations, edge-function deploys, secrets to set or NOT
+set — plus pre-merge verification commands. Complete every step, then delete
+the file as part of the merge.
+
 # Aether Agent Guidelines & Developer Standards
 
 This project follows premium Apple Sequoia & iOS 18 design patterns and modern Next.js 16 App Router architecture.
