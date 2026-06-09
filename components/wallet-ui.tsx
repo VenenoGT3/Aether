@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { withdrawFundsAction, getTransactionLedgerAction } from "@/lib/stripe/actions";
+import { formatMoney } from "@/lib/currency";
 
 interface Transaction {
   id: string;
@@ -162,11 +163,7 @@ export default function WalletUI() {
   };
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2
-    }).format(val);
+    return formatMoney(val, { minimumFractionDigits: 2 });
   };
 
   const formatDate = (dateStr: string) => {

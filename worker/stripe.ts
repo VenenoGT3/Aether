@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { getCircuitBreaker } from "./circuit-breaker";
+import { getStripeCurrency } from "../lib/currency";
 
 // All live worker Stripe calls go through one breaker: 5 consecutive failures →
 // OPEN 30s. When OPEN, exec() throws — the payout batch treats that as a transient
@@ -48,7 +49,7 @@ export async function transferToCreator(
     getStripe().transfers.create(
       {
         amount: Math.round(amount * 100),
-        currency: "usd",
+        currency: getStripeCurrency(),
         destination: destinationAccountId,
         metadata,
       },

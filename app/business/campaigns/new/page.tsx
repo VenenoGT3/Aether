@@ -54,6 +54,7 @@ import { createCampaignAction } from "@/lib/supabase/campaigns";
 import { fundCampaignPoolAction } from "@/lib/stripe/actions";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/translations";
+import { formatMoney } from "@/lib/currency";
 
 const AVAILABLE_NICHES = [
   "Tech",
@@ -108,12 +109,7 @@ interface MatchCreator {
 }
 
 function money(value: number, digits = 0): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+  return formatMoney(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function compactNumber(value: number): string {

@@ -1,5 +1,6 @@
 import { stripeServer } from "./client";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
+import { getStripeCurrency } from "@/lib/currency";
 
 // All live Stripe API calls go through one breaker: 5 consecutive failures →
 // OPEN 30s. When OPEN, exec() throws a safe "temporarily unavailable" error
@@ -92,7 +93,7 @@ export async function createEscrowPaymentIntent(
     const paymentIntent = await stripeBreaker.exec(() =>
       stripeServer.paymentIntents.create({
         amount: Math.round(amount * 100),
-        currency: "usd",
+        currency: getStripeCurrency(),
         metadata,
       })
     );
@@ -128,7 +129,7 @@ export async function releaseEscrowPayment(
       stripeServer.transfers.create(
         {
           amount: Math.round(amount * 100),
-          currency: "usd",
+          currency: getStripeCurrency(),
           destination: influencerStripeAccountId,
           metadata,
         },

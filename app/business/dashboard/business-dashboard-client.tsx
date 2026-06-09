@@ -49,6 +49,7 @@ import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import { campaignCategoryLabel } from "@/lib/campaign-category";
 import { useTranslation } from "@/lib/translations";
 import type { DbCampaign } from "@/types/database";
+import { formatMoney } from "@/lib/currency";
 
 type DashboardCampaign = Omit<DbCampaign, "status"> & {
   status: string;
@@ -102,12 +103,7 @@ function numberValue(value: unknown): number {
 }
 
 function money(value: number, digits = 0): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+  return formatMoney(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function compactNumber(value: number): string {

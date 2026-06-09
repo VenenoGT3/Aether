@@ -40,6 +40,7 @@ import { campaignCategoryLabel } from "@/lib/campaign-category";
 import { cn } from "@/lib/utils";
 import { useTranslation, type Locale } from "@/lib/translations";
 import type { CampaignStatus, DbCampaign } from "@/types/database";
+import { formatMoney } from "@/lib/currency";
 
 type CampaignRow = Omit<DbCampaign, "status"> & {
   status: CampaignStatus | "exhausted" | string;
@@ -118,13 +119,10 @@ function localeCode(locale: Locale): string {
   return locale === "it" ? "it-IT" : "en-US";
 }
 
-function money(value: number, digits = 0, locale: Locale = "en"): string {
-  return new Intl.NumberFormat(localeCode(locale), {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+function money(value: number, digits = 0, _locale: Locale = "en"): string {
+  // Currency formatting is pinned per platform currency (see lib/currency) so
+  // server and client render identically regardless of UI locale.
+  return formatMoney(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function compactNumber(value: number, locale: Locale = "en"): string {

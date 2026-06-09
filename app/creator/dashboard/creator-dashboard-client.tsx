@@ -34,9 +34,10 @@ import { usePosts, useTransactions } from "@/lib/supabase/metrics";
 import { useTranslation } from "@/lib/translations";
 import type { CreatorDashboardInitialData } from "@/lib/supabase/dashboard-initial";
 import type { Profile } from "@/types";
+import { formatMoneyCompact } from "@/lib/currency";
 
 function currency(value: number) {
-  return `$${Math.round(value).toLocaleString()}`;
+  return formatMoneyCompact(value);
 }
 
 function compact(value: number) {

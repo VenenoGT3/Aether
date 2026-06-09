@@ -42,6 +42,7 @@ import { type TransactionRecord, useTransactions } from "@/lib/supabase/metrics"
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import { useTranslation } from "@/lib/translations";
 import type { DbCampaign } from "@/types/database";
+import { formatMoney } from "@/lib/currency";
 
 type TreasuryCampaign = Omit<DbCampaign, "status"> & {
   status: string;
@@ -117,12 +118,7 @@ function numberValue(value: unknown): number {
 }
 
 function money(value: number, digits = 0): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+  return formatMoney(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function compactNumber(value: number): string {

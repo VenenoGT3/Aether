@@ -58,6 +58,7 @@ import {
 } from "recharts";
 import confetti from "canvas-confetti";
 import { useCampaignMetrics, calculateROIProjection } from "@/lib/supabase/metrics";
+import { formatMoneyCompact } from "@/lib/currency";
 
 // Custom SVG icons for social platforms
 function InstagramIcon({ className, size = 16 }: { className?: string; size?: number }) {
@@ -2267,7 +2268,7 @@ export default function CampaignDetailPage() {
             <div className="space-y-4 pt-4 border-t border-border/10">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-muted-foreground font-semibold">{t("Contract Budget:")}</span>
-                <span className="font-extrabold text-foreground">${campaign.budget.toLocaleString()} USD</span>
+                <span className="font-extrabold text-foreground">{formatMoneyCompact(campaign.budget)}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-muted-foreground font-semibold">{t("Stripe Escrow Status:")}</span>

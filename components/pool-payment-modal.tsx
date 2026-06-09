@@ -13,6 +13,7 @@ import { BusinessActionButton } from "@/components/business/business-ui";
 import { getStripePromise } from "@/lib/stripe/browser";
 import { useTranslation } from "@/lib/translations";
 import { feeBreakdown } from "@/lib/campaign-budget";
+import { formatMoneyCompact } from "@/lib/currency";
 
 function PoolPaymentInner({
   amount,
@@ -70,18 +71,18 @@ function PoolPaymentInner({
         </div>
         <div className="mt-3 flex justify-between border-t border-white/10 pt-3 font-semibold text-[var(--business-muted)]">
           <span>{t("Platform fee (10%):")}</span>
-          <span>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(split.fee)}</span>
+          <span>{formatMoneyCompact(split.fee)}</span>
         </div>
         <div className="flex justify-between font-semibold text-[var(--business-muted)]">
           <span>{t("Creators can earn:")}</span>
           <span className="text-[var(--business-success)]">
-            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(split.creators)}
+            {formatMoneyCompact(split.creators)}
           </span>
         </div>
         <div className="mt-2 flex justify-between border-t border-white/10 pt-3 text-sm font-semibold">
           <span>{t("You pay:")}</span>
           <span className="text-[var(--business-text)]">
-            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount)}
+            {formatMoneyCompact(amount)}
           </span>
         </div>
       </div>
@@ -109,7 +110,7 @@ function PoolPaymentInner({
           icon={paying ? Loader2 : Lock}
           className={`w-1/2 ${paying ? "[&_svg]:animate-spin" : ""}`}
         >
-          {t("Fund pool")} · {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount)}
+          {t("Fund pool")} · {formatMoneyCompact(amount)}
         </BusinessActionButton>
       </div>
     </div>
