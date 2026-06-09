@@ -60,6 +60,19 @@ async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const res = NextResponse.next();
 
+  const isProtectedPath =
+    pathname.startsWith("/business") ||
+    pathname.startsWith("/creator") ||
+    pathname.startsWith("/campaigns") ||
+    pathname === "/dashboard";
+  const isAuthPath = pathname.startsWith("/auth");
+
+  // Public pages (landing, privacy, …) need no auth decision — skip the
+  // Supabase round-trips entirely instead of paying them on every page view.
+  if (!isProtectedPath && !isAuthPath) {
+    return res;
+  }
+
   let isLoggedIn = false;
   let userRole: "business" | "influencer" = "business";
   let isOnboarded = false;
@@ -84,30 +97,30 @@ async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
     } = await supabase.auth.getUser();
     isLoggedIn = !!user;
 
-    if (user) {
+    // Auth pages only need to know "logged in?" — the /dashboard redirect
+    // resolves role + onboarding on its own request.
+    if (user && isProtectedPath) {
       userRole =
         (user.app_metadata?.role as "business" | "influencer") || "influencer";
 
-      const { data: userRow } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
+      const [{ data: userRow }, { data: profile }] = await Promise.all([
+        supabase.from("users").select("role").eq("id", user.id).single(),
+        supabase
+          .from("profiles")
+          .select("onboarded")
+          .eq(PROFILE_PK_COLUMN, user.id)
+          .single(),
+      ]);
       if (userRow?.role) {
         userRole = userRow.role as "business" | "influencer";
       }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarded")
-        .eq(PROFILE_PK_COLUMN, user.id)
-        .single();
       isOnboarded = profile?.onboarded ?? false;
 
       res.cookies.set("aether-onboarded", isOnboarded ? "true" : "false", {
         path: "/",
         maxAge: 31536000,
         sameSite: "lax",
+        secure: request.nextUrl.protocol === "https:",
       });
     }
   } catch {
@@ -116,19 +129,12 @@ async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
 
   const userRolePath = userRole === "influencer" ? "creator" : "business";
 
-  const isProtectedPath =
-    pathname.startsWith("/business") ||
-    pathname.startsWith("/creator") ||
-    pathname.startsWith("/campaigns") ||
-    pathname === "/dashboard";
-
   if (!isLoggedIn && isProtectedPath) {
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  const isAuthPath = pathname.startsWith("/auth");
   if (isLoggedIn && isAuthPath) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
