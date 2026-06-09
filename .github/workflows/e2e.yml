@@ -1,0 +1,60 @@
+name: E2E
+
+# Browser smoke suite (Playwright) against a real `next dev` server.
+#
+# Needs real Supabase repository secrets to boot the app, so the job checks for
+# them first and skips gracefully when they are absent (forks, fresh clones).
+# Intentionally NOT a required status check — see ci.yml for the quality gate.
+on:
+  pull_request:
+    branches: [main, staging, development]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: e2e-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      CRON_SECRET: ${{ secrets.CRON_SECRET || 'e2e-placeholder-cron-secret' }}
+    steps:
+      - name: Check for required secrets
+        id: secrets
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_URL" ] && [ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Supabase secrets not configured — skipping E2E."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.configured == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.configured == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+        if: steps.secrets.outputs.configured == 'true'
+      - run: npx playwright install --with-deps chromium
+        if: steps.secrets.outputs.configured == 'true'
+      - run: npm run test:e2e
+        if: steps.secrets.outputs.configured == 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.secrets.outputs.configured == 'true'
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

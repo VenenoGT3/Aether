@@ -7,6 +7,8 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
     },
+    // Playwright owns tests/e2e — keep vitest from picking up its *.spec.ts.
+    exclude: ["**/node_modules/**", "tests/e2e/**"],
   },
   resolve: {
     alias: {

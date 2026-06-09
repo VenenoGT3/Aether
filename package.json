@@ -22,7 +22,8 @@
     "preflight": "tsx scripts/preflight.ts",
     "loadtest:health": "k6 run tests/load/load-test-health.js",
     "loadtest:discovery": "k6 run tests/load/load-test-discovery.js",
-    "loadtest:clips": "k6 run tests/load/load-test-clip-submit.js"
+    "loadtest:clips": "k6 run tests/load/load-test-clip-submit.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -52,6 +53,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
