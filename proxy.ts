@@ -123,9 +123,11 @@ async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
     pathname === "/dashboard";
 
   if (!isLoggedIn && isProtectedPath) {
-    const loginUrl = new URL("/auth/login", request.url);
-    loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+    // --- MOCK OVERRIDE FOR LOCAL VISUALIZATION ---
+    // Bypass login redirect
+    // const loginUrl = new URL("/auth/login", request.url);
+    // loginUrl.searchParams.set("redirectTo", pathname);
+    // return NextResponse.redirect(loginUrl);
   }
 
   const isAuthPath = pathname.startsWith("/auth");

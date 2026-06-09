@@ -28,6 +28,8 @@ import {
   type CreatorTone,
 } from "@/components/creator/creator-ui";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import confetti from "canvas-confetti";
 import { approvalCountdownLabel } from "@/lib/approval";
 import { isYoutubePostUrl } from "@/lib/social-post";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
@@ -137,6 +139,12 @@ export default function CreatorClipsPage() {
     const res = await submitClip(selectedCampaign, postUrl.trim());
     setSubmitting(false);
     if (res.ok) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ["#4d8eff", "#9f8dfa", "#22d3ee"],
+      });
       toast.success(t("Clip submitted!"), {
         description: t("It will start earning once the brand approves it."),
       });
@@ -152,6 +160,12 @@ export default function CreatorClipsPage() {
     const res = await withdraw();
     setWithdrawing(false);
     if (res.ok) {
+      confetti({
+        particleCount: 150,
+        spread: 90,
+        origin: { y: 0.6 },
+        colors: ["#34d399", "#22d3ee", "#4d8eff"],
+      });
       toast.success(t("Withdrawal requested."), {
         id: "creator-withdrawal",
         description:
@@ -191,7 +205,7 @@ export default function CreatorClipsPage() {
             </span>
             <div>
               <h2 className="text-sm font-semibold text-white">{t("You're a Trusted Creator")}</h2>
-              <p className="mt-1 text-xs leading-5 text-white/55">
+              <p className="mt-1 text-xs leading-5 text-white/70">
                 {t("Your clips are approved instantly and start tracking right away, without the review wait.")}
               </p>
             </div>
@@ -235,14 +249,14 @@ export default function CreatorClipsPage() {
           <CreatorGlassCard>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="creator-label text-white/35">{t("Creator clips")}</p>
+                <p className="creator-label text-white/60">{t("Creator clips")}</p>
                 <h2 className="mt-1 text-lg font-semibold text-white">{t("Your Clips")}</h2>
               </div>
               <CreatorStatusPill tone="neutral">{clips.length} clips</CreatorStatusPill>
             </div>
 
             {loading ? (
-              <div className="flex h-44 items-center justify-center text-white/45">
+              <div className="flex h-44 items-center justify-center text-white/60">
                 <Loader2 className="animate-spin" />
               </div>
             ) : clips.length === 0 ? (
@@ -270,7 +284,7 @@ export default function CreatorClipsPage() {
                             ) : (
                               <CreatorStatusPill tone={style.tone}>{t(style.label)}</CreatorStatusPill>
                             )}
-                            <span className="text-[10px] capitalize text-white/40">{clip.platform}</span>
+                            <span className="text-[10px] capitalize text-white/60">{clip.platform}</span>
                             {clip.status === "pending" && clip.quality_status !== "changes_requested" ? (
                               <span className="flex items-center gap-1 text-[9px] font-semibold text-[var(--creator-warning)]">
                                 <Clock size={9} />
@@ -304,20 +318,20 @@ export default function CreatorClipsPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-3 sm:w-44">
                           <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
-                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/60">
                               <Eye size={11} /> {t("Views")}
                             </span>
                             <p className="mt-1 text-sm font-bold text-white">{clip.current_views.toLocaleString()}</p>
                           </div>
                           <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
-                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/60">
                               <DollarSign size={11} /> {t("Earned")}
                             </span>
                             <p className="mt-1 text-sm font-bold text-[var(--creator-success)]">
                               {money(clip.estimated_earnings)}
                             </p>
                             {clip.creator_cpm != null ? (
-                              <span className="mt-0.5 block text-[9px] text-white/35">
+                              <span className="mt-0.5 block text-[9px] text-white/60">
                                 @ ${Number(clip.creator_cpm).toFixed(2)} {t("CPM")}
                               </span>
                             ) : null}
@@ -336,7 +350,7 @@ export default function CreatorClipsPage() {
           <CreatorGlassCard>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="creator-label text-white/35">{t("Submit work")}</p>
+                <p className="creator-label text-white/60">{t("Submit work")}</p>
                 <h2 className="mt-1 text-lg font-semibold text-white">{t("Submit a clip")}</h2>
               </div>
               <Plus size={20} className="text-[var(--creator-primary)]" />
@@ -344,32 +358,36 @@ export default function CreatorClipsPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="creator-label block text-white/40">{t("Campaign")}</label>
-                <select
-                  value={selectedCampaign}
-                  onChange={(event) => setSelectedCampaign(event.target.value)}
-                  className="creator-input w-full rounded-xl px-3 py-3 text-sm"
-                >
-                  {campaigns.length === 0 ? <option value="">{t("No open campaigns")}</option> : null}
-                  {campaigns.map((campaign) => (
-                    <option key={campaign.id} value={campaign.id} className="bg-slate-950">
-                      {campaign.title}
-                    </option>
-                  ))}
-                </select>
+                <label className="creator-label block text-white/60">{t("Campaign")}</label>
+                <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                  <SelectTrigger className="creator-input h-12 w-full rounded-xl px-4 py-3 text-sm">
+                    <SelectValue placeholder={t("Select a campaign")} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#0f172a] text-white border-white/10">
+                    {campaigns.length === 0 ? (
+                      <SelectItem value="empty" disabled>{t("No open campaigns")}</SelectItem>
+                    ) : (
+                      campaigns.map((campaign) => (
+                        <SelectItem key={campaign.id} value={campaign.id}>
+                          {campaign.title}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               {!isJoined ? (
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                    <p className="creator-label text-white/35">{t("Brand rate")}</p>
+                    <p className="creator-label text-white/60">{t("Brand rate")}</p>
                     <div className="mt-2 flex items-baseline gap-2">
                       <span className="text-2xl font-bold text-white">
                         ${Number(selectedOfferedCpm ?? 0).toFixed(2)}
                       </span>
-                      <span className="text-xs text-white/45">{t("CPM per 1,000 views")}</span>
+                      <span className="text-xs text-white/60">{t("CPM per 1,000 views")}</span>
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-white/45">
+                    <p className="mt-2 text-xs leading-5 text-white/60">
                       {selectedOfferedCpm
                         ? t("Earn ${per100k} per 100k views at the brand's rate.").replace(
                             "{per100k}",
@@ -386,7 +404,7 @@ export default function CreatorClipsPage() {
                     {joining ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                     {t("Join Campaign")}
                   </Button>
-                  <p className="text-xs leading-5 text-white/45">
+                  <p className="text-xs leading-5 text-white/60">
                     {t("Join this campaign to start submitting clips. It is instant and free.")}
                   </p>
                 </div>
@@ -394,7 +412,7 @@ export default function CreatorClipsPage() {
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <label className="creator-label block text-white/40">{t("Clip URL")}</label>
+                      <label className="creator-label block text-white/60">{t("Clip URL")}</label>
                       <span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--creator-success)]">
                         <CheckCircle2 size={10} /> {t("Joined")}
                       </span>
@@ -404,7 +422,7 @@ export default function CreatorClipsPage() {
                       placeholder="https://youtube.com/shorts/..."
                       value={postUrl}
                       onChange={(event) => setPostUrl(event.target.value)}
-                      className="creator-input w-full rounded-xl px-3 py-3 text-sm placeholder:text-white/30"
+                      className="creator-input w-full rounded-xl px-3 py-3 text-sm placeholder:text-white/60"
                     />
                   </div>
                   <Button
@@ -415,7 +433,7 @@ export default function CreatorClipsPage() {
                     {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                     {t("Submit clip")}
                   </Button>
-                  <p className="text-xs leading-5 text-white/45">
+                  <p className="text-xs leading-5 text-white/60">
                     {t("You can submit multiple clips. Each is reviewed, then tracked for verified views.")}
                   </p>
                 </div>
@@ -426,7 +444,7 @@ export default function CreatorClipsPage() {
           <CreatorGlassCard>
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <p className="creator-label text-white/35">{t("Available balance")}</p>
+                <p className="creator-label text-white/60">{t("Available balance")}</p>
                 <h2 className="mt-1 text-3xl font-bold text-[var(--creator-primary)]">
                   {money(breakdown.readyForPayout)}
                 </h2>
@@ -441,15 +459,15 @@ export default function CreatorClipsPage() {
               {withdrawing ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
               {t("Withdraw Funds")}
             </Button>
-            <p className="mt-3 text-xs leading-5 text-white/45">
+            <p className="mt-3 text-xs leading-5 text-white/60">
               {t("Only cleared earnings can be withdrawn. Holdback earnings become available automatically.")}
             </p>
           </CreatorGlassCard>
 
           <CreatorGlassCard>
-            <p className="creator-label mb-3 text-white/35">{t("Recent performance payouts")}</p>
+            <p className="creator-label mb-3 text-white/60">{t("Recent performance payouts")}</p>
             {payouts.length === 0 ? (
-              <p className="text-xs text-white/45">{t("No payouts yet.")}</p>
+              <p className="text-xs text-white/60">{t("No payouts yet.")}</p>
             ) : (
               <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5">
                 {payouts.slice(0, 6).map((payout) => (
@@ -466,7 +484,7 @@ export default function CreatorClipsPage() {
                             year: "numeric",
                           })}
                         </p>
-                        <p className="mt-0.5 text-[10px] text-white/35">{payout.status}</p>
+                        <p className="mt-0.5 text-[10px] text-white/60">{payout.status}</p>
                       </div>
                     </div>
                     <span className="text-xs font-bold text-[var(--creator-success)]">

@@ -45,6 +45,7 @@ import { supabase } from "@/lib/supabase/client";
 import { type ModerationClip, useBrandModeration } from "@/lib/supabase/clips";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/translations";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface PerfCampaign {
   id: string;
@@ -671,7 +672,12 @@ export default function BrandModerationPage() {
                 </div>
 
                 {selectedYouTubeId ? (
-                  <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+                  <div className={cn(
+                    "overflow-hidden rounded-2xl border border-white/10 bg-black",
+                    (selectedClip.platform === "tiktok" || selectedClip.platform === "instagram" || selectedClip.post_url?.includes("shorts/") || selectedClip.campaignCategory === "ugc" || selectedClip.campaignCategory === "clipping")
+                      ? "aspect-[9/16] mx-auto w-full max-w-[360px]"
+                      : "aspect-video w-full"
+                  )}>
                     <iframe
                       src={`https://www.youtube.com/embed/${selectedYouTubeId}`}
                       title={t("Clip preview")}
@@ -775,19 +781,22 @@ export default function BrandModerationPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <label className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
                       {t("Quality score")}
-                      <select
-                        value={scores[selectedClip.id] ?? ""}
-                        onChange={(event) =>
-                          setScores((current) => ({ ...current, [selectedClip.id]: Number(event.target.value) }))
+                      <Select
+                        value={scores[selectedClip.id] ? String(scores[selectedClip.id]) : ""}
+                        onValueChange={(val) =>
+                          setScores((current) => ({ ...current, [selectedClip.id]: Number(val) }))
                         }
-                        aria-label={t("Quality score")}
-                        className="business-input h-9 rounded-xl px-3 text-xs"
                       >
-                        <option value="">{t("—")}</option>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => (
-                          <option key={score} value={score}>{score}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="business-input h-9 rounded-xl px-3 text-xs border-0">
+                          <SelectValue placeholder={t("—")} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[var(--business-surface)] text-[var(--business-text)] border-white/10 min-w-0">
+                          <SelectItem value="empty" disabled>{t("—")}</SelectItem>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => (
+                            <SelectItem key={score} value={String(score)}>{score}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </label>
                     <BusinessStatusPill tone="neutral">
                       {platformLabel(selectedClip.platform)}

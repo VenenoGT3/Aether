@@ -292,7 +292,7 @@ export default function InfluencerDashboard() {
           <CreatorGlassCard>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="creator-label text-white/40">{t("Recent activity")}</p>
+                <p className="creator-label text-white/60">{t("Recent activity")}</p>
                 <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">
                   {t("Latest creator movement")}
                 </h2>
@@ -301,7 +301,7 @@ export default function InfluencerDashboard() {
             </div>
             <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5">
               {activity.length === 0 ? (
-                <div className="p-6 text-sm text-white/45">
+                <div className="p-6 text-sm text-white/60">
                   {t("No creator activity yet. Join a campaign or submit a clip to start building your feed.")}
                 </div>
               ) : (
@@ -315,9 +315,9 @@ export default function InfluencerDashboard() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
                           <h3 className="truncate text-sm font-semibold text-white">{item.title}</h3>
-                          <span className="shrink-0 text-[10px] font-semibold text-white/35">{item.meta}</span>
+                          <span className="shrink-0 text-[10px] font-semibold text-white/60">{item.meta}</span>
                         </div>
-                        <p className="mt-1 truncate text-xs text-white/55">{item.subtitle}</p>
+                        <p className="mt-1 truncate text-xs text-white/70">{item.subtitle}</p>
                         <CreatorStatusPill tone={item.tone} className="mt-2">
                           {String(item.badge).replaceAll("_", " ")}
                         </CreatorStatusPill>
@@ -332,12 +332,12 @@ export default function InfluencerDashboard() {
 
         <div className="space-y-4">
           <CreatorGlassCard>
-            <p className="creator-label text-white/40">{t("Performance pulse")}</p>
+            <p className="creator-label text-white/60">{t("Performance pulse")}</p>
             <div className="mt-4 grid gap-3">
               <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-white/45">{t("Live tracked views")}</p>
+                    <p className="text-xs text-white/60">{t("Live tracked views")}</p>
                     <p className="mt-1 text-3xl font-bold tracking-tight text-white">
                       {compact(totalLiveViews)}
                     </p>
@@ -347,13 +347,13 @@ export default function InfluencerDashboard() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
                     {t("Engagement")}
                   </p>
                   <p className="mt-2 text-xl font-semibold text-white">{engagementRate.toFixed(1)}%</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
                     {t("Holdback")}
                   </p>
                   <p className="mt-2 text-xl font-semibold text-white">{currency(breakdown.inHoldback)}</p>
@@ -365,12 +365,12 @@ export default function InfluencerDashboard() {
           <CreatorGlassCard>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="creator-label text-white/40">{t("Payout status")}</p>
+                <p className="creator-label text-white/60">{t("Payout status")}</p>
                 <h2 className="mt-1 text-lg font-semibold text-white">{currency(breakdown.readyForPayout)}</h2>
               </div>
               <Wallet size={22} className="text-[var(--creator-success)]" />
             </div>
-            <div className="mt-4 space-y-2 text-xs text-white/55">
+            <div className="mt-4 space-y-2 text-xs text-white/70">
               <div className="flex items-center justify-between">
                 <span>{t("In holdback")}</span>
                 <span className="font-semibold text-white">{currency(breakdown.inHoldback)}</span>

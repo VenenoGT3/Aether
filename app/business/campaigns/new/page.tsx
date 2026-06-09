@@ -352,8 +352,9 @@ export default function NewCampaignWizard() {
       title,
     ]
   );
-  const readinessCount = readinessItems.filter((item) => item.ready).length;
-  const readinessPct = Math.round((readinessCount / readinessItems.length) * 100);
+  const readinessCount = step - 1;
+  const readinessTotal = wizardSteps.length - 1;
+  const readinessPct = Math.round((readinessCount / readinessTotal) * 100);
 
   useEffect(() => {
     if (niches.length === 0) {
@@ -1408,7 +1409,7 @@ export default function NewCampaignWizard() {
           <BusinessMetricCard
             label={t("Launch readiness")}
             value={`${readinessPct}%`}
-            detail={`${readinessCount}/${readinessItems.length} ${t("sections complete")}`}
+            detail={`${readinessCount}/${readinessTotal} ${t("sections complete")}`}
             icon={Gauge}
             tone={readinessPct === 100 ? "success" : "accent"}
           />
