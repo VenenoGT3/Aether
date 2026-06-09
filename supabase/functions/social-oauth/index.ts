@@ -10,7 +10,7 @@
  *   GET /functions/v1/social-oauth/callback?code=...&state=...
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { decryptToken, encryptToken } from "../_shared/token-crypto.ts";
+import { decryptToken } from "../_shared/token-crypto.ts";
 
 type Provider = "youtube_official";
 type Platform = "youtube";
@@ -33,6 +33,10 @@ const youtubeClientId = Deno.env.get("YOUTUBE_OAUTH_CLIENT_ID");
 const youtubeClientSecret = Deno.env.get("YOUTUBE_OAUTH_CLIENT_SECRET");
 const configuredFunctionUrl = Deno.env.get("SOCIAL_OAUTH_FUNCTION_URL");
 const configuredAllowedOrigins = Deno.env.get("SOCIAL_OAUTH_ALLOWED_ORIGINS");
+// OPTIONAL. YouTube links store no tokens (revoked at link time), so no key is
+// needed for the current beta. Only used to decrypt legacy enc:v1 rows during
+// disconnect, and required again if a provider that must keep tokens (TikTok
+// Display API polling) is enabled.
 const tokenEncryptionKey = Deno.env.get("SOCIAL_TOKEN_ENCRYPTION_KEY")?.trim();
 // Anyone can deploy to *.vercel.app, so trusting the whole suffix is opt-in
 // for QA environments only — never enable this on the production project.
@@ -187,13 +191,6 @@ async function start(req: Request): Promise<Response> {
     return json(req, { error: "YouTube OAuth is not configured." }, 503);
   }
 
-  // Fail closed: never start a flow whose tokens we could only store as
-  // plaintext. Set SOCIAL_TOKEN_ENCRYPTION_KEY (32 bytes, base64) to enable.
-  if (!tokenEncryptionKey) {
-    console.error("social oauth: SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
-    return json(req, { error: "Account linking is not configured." }, 503);
-  }
-
   const origin = req.headers.get("origin") ?? "";
   if (!originAllowed(origin)) {
     return json(req, { error: "This origin is not allowed to start account linking." }, 403);
@@ -223,11 +220,13 @@ async function start(req: Request): Promise<Response> {
   });
   if (error) return json(req, { error: "Could not start account linking." }, 500);
 
+  // Online-only access on purpose: the grant exists solely to prove channel
+  // ownership in the callback and is revoked there immediately. Without
+  // access_type=offline Google never even issues a refresh token.
   const params = new URLSearchParams({
     client_id: youtubeClientId!,
     response_type: "code",
-    access_type: "offline",
-    prompt: "consent",
+    prompt: "select_account",
     scope: YOUTUBE_READONLY_SCOPE,
     redirect_uri: redirectUri,
     state,
@@ -287,16 +286,30 @@ async function exchangeYouTube(code: string, redirectUri: string) {
 }
 
 /** Best-effort: tell Google to invalidate the grant. Revoking either token of a pair kills both. */
-async function revokeGoogleToken(storedToken: string | null): Promise<boolean> {
-  if (!storedToken) return false;
+async function revokeGoogleTokenValue(token: string): Promise<boolean> {
   try {
-    const token = await decryptToken(storedToken, tokenEncryptionKey);
     const res = await fetch("https://oauth2.googleapis.com/revoke", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token }),
     });
     return res.ok;
+  } catch (err) {
+    console.error("social oauth revoke:", err);
+    return false;
+  }
+}
+
+/**
+ * Revoke a token as stored in the DB. New links store no tokens at all, so
+ * this only fires for legacy rows written before revoke-at-link — those may
+ * be plaintext or enc:v1 (decryptable only if the optional key is present).
+ */
+async function revokeStoredGoogleToken(storedToken: string | null): Promise<boolean> {
+  if (!storedToken) return false;
+  try {
+    const token = await decryptToken(storedToken, tokenEncryptionKey);
+    return await revokeGoogleTokenValue(token);
   } catch (err) {
     console.error("social oauth revoke:", err);
     return false;
@@ -323,7 +336,7 @@ async function disconnect(req: Request): Promise<Response> {
 
   // Upstream revocation is best-effort: the local disconnect must succeed even
   // when Google is unreachable, otherwise creators can never unlink.
-  const upstreamRevoked = await revokeGoogleToken(
+  const upstreamRevoked = await revokeStoredGoogleToken(
     account.refresh_token ?? account.access_token
   );
 
@@ -400,9 +413,6 @@ async function callback(req: Request): Promise<Response> {
 
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   try {
-    if (!tokenEncryptionKey) {
-      throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
-    }
     const linked = await exchangeYouTube(code, redirectUri);
 
     const { data: existingAccount } = await supabase
@@ -416,6 +426,13 @@ async function callback(req: Request): Promise<Response> {
       throw new Error("This YouTube channel is already linked to another Aether account.");
     }
 
+    // The grant existed only to prove channel ownership (channels?mine=true
+    // above). Ownership is proven — revoke it now and store NO tokens: view
+    // tracking uses the public Data API with the server key, so a secret we
+    // never store can never leak. (Best-effort: an unrevoked online-only
+    // token simply expires within the hour.)
+    await revokeGoogleTokenValue(linked.accessToken);
+
     const { error } = await supabase.from("creator_social_accounts").upsert(
       {
         user_id: oauthState.user_id,
@@ -425,13 +442,11 @@ async function callback(req: Request): Promise<Response> {
         handle: linked.handle,
         display_name: linked.displayName,
         profile_url: linked.profileUrl,
-        access_token: await encryptToken(linked.accessToken, tokenEncryptionKey),
-        refresh_token: linked.refreshToken
-          ? await encryptToken(linked.refreshToken, tokenEncryptionKey)
-          : null,
+        access_token: null,
+        refresh_token: null,
         scopes: linked.scopes,
-        token_expires_at: linked.tokenExpiresAt,
-        refresh_expires_at: linked.refreshExpiresAt,
+        token_expires_at: null,
+        refresh_expires_at: null,
         status: "active",
         last_verified_at: new Date().toISOString(),
         token_metadata: linked.metadata,
