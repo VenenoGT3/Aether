@@ -33,6 +33,9 @@ These ship with the merge — the code assumes them:
      constrains succeeded escrow releases (one per participation).
    - `20260609230000_drop_stored_youtube_tokens.sql` — nulls legacy stored
      YouTube OAuth tokens (the flow no longer stores any).
+   - `20260610090000_per_clip_payout_bounds.sql` — per-clip payout cap +
+     qualification floor columns, record_clip_earning v3, and the funded
+     campaign money-terms lock extended to the new columns.
 2. **Edge function** — `supabase functions deploy social-oauth --no-verify-jwt`.
    Brings: revoke-at-link (no tokens stored), the `/disconnect` endpoint
    (upstream Google revocation), preview-origin gating, CORS fix.
@@ -48,6 +51,7 @@ These ship with the merge — the code assumes them:
 | `ALERT_WEBHOOK_URL` | Optional, recommended. Slack-compatible webhook on the **worker host**; worker `[ALERT]` lines (stuck payouts, provider outages) get POSTed there. |
 | `BETA_PLATFORMS` | Optional. Defaults to `youtube`; only set when expanding the beta. |
 | `ENABLE_TEST_LOGIN` | No change needed. Note: test login is now **hard-blocked when `VERCEL_ENV=production`** regardless of this flag. |
+| `NEXT_PUBLIC_PLATFORM_CURRENCY` | **Decision required.** The platform now defaults to **EUR** (EU-first). The current Stripe test account settles USD — set `NEXT_PUBLIC_PLATFORM_CURRENCY=usd` on Vercel (all scopes) AND the worker host until EUR settlement is enabled on Stripe, otherwise transfers/PaymentIntents will fail with a currency mismatch. |
 | E2E CI secrets | Optional. The `e2e` workflow self-skips unless `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` (and ideally `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET`) exist as GitHub repo secrets. |
 
 ## 4. Behavior changes to be aware of (no action, just context)
@@ -73,6 +77,10 @@ These ship with the merge — the code assumes them:
 - `supabase/schema.sql` snapshot not yet generated — run
   `./scripts/dump-schema.sh` once on a machine with an authenticated Supabase
   CLI and commit it.
+- Campaign builder UI inputs for the new per-clip cap/floor fields are a
+  follow-up; the create API accepts and enforces them already.
+- `docs/legal/program-terms-draft.md` is an engineering draft — requires
+  legal counsel review before publication (checklist at the bottom).
 
 ## 6. After merging
 
