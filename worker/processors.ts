@@ -53,10 +53,14 @@ export async function fetchTrackingClipIds(
   client?: SupabaseClient
 ): Promise<string[]> {
   const supabase = client ?? getServiceClient();
+  // Legacy 'approved' clips only qualify once quality review has passed —
+  // runViewSyncForClip skips the rest WITHOUT touching last_synced_at, so a
+  // broader filter would let them squat the head of every batch (their null
+  // last_synced_at sorts first) and starve genuine tracking clips.
   const { data, error } = await supabase
     .from("clips")
     .select("id")
-    .in("status", ["tracking", "approved"])
+    .or("status.eq.tracking,and(status.eq.approved,quality_status.eq.approved)")
     .order("last_synced_at", { ascending: true, nullsFirst: true })
     .limit(limit);
 
