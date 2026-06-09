@@ -318,7 +318,7 @@ export async function releaseEscrowAction(participationId: string) {
       throw new ExternalServiceError("The payout transfer could not be completed. Please try again.");
     }
 
-    await admin.from("transactions").insert({
+    const { error: ledgerErr } = await admin.from("transactions").insert({
       participation_id: participationId,
       user_id: user!.user_id,
       amount,
@@ -326,6 +326,15 @@ export async function releaseEscrowAction(participationId: string) {
       status: "succeeded",
       stripe_payment_intent_id: transferId,
     });
+    if (ledgerErr) {
+      // 23505 = the partial unique index caught a concurrent release. The
+      // transfer is idempotent (stable key), so the money moved exactly once —
+      // the other writer owns the ledger row and the completion updates below.
+      if (ledgerErr.code === "23505") {
+        throw new ConflictError("Escrow has already been released for this participation.");
+      }
+      throw ledgerErr;
+    }
 
     await admin
       .from("participations")
