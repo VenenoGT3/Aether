@@ -359,7 +359,7 @@ export default function CreatorClipsPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="creator-label block text-white/60">{t("Campaign")}</label>
-                <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                <Select value={selectedCampaign} onValueChange={(value) => setSelectedCampaign(value ?? "")}>
                   <SelectTrigger className="creator-input h-12 w-full rounded-xl px-4 py-3 text-sm">
                     <SelectValue placeholder={t("Select a campaign")} />
                   </SelectTrigger>

@@ -193,14 +193,13 @@ export async function getClientProfile(): Promise<Profile | null> {
         : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
       onboarded: true,
       bio: 'Mock profile for local visualization.',
-      follower_count: 50000,
+      followers: 50000,
       engagement_rate: 4.5,
-      niches: ['Fashion', 'Lifestyle'],
-      social_handles: { instagram: '@alexmercer' },
+      niche: 'Fashion',
+      social_links: { instagram: '@alexmercer' },
       portfolio: [],
       stripe_connect_id: 'acct_mock123',
-      stripe_onboarding_completed: true,
-      stripe_onboarding_url: null
+      stripe_onboarding_completed: true
     };
   }
   // ---------------------------------------------
