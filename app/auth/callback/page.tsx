@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase, syncAuthUxCookies } from "@/lib/supabase/client";
+import { safeNextPath } from "@/lib/supabase/auth-redirect";
 import { useTranslation } from "@/lib/translations";
 import type { UserRole } from "@/types";
 
@@ -17,11 +18,6 @@ const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   "email_change",
   "email",
 ]);
-
-function safeNextPath(value: string | null): string {
-  if (!value?.startsWith("/") || value.startsWith("//")) return "/dashboard";
-  return value;
-}
 
 function emailOtpType(value: string | null): EmailOtpType {
   if (value && EMAIL_OTP_TYPES.has(value as EmailOtpType)) {

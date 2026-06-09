@@ -1,7 +1,12 @@
 const PUBLIC_APP_ORIGIN = "https://aether-blue-alpha.vercel.app";
 
-function safeNextPath(nextPath?: string): string {
-  if (!nextPath?.startsWith("/") || nextPath.startsWith("//")) return "/dashboard";
+/**
+ * Restrict a post-auth redirect target to an in-app path. Browsers normalize
+ * "\" to "/" during navigation, so "/\evil.com" becomes the protocol-relative
+ * "//evil.com" — both separators must be rejected after the leading slash.
+ */
+export function safeNextPath(nextPath?: string | null): string {
+  if (!nextPath || !/^\/(?![/\\])/.test(nextPath)) return "/dashboard";
   return nextPath;
 }
 

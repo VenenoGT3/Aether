@@ -26,6 +26,7 @@ import {
 import { useTranslation } from "@/lib/translations";
 import { motion } from "framer-motion";
 import { apiGet, apiPost } from "@/lib/api/client";
+import { safeNextPath as safeRedirectPath } from "@/lib/supabase/auth-redirect";
 
 type TestLoginRole = "business" | "influencer";
 
@@ -53,13 +54,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
         reject(error);
       });
   });
-}
-
-function safeRedirectPath(path: string | null | undefined): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) {
-    return "/dashboard";
-  }
-  return path;
 }
 
 function LoginForm() {

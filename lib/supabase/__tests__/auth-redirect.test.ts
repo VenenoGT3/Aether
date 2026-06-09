@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appOrigin, authCallbackUrl } from "@/lib/supabase/auth-redirect";
+import { appOrigin, authCallbackUrl, safeNextPath } from "@/lib/supabase/auth-redirect";
 
 describe("Supabase auth redirect URLs", () => {
   const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -40,5 +40,29 @@ describe("Supabase auth redirect URLs", () => {
     expect(authCallbackUrl("//evil.example", "https://preview.example")).toBe(
       "https://aether-blue-alpha.vercel.app/auth/callback?next=%2Fdashboard"
     );
+  });
+});
+
+describe("safeNextPath", () => {
+  it("keeps ordinary in-app paths", () => {
+    expect(safeNextPath("/creator/dashboard")).toBe("/creator/dashboard");
+    expect(safeNextPath("/business/campaigns?tab=open")).toBe("/business/campaigns?tab=open");
+  });
+
+  it("rejects protocol-relative escapes", () => {
+    expect(safeNextPath("//evil.example")).toBe("/dashboard");
+  });
+
+  it("rejects backslash escapes that browsers normalize to //", () => {
+    expect(safeNextPath("/\\evil.example")).toBe("/dashboard");
+    expect(safeNextPath("\\/evil.example")).toBe("/dashboard");
+    expect(safeNextPath("\\\\evil.example")).toBe("/dashboard");
+  });
+
+  it("rejects absolute URLs, empty and missing values", () => {
+    expect(safeNextPath("https://evil.example")).toBe("/dashboard");
+    expect(safeNextPath("")).toBe("/dashboard");
+    expect(safeNextPath(null)).toBe("/dashboard");
+    expect(safeNextPath(undefined)).toBe("/dashboard");
   });
 });
