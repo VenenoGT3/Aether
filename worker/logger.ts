@@ -44,9 +44,34 @@ export const log = {
   },
   /** Critical condition that should page/notify someone. Tagged [ALERT]. */
   alert(event: string, ctx?: LogContext): void {
-    console.error(format("alert", event, ctx));
+    const line = format("alert", event, ctx);
+    console.error(line);
+    notifyAlertWebhook(line);
   },
 };
+
+/**
+ * Push [ALERT] lines to ALERT_WEBHOOK_URL (Slack-compatible `{ text }` JSON)
+ * so conditions like payout.transfer.unknown page someone instead of waiting
+ * in stdout for a log review. Fire-and-forget: alerting must never block or
+ * crash the pipeline it is reporting on.
+ */
+function notifyAlertWebhook(line: string): void {
+  const url = process.env.ALERT_WEBHOOK_URL?.trim();
+  if (!url) return;
+  try {
+    void fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: line }),
+      signal: AbortSignal.timeout(5_000),
+    }).catch((err) => {
+      console.error(format("error", "alert.webhook_failed", { error: errMessage(err) }));
+    });
+  } catch (err) {
+    console.error(format("error", "alert.webhook_failed", { error: errMessage(err) }));
+  }
+}
 
 /** Normalize an unknown thrown value into a message string. */
 export function errMessage(err: unknown): string {
