@@ -85,6 +85,7 @@ function LoginForm() {
     const confirmed = searchParams.get("confirmed");
     const confirmationExpired = searchParams.get("confirmationExpired");
     const authError = searchParams.get("authError");
+    const passwordReset = searchParams.get("passwordReset");
 
     if (confirmed) {
       toast.success(t("Email confirmed."), {
@@ -105,6 +106,14 @@ function LoginForm() {
     if (authError) {
       toast.error(t("Authentication link failed."), {
         description: authError,
+      });
+      authNoticeHandled.current = true;
+      return;
+    }
+
+    if (passwordReset) {
+      toast.success(t("Password updated."), {
+        description: t("Sign in again with your new password."),
       });
       authNoticeHandled.current = true;
     }
@@ -382,9 +391,12 @@ function LoginForm() {
                     {t("Password")}
                   </label>
                   <Link
-                    href="#"
+                    href={
+                      email.trim()
+                        ? `/auth/forgot-password?email=${encodeURIComponent(email.trim())}`
+                        : "/auth/forgot-password"
+                    }
                     className="text-xs font-semibold text-[#adc6ff] hover:text-white"
-                    onClick={() => toast.info(t("Password reset is coming soon."), { description: t("Please contact support to reset your password.") })}
                   >
                     {t("Forgot password?")}
                   </Link>

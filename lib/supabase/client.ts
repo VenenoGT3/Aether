@@ -147,6 +147,16 @@ export async function resendSignupConfirmation(email: string, nextPath = "/dashb
   });
 }
 
+export async function requestPasswordResetClient(email: string) {
+  return signupRedirectClient.auth.resetPasswordForEmail(email, {
+    redirectTo: authCallbackUrl("/auth/reset-password"),
+  });
+}
+
+export async function updatePasswordClient(password: string) {
+  return supabase.auth.updateUser({ password });
+}
+
 export async function signInClient(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
