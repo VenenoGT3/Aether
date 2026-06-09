@@ -86,9 +86,13 @@ export async function handleStripeWebhookEvent(
       };
 
       if (account.details_submitted) {
+        // Stripe Connect completion marks ONLY the payment rail as ready.
+        // App onboarding stays separate: it collects the EU-required seller
+        // data (DAC7 reporting fields, disclosure acknowledgement) and must
+        // never be short-circuited by a Stripe webhook.
         const { error: profileError } = await supabase
           .from("profiles")
-          .update({ stripe_onboarding_completed: true, onboarded: true })
+          .update({ stripe_onboarding_completed: true })
           .eq("stripe_connect_id", account.id);
 
         if (profileError) {
