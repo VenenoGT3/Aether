@@ -155,6 +155,8 @@ export const CampaignSchema = z.object({
   budget_paid: z.number().nonnegative().default(0).optional(),
   max_payout_per_creator: z.number().nonnegative().nullable().optional(),
   min_payout_threshold: z.number().nonnegative().default(10).optional(),
+  max_payout_per_clip: z.number().nonnegative().nullable().optional(),
+  min_payout_per_clip: z.number().nonnegative().nullable().optional(),
   platforms: z.array(z.string()).default([]).optional(),
   view_holdback_hours: z.number().int().nonnegative().default(48).optional(),
   funding_payment_intent_id: z.string().nullable().optional(),

@@ -25,7 +25,15 @@ const CampaignCreateSchema = z.object({
   cpm_rate: z.number().finite().nonnegative().max(100_000).nullable().optional(),
   budget_pool: z.number().finite().nonnegative().max(10_000_000).nullable().optional(),
   min_payout_threshold: z.number().finite().nonnegative().max(1_000_000).optional(),
-});
+  max_payout_per_clip: z.number().finite().positive().max(1_000_000).nullable().optional(),
+  min_payout_per_clip: z.number().finite().positive().max(1_000_000).nullable().optional(),
+}).refine(
+  (data) =>
+    data.max_payout_per_clip == null ||
+    data.min_payout_per_clip == null ||
+    data.min_payout_per_clip <= data.max_payout_per_clip,
+  { message: "Per-clip minimum payout cannot exceed the per-clip maximum." }
+);
 
 /** Fields read off the campaign-creation payload (extra keys are passed through). */
 interface CampaignInput {
@@ -42,6 +50,10 @@ interface CampaignInput {
   cpm_rate?: number | null;
   max_payout_per_creator?: number | null;
   min_payout_threshold?: number | null;
+  /** Per-clip ceiling (CR-style per-video max payout). */
+  max_payout_per_clip?: number | null;
+  /** Per-clip qualification floor (clip pays retroactively once reached). */
+  min_payout_per_clip?: number | null;
   view_holdback_hours?: number;
   platforms?: string[];
   target_niches?: string[];
@@ -201,6 +213,12 @@ export async function createCampaignAction(campaignData: CampaignInput) {
         min_payout_threshold: isPerformance
           ? campaignData.min_payout_threshold ?? 10
           : 10,
+        max_payout_per_clip: isPerformance
+          ? campaignData.max_payout_per_clip ?? null
+          : null,
+        min_payout_per_clip: isPerformance
+          ? campaignData.min_payout_per_clip ?? null
+          : null,
         platforms: campaignData.platforms || [],
         view_holdback_hours: campaignData.view_holdback_hours ?? 48,
         content_rules: campaignData.content_rules || {},
