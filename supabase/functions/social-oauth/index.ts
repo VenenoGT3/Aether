@@ -10,6 +10,7 @@
  *   GET /functions/v1/social-oauth/callback?code=...&state=...
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/token-crypto.ts";
 
 type Provider = "youtube_official";
 type Platform = "youtube";
@@ -32,6 +33,11 @@ const youtubeClientId = Deno.env.get("YOUTUBE_OAUTH_CLIENT_ID");
 const youtubeClientSecret = Deno.env.get("YOUTUBE_OAUTH_CLIENT_SECRET");
 const configuredFunctionUrl = Deno.env.get("SOCIAL_OAUTH_FUNCTION_URL");
 const configuredAllowedOrigins = Deno.env.get("SOCIAL_OAUTH_ALLOWED_ORIGINS");
+const tokenEncryptionKey = Deno.env.get("SOCIAL_TOKEN_ENCRYPTION_KEY")?.trim();
+// Anyone can deploy to *.vercel.app, so trusting the whole suffix is opt-in
+// for QA environments only — never enable this on the production project.
+const allowPreviewOrigins =
+  (Deno.env.get("SOCIAL_OAUTH_ALLOW_PREVIEW_ORIGINS") ?? "").trim().toLowerCase() === "true";
 const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
 function allowedOrigins(): Set<string> {
@@ -58,18 +64,20 @@ function originAllowed(origin: string): boolean {
     const parsed = new URL(origin);
     const allowed = allowedOrigins();
     if (allowed.has(parsed.origin)) return true;
-    // Preview deploys still need OAuth during QA. Restrict this fallback to
-    // Vercel HTTPS origins rather than accepting arbitrary domains.
+    if (!allowPreviewOrigins) return false;
     return parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app");
   } catch {
     return false;
   }
 }
 
-function cors(req: Request) {
+function cors(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") ?? "";
+  // Disallowed origins get no ACAO header at all: the literal "null" value
+  // would match sandboxed-iframe origins.
+  if (!originAllowed(origin)) return { Vary: "Origin" };
   return {
-    "Access-Control-Allow-Origin": originAllowed(origin) ? origin : "null",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
     "Vary": "Origin",
   };
@@ -177,6 +185,13 @@ async function start(req: Request): Promise<Response> {
 
   if (provider === "youtube_official" && (!youtubeClientId || !youtubeClientSecret)) {
     return json(req, { error: "YouTube OAuth is not configured." }, 503);
+  }
+
+  // Fail closed: never start a flow whose tokens we could only store as
+  // plaintext. Set SOCIAL_TOKEN_ENCRYPTION_KEY (32 bytes, base64) to enable.
+  if (!tokenEncryptionKey) {
+    console.error("social oauth: SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+    return json(req, { error: "Account linking is not configured." }, 503);
   }
 
   const origin = req.headers.get("origin") ?? "";
@@ -327,6 +342,9 @@ async function callback(req: Request): Promise<Response> {
 
   const redirectUri = `${functionBaseUrl(req)}/callback`;
   try {
+    if (!tokenEncryptionKey) {
+      throw new Error("SOCIAL_TOKEN_ENCRYPTION_KEY is not configured.");
+    }
     const linked = await exchangeYouTube(code, redirectUri);
 
     const { data: existingAccount } = await supabase
@@ -349,8 +367,10 @@ async function callback(req: Request): Promise<Response> {
         handle: linked.handle,
         display_name: linked.displayName,
         profile_url: linked.profileUrl,
-        access_token: linked.accessToken,
-        refresh_token: linked.refreshToken,
+        access_token: await encryptToken(linked.accessToken, tokenEncryptionKey),
+        refresh_token: linked.refreshToken
+          ? await encryptToken(linked.refreshToken, tokenEncryptionKey)
+          : null,
         scopes: linked.scopes,
         token_expires_at: linked.tokenExpiresAt,
         refresh_expires_at: linked.refreshExpiresAt,

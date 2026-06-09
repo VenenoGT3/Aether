@@ -64,6 +64,15 @@ export function isTiktokConfigured(): boolean {
   return !!getTiktokClientKey() && !!getTiktokClientSecret();
 }
 
+/**
+ * AES key for creator OAuth tokens at rest (32 bytes, base64). Must match the
+ * SOCIAL_TOKEN_ENCRYPTION_KEY secret on the social-oauth edge function, which
+ * writes the tokens this worker reads.
+ */
+export function getSocialTokenEncryptionKey(): string | undefined {
+  return process.env.SOCIAL_TOKEN_ENCRYPTION_KEY?.trim() || undefined;
+}
+
 export function getConfiguredViewProviderNames(): ViewProviderName[] {
   const providers: ViewProviderName[] = [];
   if (isYoutubeConfigured()) providers.push("youtube_official");

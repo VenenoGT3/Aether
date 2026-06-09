@@ -100,6 +100,8 @@ Do **not** point production Stripe webhooks at `/api/webhooks/stripe` on Vercel 
 | `TIKTOK_CLIENT_SECRET` | TikTok Login Kit client secret |
 | `YOUTUBE_OAUTH_CLIENT_ID` | Google OAuth client id for YouTube ownership verification |
 | `YOUTUBE_OAUTH_CLIENT_SECRET` | Google OAuth client secret |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | **Required.** AES key for OAuth tokens at rest (32 bytes, base64; `openssl rand -base64 32`). Must match the worker's copy. The function refuses to start link flows without it. |
+| `SOCIAL_OAUTH_ALLOW_PREVIEW_ORIGINS` | Optional, QA only. `true` trusts any `https://*.vercel.app` origin for OAuth start/redirect. Anyone can deploy to that suffix — leave unset in production. |
 | `SOCIAL_OAUTH_FUNCTION_URL` | Optional explicit callback base, e.g. `https://<project-ref>.supabase.co/functions/v1/social-oauth` |
 
 Supabase injects automatically:
@@ -130,6 +132,7 @@ The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) r
 | `REDIS_URL` | BullMQ queues + scheduler |
 | `YOUTUBE_DATA_API_KEY` | Official YouTube Data API v3 video statistics |
 | `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | TikTok Login Kit credentials for token refresh and Display API polling |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | Decrypts creator OAuth tokens written by the `social-oauth` edge function (same value as the function secret). Without it, encrypted tokens are treated as unavailable and direct polling degrades to last-known views. |
 | `AYRSHARE_API_KEY` | Optional fallback/aggregator for live view tracking |
 
 At least one trusted view provider must be configured or the worker hard-fails.

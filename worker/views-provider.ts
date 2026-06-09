@@ -1,6 +1,7 @@
 import {
   getAyrshareApiKey,
   getConfiguredViewProviderNames,
+  getSocialTokenEncryptionKey,
   getTiktokClientKey,
   getTiktokClientSecret,
   getViewProviderMinIntervalMs,
@@ -10,6 +11,10 @@ import {
   isTrustedViewSourceConfigured,
   isYoutubeConfigured,
 } from "./env";
+import {
+  decryptToken,
+  encryptToken,
+} from "../supabase/functions/_shared/token-crypto";
 import { log, errMessage } from "./logger";
 import { recordProviderError } from "./metrics";
 import { fetchWithRetry } from "./fetch-utils";
@@ -513,18 +518,39 @@ async function loadTikTokAccountForClip(
   return (data as SocialAccountRow | null) ?? null;
 }
 
+/** Stored tokens may be enc:v1 (AES-GCM) or legacy plaintext. Decrypt failures degrade to "token unavailable" — never to a garbage token. */
+async function readStoredToken(
+  value: string | null,
+  accountId: string,
+  kind: "access" | "refresh"
+): Promise<string | null> {
+  if (!value) return null;
+  try {
+    return await decryptToken(value, getSocialTokenEncryptionKey());
+  } catch (err) {
+    log.warn("views.token.decrypt_error", {
+      accountId,
+      kind,
+      error: errMessage(err),
+    });
+    return null;
+  }
+}
+
 async function getFreshTikTokAccessToken(
   account: SocialAccountRow
 ): Promise<string | null> {
+  const storedAccessToken = await readStoredToken(account.access_token, account.id, "access");
   if (
-    account.access_token &&
+    storedAccessToken &&
     (!account.token_expires_at ||
       new Date(account.token_expires_at).getTime() > Date.now() + 5 * 60_000)
   ) {
-    return account.access_token;
+    return storedAccessToken;
   }
 
-  if (!account.refresh_token) return null;
+  const refreshToken = await readStoredToken(account.refresh_token, account.id, "refresh");
+  if (!refreshToken) return null;
   const clientKey = getTiktokClientKey();
   const clientSecret = getTiktokClientSecret();
   if (!clientKey || !clientSecret) return null;
@@ -533,7 +559,7 @@ async function getFreshTikTokAccessToken(
     client_key: clientKey,
     client_secret: clientSecret,
     grant_type: "refresh_token",
-    refresh_token: account.refresh_token,
+    refresh_token: refreshToken,
   });
 
   const res = await rateLimited("tiktok_official", () =>
@@ -590,11 +616,24 @@ async function getFreshTikTokAccessToken(
       ? new Date(now + json.refresh_expires_in * 1000).toISOString()
       : null;
 
+  // Persist new tokens encrypted when the key is configured. A rotated refresh
+  // token is encrypted fresh; absent rotation, the stored value is kept as-is
+  // (it is already in its at-rest form — re-encrypting would double-wrap it).
+  const encryptionKey = getSocialTokenEncryptionKey();
+  const persistedAccessToken = encryptionKey
+    ? await encryptToken(json.access_token, encryptionKey)
+    : json.access_token;
+  const persistedRefreshToken = json.refresh_token
+    ? encryptionKey
+      ? await encryptToken(json.refresh_token, encryptionKey)
+      : json.refresh_token
+    : account.refresh_token;
+
   const { error } = await getServiceClient()
     .from("creator_social_accounts")
     .update({
-      access_token: json.access_token,
-      refresh_token: json.refresh_token ?? account.refresh_token,
+      access_token: persistedAccessToken,
+      refresh_token: persistedRefreshToken,
       scopes: json.scope ? json.scope.split(",").map((s) => s.trim()) : account.scopes ?? [],
       token_expires_at: tokenExpiresAt,
       refresh_expires_at: refreshExpiresAt,
