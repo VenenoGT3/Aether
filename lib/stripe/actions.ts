@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { getServerUser, createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { centsEqual, centsGte, fromCents, sumMoney, toCents } from "@/lib/money";
 import {
   createStripeExpressAccount,
   createEscrowPaymentIntent,
@@ -117,7 +118,7 @@ export async function fundEscrowAction(
     if (!Number.isFinite(requiredAmount) || requiredAmount <= 0) {
       throw new ConflictError("This participation does not have a valid payout amount.");
     }
-    if (Math.abs(amount - requiredAmount) > 0.01) {
+    if (!centsEqual(amount, requiredAmount)) {
       throw new ConflictError("Escrow amount must match the agreed participation payout.");
     }
     amount = requiredAmount;
@@ -296,8 +297,8 @@ export async function releaseEscrowAction(participationId: string) {
       .eq("type", "escrow")
       .eq("status", "succeeded");
     if (escrowQueryErr) throw escrowQueryErr;
-    const funded = (escrows ?? []).reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0);
-    if (funded + 0.01 < amount) {
+    const funded = sumMoney((escrows ?? []).map((tx) => Number(tx.amount ?? 0)));
+    if (!centsGte(funded, amount)) {
       throw new ConflictError("Escrow must be fully funded before release.");
     }
 
@@ -593,11 +594,13 @@ export async function getTransactionLedgerAction() {
 
     if (error) throw error;
 
-    let availableBalance = 0;
-    let pendingBalance = 0;
+    // Accumulate in integer cents so a long ledger can't drift the balance.
+    let availableCents = 0;
+    let pendingCents = 0;
 
     transactions?.forEach((tx) => {
-      const amt = Number(tx.amount);
+      const amt = toCents(Number(tx.amount));
+      if (!Number.isFinite(amt)) return;
       if (tx.status !== "succeeded") return;
 
       // LEGACY (fixed-fee) wallet. Performance-clipping payouts are written by
@@ -609,9 +612,9 @@ export async function getTransactionLedgerAction() {
 
       if (user.role === "influencer") {
         if (tx.type === "release" || tx.type === "bonus") {
-          availableBalance += amt;
+          availableCents += amt;
         } else if (tx.type === "payout") {
-          availableBalance -= amt;
+          availableCents -= amt;
         } else if (tx.type === "escrow") {
           const hasRelease = transactions.some(
             (t) =>
@@ -620,7 +623,7 @@ export async function getTransactionLedgerAction() {
               t.status === "succeeded"
           );
           if (!hasRelease) {
-            pendingBalance += amt;
+            pendingCents += amt;
           }
         }
       } else {
@@ -632,10 +635,10 @@ export async function getTransactionLedgerAction() {
               t.status === "succeeded"
           );
           if (!hasRelease) {
-            pendingBalance += amt;
+            pendingCents += amt;
           }
         } else if (tx.type === "release") {
-          availableBalance += amt;
+          availableCents += amt;
         }
       }
     });
@@ -643,8 +646,8 @@ export async function getTransactionLedgerAction() {
     return {
       success: true,
       transactions,
-      availableBalance,
-      pendingBalance,
+      availableBalance: fromCents(availableCents),
+      pendingBalance: fromCents(pendingCents),
     };
   } catch (error) {
     // Capture full detail internally; return a safe message. (Keep this action's
