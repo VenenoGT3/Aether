@@ -30,7 +30,8 @@ const signupRedirectClient = createClient(getSupabaseUrl(), getSupabaseAnonKey()
 
 /** A one-year, lax cookie used by middleware/server for coarse role + onboarding UX. */
 function setUxCookie(name: string, value: string): void {
-  document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax`;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${value}; path=/; max-age=31536000; SameSite=Lax${secure}`;
 }
 
 function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

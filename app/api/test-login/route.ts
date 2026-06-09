@@ -114,21 +114,15 @@ export async function POST(request: Request): Promise<Response> {
   const onboarded = profile?.onboarded ?? false;
 
   const cookieStore = await getCookies();
-  cookieStore.set("aether-role", role, {
+  const uxCookieOptions = {
     path: "/",
     maxAge: 31536000,
     sameSite: "lax",
-  });
-  cookieStore.set("aether-session", "session-active", {
-    path: "/",
-    maxAge: 31536000,
-    sameSite: "lax",
-  });
-  cookieStore.set("aether-onboarded", onboarded ? "true" : "false", {
-    path: "/",
-    maxAge: 31536000,
-    sameSite: "lax",
-  });
+    secure: process.env.NODE_ENV === "production",
+  } as const;
+  cookieStore.set("aether-role", role, uxCookieOptions);
+  cookieStore.set("aether-session", "session-active", uxCookieOptions);
+  cookieStore.set("aether-onboarded", onboarded ? "true" : "false", uxCookieOptions);
 
   endRequest(log, { statusCode: 200, startTime });
   return jsonSuccess({
