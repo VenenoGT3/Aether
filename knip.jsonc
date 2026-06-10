@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Entry points knip can't infer (worker scripts + instrumentation are
+  // auto-detected from package.json / Next.js convention).
+  "entry": [
+    "supabase/functions/**/index.ts" // Deno edge functions (deployed, not imported)
+  ],
+  "ignore": [
+    "public/sw.js", // registered at runtime via navigator.serviceWorker.register
+    "tests/load/**", // k6 load tests, executed by the k6 binary (no TS import)
+
+    // --- BACKEND-READY FEATURES AWAITING FRONTEND WIRING ---------------------
+    // Live backend / env flag, but no page mounts or calls them yet. Kept (not
+    // deleted) so the work-to-do stays visible — see
+    // docs/pending-frontend-wiring.md. Remove an entry once you connect it.
+    "components/weekly-challenge-widget.tsx", // challenges feature (FEATURE_ENABLE_CHALLENGES + claim_weekly_challenge RPC)
+    "lib/actions/challenges.ts", // server actions behind the challenge widget
+    "components/refer-friend-card.tsx", // referral rewards UI (FEATURE_ENABLE_REFERRALS + referrals table)
+    "components/ui/status-badge.tsx", // only consumed by refer-friend-card today
+    "lib/resend.ts", // transactional email (RESEND_API_KEY) — no trigger calls it yet
+    "lib/use-feature-flags.ts" // client-side flag hook — no component reads flags client-side yet
+  ],
+  "ignoreBinaries": ["k6"],
+  "ignoreExportsUsedInFile": true
+}

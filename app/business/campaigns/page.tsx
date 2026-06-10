@@ -119,7 +119,7 @@ function localeCode(locale: Locale): string {
   return locale === "it" ? "it-IT" : "en-US";
 }
 
-function money(value: number, digits = 0, _locale: Locale = "en"): string {
+function money(value: number, digits = 0): string {
   // Currency formatting is pinned per platform currency (see lib/currency) so
   // server and client render identically regardless of UI locale.
   return formatMoney(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -371,14 +371,14 @@ function CampaignCard({
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Budget pool")}
           </p>
-          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0, locale)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Reward rate")}
           </p>
           <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
-            {isPerformance && rate > 0 ? `${money(rate, 2, locale)} RPM` : t("Fixed")}
+            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : t("Fixed")}
           </p>
         </div>
       </div>
@@ -388,12 +388,12 @@ function CampaignCard({
           <BusinessProgressBar
             value={used}
             max={pool || 100}
-            label={`${money(remaining, 0, locale)} ${t("remaining")}`}
+            label={`${money(remaining, 0)} ${t("remaining")}`}
             tone={campaign.status === "exhausted" ? "danger" : used / Math.max(pool, 1) >= 0.9 ? "warning" : "accent"}
           />
           {funded > pool ? (
             <p className="text-[10px] text-[var(--business-muted)]">
-              {money(funded, 0, locale)} {t("funded")} · {t("creators earn from")} {money(pool, 0, locale)}
+              {money(funded, 0)} {t("funded")} · {t("creators earn from")} {money(pool, 0)}
             </p>
           ) : null}
         </div>
@@ -507,7 +507,7 @@ function CampaignRowItem({
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Budget pool")}
           </p>
-          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0, locale)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0)}</p>
           {isPerformance ? <BusinessProgressBar value={used} max={pool || 100} className="mt-2" /> : null}
         </div>
 
@@ -519,7 +519,7 @@ function CampaignRowItem({
             {compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}
           </p>
           <p className="text-[10px] text-[var(--business-muted)]">
-            {isPerformance && rate > 0 ? `${money(rate, 2, locale)} RPM` : `${integerNumber(clipSummary.total, locale)} ${t("clips")}`}
+            {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : `${integerNumber(clipSummary.total, locale)} ${t("clips")}`}
           </p>
         </div>
 
@@ -760,8 +760,8 @@ export default function CampaignsPage() {
         />
         <BusinessMetricCard
           label={t("Remaining pool")}
-          value={money(hubStats.remainingPool, 0, locale)}
-          detail={hubStats.totalEarned > 0 ? `${money(hubStats.totalEarned, 0, locale)} ${t("earned")}` : t("available budget")}
+          value={money(hubStats.remainingPool, 0)}
+          detail={hubStats.totalEarned > 0 ? `${money(hubStats.totalEarned, 0)} ${t("earned")}` : t("available budget")}
           icon={CircleDollarSign}
           tone="success"
         />
