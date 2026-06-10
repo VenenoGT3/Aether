@@ -23,8 +23,12 @@ lib/*
 types
 hooks
 
-# Supabase migrations / edge functions (applied separately)
+# Supabase migrations / edge functions (applied separately). Keep the shared
+# token crypto helper because the worker decrypts creator OAuth tokens.
 supabase
+!supabase/functions/
+!supabase/functions/_shared/
+!supabase/functions/_shared/token-crypto.ts
 
 # Load tests, one-off scripts, deploy/systemd assets, Vercel link state
 tests

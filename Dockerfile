@@ -43,6 +43,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY worker ./worker
 COPY lib/beta.ts lib/currency.ts lib/social-post.ts ./lib/
+COPY supabase/functions/_shared/token-crypto.ts ./supabase/functions/_shared/token-crypto.ts
 
 USER aether
 
