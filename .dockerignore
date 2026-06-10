@@ -17,6 +17,8 @@ app
 components
 public
 lib/*
+!lib/beta.ts
+!lib/currency.ts
 !lib/social-post.ts
 types
 hooks
