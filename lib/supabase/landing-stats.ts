@@ -1,5 +1,6 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient as createAnonClient } from "@supabase/supabase-js";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
 export type LandingStats = {
   openCampaigns: number | null;
@@ -39,7 +40,14 @@ function settledCount(result: PromiseSettledResult<{ count: number | null; error
  */
 export async function getLandingStats(): Promise<LandingStats> {
   try {
-    const supabase = await createClient();
+    // Deliberately cookie-free: these are public anon/RLS aggregates. The
+    // cookie-bound server client would force the landing page dynamic (one
+    // batch of DB queries per anonymous visit) AND silently froze the stats
+    // at build time when the page prerendered. A plain anon client keeps the
+    // page ISR-cacheable — see `revalidate` in app/page.tsx.
+    const supabase = createAnonClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const [
       openCampaigns,

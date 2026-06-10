@@ -8,6 +8,11 @@ export const metadata: Metadata = {
     "Launch creator campaigns with funded performance pools, verified view tracking, fraud checks, and Stripe-backed creator payouts.",
 };
 
+// ISR: regenerate at most every 5 minutes. The landing page is the highest
+// traffic anonymous route — its DB-backed stats must never cost one query
+// batch per visit, and must still refresh (they were frozen at build before).
+export const revalidate = 300;
+
 export default async function Home() {
   const stats = await getLandingStats();
   return <AetherLandingPage stats={stats} />;
