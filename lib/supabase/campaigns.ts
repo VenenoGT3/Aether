@@ -79,7 +79,8 @@ export async function getCampaignsAction() {
       .from("campaigns")
       .select("*")
       .eq("business_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     if (error) throw error;
     return { success: true, campaigns: data };

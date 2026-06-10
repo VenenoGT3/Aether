@@ -155,7 +155,8 @@ async function loadDashboardClips(campaignIds: string[]): Promise<BrandClipLite[
     .from("clips")
     .select("id, campaign_id, status, current_views, counted_views, creator_id, platform, created_at, updated_at")
     .in("campaign_id", campaignIds)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error) throw error;
   return ((data ?? []) as BrandClipLite[]);
@@ -237,24 +238,34 @@ export function BusinessDashboardClient({
       loadData();
     }
 
-    const unsubscribeCampaigns = subscribeToCampaignChanges(() => {
-      loadData();
-    });
+    // The realtime channels below are table-wide (Supabase postgres_changes
+    // cannot filter "clips belonging to my campaigns" server-side), so every
+    // change anywhere on the platform reaches every open dashboard. Without
+    // coalescing, each event triggers a full multi-query reload — at fleet
+    // scale that is a self-inflicted stampede. Collapse all triggers into at
+    // most one reload per window.
+    let reloadTimer: number | null = null;
+    const scheduleReload = () => {
+      if (reloadTimer !== null) return;
+      reloadTimer = window.setTimeout(() => {
+        reloadTimer = null;
+        loadData();
+      }, 10_000);
+    };
+
+    const unsubscribeCampaigns = subscribeToCampaignChanges(scheduleReload);
 
     const clipsChannel = supabase
       .channel("business-dashboard-clips")
-      .on("postgres_changes", { event: "*", schema: "public", table: "clips" }, () => {
-        loadData();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "clips" }, scheduleReload)
       .subscribe();
 
     const participationsChannel = supabase
       .channel("business-dashboard-participations")
-      .on("postgres_changes", { event: "*", schema: "public", table: "participations" }, () => {
-        loadData();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "participations" }, scheduleReload)
       .subscribe();
 
+    // App-local events are the user's own actions — refresh immediately.
     const handleExternalRefresh = () => {
       loadData();
       refreshTransactions();
@@ -266,6 +277,7 @@ export function BusinessDashboardClient({
     window.addEventListener("role-change", handleExternalRefresh);
 
     return () => {
+      if (reloadTimer !== null) window.clearTimeout(reloadTimer);
       unsubscribeCampaigns();
       supabase.removeChannel(clipsChannel);
       supabase.removeChannel(participationsChannel);
