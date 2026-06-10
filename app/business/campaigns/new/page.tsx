@@ -578,6 +578,58 @@ export default function NewCampaignWizard() {
     }
   };
 
+  const handlePerformancePaymentSucceeded = async () => {
+    const funding = poolFunding;
+    if (!funding) return;
+
+    try {
+      const response = await fetch(`/api/campaigns/${funding.campaignId}/reconcile-funding`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        activated?: boolean;
+        alreadyActive?: boolean;
+        paymentStatus?: string;
+        error?: string;
+      };
+
+      setPoolFunding(null);
+
+      if (!response.ok || !result.success) {
+        toast.error(t("Payment received, but activation failed"), {
+          description: result.error || t("Open the campaign workspace and sync funding again."),
+        });
+        router.push(`/campaigns/${funding.campaignId}`);
+        return;
+      }
+
+      if (result.activated || result.alreadyActive) {
+        celebrate();
+        toast.success(t("Campaign funded and live"), {
+          description: t("Your performance campaign is now open for creators."),
+        });
+        router.push(`/campaigns/${funding.campaignId}`);
+        return;
+      }
+
+      toast.warning(t("Payment is still processing"), {
+        description: result.paymentStatus
+          ? `${t("Stripe status:")} ${result.paymentStatus}`
+          : t("The campaign will go live once Stripe confirms the payment."),
+      });
+      router.push(`/campaigns/${funding.campaignId}`);
+    } catch (err) {
+      setPoolFunding(null);
+      toast.error(t("Payment received, but activation failed"), {
+        description: err instanceof Error ? err.message : t("Open the campaign workspace and sync funding again."),
+      });
+      router.push(`/campaigns/${funding.campaignId}`);
+    }
+  };
+
   const handleConfirmPayment = async () => {
     setPaying(true);
     try {
@@ -1726,14 +1778,7 @@ export default function NewCampaignWizard() {
         clientSecret={poolFunding?.clientSecret ?? null}
         amount={poolFunding?.amount ?? budgetTotal}
         campaignTitle={poolFunding?.title ?? title}
-        onSucceeded={() => {
-          setPoolFunding(null);
-          celebrate();
-          toast.success(t("Payment received!"), {
-            description: t("Your campaign is being activated and will go live shortly."),
-          });
-          router.push("/business/dashboard");
-        }}
+        onSucceeded={handlePerformancePaymentSucceeded}
         onClose={() => setPoolFunding(null)}
       />
     </div>

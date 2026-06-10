@@ -516,7 +516,7 @@ export function BusinessDashboardClient({
         date: new Date(campaign.updated_at || campaign.created_at).getTime(),
         tone: campaign.status === "draft" ? "neutral" : "info",
         icon: Megaphone,
-        href: campaign.status === "draft" ? "/business/campaigns/new" : `/campaigns/${campaign.id}`,
+        href: `/campaigns/${campaign.id}`,
       });
     }
 
@@ -907,7 +907,7 @@ export function BusinessDashboardClient({
                   return (
                     <Link
                       key={campaign.id}
-                      href={campaign.status === "draft" ? "/business/campaigns/new" : `/campaigns/${campaign.id}`}
+                      href={`/campaigns/${campaign.id}`}
                       className="block rounded-xl py-4 transition-colors hover:bg-white/[0.05]"
                     >
                       <div className="flex items-start justify-between gap-3">

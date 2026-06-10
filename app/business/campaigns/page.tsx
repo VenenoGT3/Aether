@@ -189,7 +189,7 @@ function isPerformanceCampaign(campaign: CampaignRow): boolean {
 }
 
 function detailHref(campaign: CampaignRow): string {
-  return campaign.status === "draft" ? "/business/campaigns/new" : `/campaigns/${campaign.id}`;
+  return `/campaigns/${campaign.id}`;
 }
 
 function createClipSummary(): ClipSummary {
@@ -302,12 +302,14 @@ function CampaignCard({
   participationSummary,
   actionLoadingId,
   onStatusUpdate,
+  onReconcileFunding,
 }: {
   campaign: CampaignRow;
   clipSummary: ClipSummary;
   participationSummary: ParticipationSummary;
   actionLoadingId: string | null;
   onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
+  onReconcileFunding: (campaign: CampaignRow) => void;
 }) {
   const { t, locale } = useTranslation();
   const isPerformance = isPerformanceCampaign(campaign);
@@ -320,6 +322,7 @@ function CampaignCard({
   const isFunded = !!campaign.funded_at;
   const actionId = `${campaign.id}-${campaign.status}`;
   const loading = actionLoadingId === actionId;
+  const fundingLoading = actionLoadingId === `funding-${campaign.id}`;
 
   return (
     <BusinessGlassCard
@@ -420,8 +423,15 @@ function CampaignCard({
         </p>
         {campaign.status === "draft" ? (
           isPerformance && !isFunded ? (
-            <BusinessActionButton href="/business/campaigns/new" size="sm" variant="secondary">
-              {t("Finish funding")}
+            <BusinessActionButton
+              size="sm"
+              variant="secondary"
+              onClick={() => onReconcileFunding(campaign)}
+              disabled={fundingLoading}
+              icon={fundingLoading ? Loader2 : CircleDollarSign}
+              className={fundingLoading ? "[&_svg]:animate-spin" : undefined}
+            >
+              {t("Sync funding")}
             </BusinessActionButton>
           ) : (
             <BusinessActionButton
@@ -466,20 +476,24 @@ function CampaignRowItem({
   participationSummary,
   actionLoadingId,
   onStatusUpdate,
+  onReconcileFunding,
 }: {
   campaign: CampaignRow;
   clipSummary: ClipSummary;
   participationSummary: ParticipationSummary;
   actionLoadingId: string | null;
   onStatusUpdate: (campaign: CampaignRow, status: CampaignStatus) => void;
+  onReconcileFunding: (campaign: CampaignRow) => void;
 }) {
   const { t, locale } = useTranslation();
   const isPerformance = isPerformanceCampaign(campaign);
   const pool = campaignPool(campaign);
   const used = campaignUsed(campaign);
   const rate = rewardRate(campaign);
+  const isFunded = !!campaign.funded_at;
   const actionId = `${campaign.id}-${campaign.status}`;
   const loading = actionLoadingId === actionId;
+  const fundingLoading = actionLoadingId === `funding-${campaign.id}`;
 
   return (
     <BusinessGlassCard variant="elevated" className="p-4 transition-colors hover:bg-white/[0.08]">
@@ -524,7 +538,18 @@ function CampaignRowItem({
         </div>
 
         <div className="flex gap-2 lg:justify-end">
-          {clipSummary.pending > 0 ? (
+          {campaign.status === "draft" && isPerformance && !isFunded ? (
+            <BusinessActionButton
+              size="sm"
+              variant="secondary"
+              onClick={() => onReconcileFunding(campaign)}
+              disabled={fundingLoading}
+              icon={fundingLoading ? Loader2 : CircleDollarSign}
+              className={fundingLoading ? "[&_svg]:animate-spin" : undefined}
+            >
+              {t("Sync")}
+            </BusinessActionButton>
+          ) : clipSummary.pending > 0 ? (
             <BusinessActionButton href="/business/moderation" size="sm" variant="secondary" icon={ClipboardCheck}>
               {t("Review submissions")}
             </BusinessActionButton>
@@ -715,6 +740,52 @@ export default function CampaignsPage() {
     } catch (error) {
       toast.error(t("An unexpected error occurred"), {
         description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleReconcileFunding = async (campaign: CampaignRow) => {
+    const actionId = `funding-${campaign.id}`;
+    setActionLoadingId(actionId);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/reconcile-funding`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        activated?: boolean;
+        alreadyActive?: boolean;
+        paymentStatus?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !result.success) {
+        toast.error(t("Funding sync failed"), {
+          description: result.error || t("Please try again."),
+        });
+        return;
+      }
+
+      if (result.activated || result.alreadyActive) {
+        toast.success(t("Campaign funding synced"), {
+          description: t("Your campaign is live."),
+        });
+      } else {
+        toast.warning(t("Funding still pending"), {
+          description: result.paymentStatus
+            ? `${t("Stripe status:")} ${result.paymentStatus}`
+            : t("Stripe has not confirmed this payment yet."),
+        });
+      }
+
+      await loadCampaigns();
+    } catch (error) {
+      toast.error(t("Funding sync failed"), {
+        description: error instanceof Error ? error.message : t("Please try again."),
       });
     } finally {
       setActionLoadingId(null);
@@ -919,6 +990,7 @@ export default function CampaignsPage() {
                 participationSummary={getParticipationSummary(campaign.id)}
                 actionLoadingId={actionLoadingId}
                 onStatusUpdate={handleUpdateStatus}
+                onReconcileFunding={handleReconcileFunding}
               />
             </motion.div>
           ))}
@@ -936,6 +1008,7 @@ export default function CampaignsPage() {
                 participationSummary={getParticipationSummary(campaign.id)}
                 actionLoadingId={actionLoadingId}
                 onStatusUpdate={handleUpdateStatus}
+                onReconcileFunding={handleReconcileFunding}
               />
             </motion.div>
           ))}
