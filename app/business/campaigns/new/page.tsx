@@ -54,7 +54,7 @@ import { createCampaignAction } from "@/lib/supabase/campaigns";
 import { fundCampaignPoolAction } from "@/lib/stripe/actions";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/translations";
-import { formatMoney } from "@/lib/currency";
+import { currencySymbol, formatMoney } from "@/lib/currency";
 
 const AVAILABLE_NICHES = [
   "Tech",
@@ -267,6 +267,8 @@ export default function NewCampaignWizard() {
   const [cpmRate, setCpmRate] = useState(2.5);
   const [minPayoutThreshold, setMinPayoutThreshold] = useState(10);
   const [maxPayoutPerCreator, setMaxPayoutPerCreator] = useState(0);
+  const [maxPayoutPerClip, setMaxPayoutPerClip] = useState(0);
+  const [minPayoutPerClip, setMinPayoutPerClip] = useState(0);
   const [platforms, setPlatforms] = useState<string[]>(["youtube"]);
   const [viewHoldbackHours, setViewHoldbackHours] = useState(48);
   const [contentRules, setContentRules] = useState("");
@@ -535,6 +537,8 @@ export default function NewCampaignWizard() {
         budget_pool: budgetTotal,
         min_payout_threshold: minPayoutThreshold,
         max_payout_per_creator: maxPayoutPerCreator > 0 ? maxPayoutPerCreator : null,
+        max_payout_per_clip: maxPayoutPerClip > 0 ? maxPayoutPerClip : null,
+        min_payout_per_clip: minPayoutPerClip > 0 ? minPayoutPerClip : null,
         platforms: ["youtube"],
         view_holdback_hours: viewHoldbackHours,
         content_rules: contentRules.trim() ? { notes: contentRules.trim() } : {},
@@ -963,6 +967,44 @@ export default function NewCampaignWizard() {
                     </div>
                     <p className="text-xs text-[var(--business-muted)]">
                       {maxCapViews > 0 ? `${compactNumber(maxCapViews)} ${t("paid views per creator")}` : t("Uncapped")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel hint={t("A single clip stops earning at this amount. Set 0 for no per-clip cap.")}>
+                      {t("Per-clip payout cap")}
+                    </FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">{currencySymbol()}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={maxPayoutPerClip}
+                        onChange={(event) => setMaxPayoutPerClip(Number(event.target.value))}
+                        aria-label={t("Per-clip payout cap")}
+                        className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-[var(--business-muted)]">
+                      {maxPayoutPerClip > 0 ? `${money(maxPayoutPerClip)} ${t("max per clip")}` : t("Uncapped")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel hint={t("A clip earns nothing until it reaches this amount, then pays retroactively in full. Set 0 to disable.")}>
+                      {t("Per-clip qualification floor")}
+                    </FieldLabel>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--business-muted)]">{currencySymbol()}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={minPayoutPerClip}
+                        onChange={(event) => setMinPayoutPerClip(Number(event.target.value))}
+                        aria-label={t("Per-clip qualification floor")}
+                        className="business-input h-12 w-full rounded-xl pl-8 pr-4 text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-[var(--business-muted)]">
+                      {minPayoutPerClip > 0 ? `${money(minPayoutPerClip)} ${t("to qualify")}` : t("No floor")}
                     </p>
                   </div>
                   <div className="space-y-2">

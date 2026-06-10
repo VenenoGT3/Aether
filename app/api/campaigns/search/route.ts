@@ -52,7 +52,7 @@ async function handleSearch(request: Request): Promise<Response> {
     let query = supabase
       .from("campaigns")
       .select(
-        "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, campaign_category, brand_cpm_rate, cpm_rate, budget_pool, platforms",
+        "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, campaign_category, brand_cpm_rate, cpm_rate, budget_pool, available_pool, budget_reserved, budget_paid, platforms",
         { count: "exact" }
       )
       .eq("status", "open")

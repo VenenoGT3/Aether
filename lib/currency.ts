@@ -41,6 +41,18 @@ export function formatMoney(
   }).format(value);
 }
 
+/** The bare currency symbol for input prefixes: "€" / "$". */
+export function currencySymbol(): string {
+  const currency = getPlatformCurrency();
+  const part = new Intl.NumberFormat(CURRENCY_LOCALES[currency], {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  })
+    .formatToParts(0)
+    .find((p) => p.type === "currency");
+  return part?.value ?? (currency === "eur" ? "€" : "$");
+}
+
 /** Compact money for dashboards (no decimals): €1,234 / $1,234. */
 export function formatMoneyCompact(value: number): string {
   return formatMoney(value, { maximumFractionDigits: 0 });

@@ -51,6 +51,10 @@ interface PerfCampaign {
   cpm_rate?: number | null;
   platforms?: string[] | null;
   category_meta?: Record<string, unknown> | null;
+  budget_pool?: number | null;
+  available_pool?: number | null;
+  budget_reserved?: number | null;
+  budget_paid?: number | null;
 }
 
 type FlowCopy = {
@@ -200,6 +204,33 @@ function verifiedAgoLabel(iso: string | null | undefined, t: (s: string) => stri
   return `${t("Views verified")} ${Math.floor(hours / 24)} d ${t("ago")}`;
 }
 
+function PoolProgress({ campaign }: { campaign: PerfCampaign }) {
+  const { t } = useTranslation();
+  const pool = Number(campaign.available_pool ?? campaign.budget_pool ?? 0);
+  if (!Number.isFinite(pool) || pool <= 0) return null;
+  const used = Number(campaign.budget_reserved ?? 0) + Number(campaign.budget_paid ?? 0);
+  const usedPct = Math.min(Math.max(used / pool, 0), 1);
+  const remaining = Math.max(pool - used, 0);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="creator-label text-white/35">{t("Pool remaining")}</p>
+        <p className="text-sm font-bold text-white">{formatMoneyCompact(remaining)}</p>
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-[var(--creator-primary)]"
+          style={{ width: `${Math.round(usedPct * 100)}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-[10px] text-white/45">
+        {Math.round(usedPct * 100)}% {t("of pool used")}
+      </p>
+    </div>
+  );
+}
+
 function CampaignBriefPanel({
   campaign,
   copy,
@@ -237,6 +268,7 @@ function CampaignBriefPanel({
           </div>
         </div>
         <div className="space-y-3 text-xs leading-5 text-white/60">
+          <PoolProgress campaign={campaign} />
           {sourceUrl ? (
             <a
               href={sourceUrl}
@@ -286,6 +318,7 @@ function CampaignBriefPanel({
         </div>
       </div>
       <div className="space-y-3 text-xs leading-5 text-white/60">
+        <PoolProgress campaign={campaign} />
         {creativeDirection ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
             <p className="creator-label mb-2 text-white/35">{t("Creative direction")}</p>
@@ -340,11 +373,15 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase
       .from("campaigns")
-      .select("id, title, cpm_rate, platforms, category_meta")
+      .select(
+        "id, title, cpm_rate, platforms, category_meta, budget_pool, available_pool, budget_reserved, budget_paid"
+      )
       .eq("campaign_type", "performance")
       .eq("campaign_category", category)
       .in("status", ["open", "in_progress"])
-      .contains("platforms", ["youtube"]);
+      .contains("platforms", ["youtube"])
+      .order("created_at", { ascending: false })
+      .limit(100);
     const list = ((data ?? []) as PerfCampaign[]).filter((campaign) =>
       (campaign.platforms ?? []).includes("youtube")
     );
@@ -476,7 +513,7 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
           label={t("Gross earnings")}
           value={money(grossEarnings)}
           icon={TrendingUp}
-          detail={t(copy.metricDetail)}
+          detail={t("All performance campaigns")}
           tone="cyan"
         />
         <CreatorMetricCard

@@ -1679,7 +1679,19 @@ export const dictionary: Record<string, string> = {
   "ago": "fa",
   "Awaiting first verification": "In attesa della prima verifica",
   "Views your video earned before submission are recorded as a non-billable baseline — only growth from submission onward is paid. Submit soon after posting.": "Le visualizzazioni ottenute prima dell'invio sono registrate come base non retribuita: viene pagata solo la crescita successiva all'invio. Invia la clip subito dopo la pubblicazione.",
-  "EU advertising rules: clearly disclose the paid partnership in the video or caption (e.g. #ad / #sponsorizzato) before any 'more' fold.": "Norme UE sulla pubblicità: dichiara chiaramente la collaborazione a pagamento nel video o nella didascalia (es. #ad / #sponsorizzato) prima di qualsiasi taglio 'altro'."
+  "EU advertising rules: clearly disclose the paid partnership in the video or caption (e.g. #ad / #sponsorizzato) before any 'more' fold.": "Norme UE sulla pubblicità: dichiara chiaramente la collaborazione a pagamento nel video o nella didascalia (es. #ad / #sponsorizzato) prima di qualsiasi taglio 'altro'.",
+
+  // Pool transparency + per-clip bounds
+  "All performance campaigns": "Tutte le campagne performance",
+  "Pool remaining": "Pool rimanente",
+  "of pool used": "del pool utilizzato",
+  "Per-clip payout cap": "Tetto di pagamento per clip",
+  "Per-clip qualification floor": "Soglia di qualificazione per clip",
+  "A single clip stops earning at this amount. Set 0 for no per-clip cap.": "Una singola clip smette di guadagnare a questo importo. Imposta 0 per nessun tetto per clip.",
+  "A clip earns nothing until it reaches this amount, then pays retroactively in full. Set 0 to disable.": "Una clip non guadagna nulla finché non raggiunge questo importo, poi paga retroattivamente per intero. Imposta 0 per disattivare.",
+  "max per clip": "massimo per clip",
+  "to qualify": "per qualificarsi",
+  "No floor": "Nessuna soglia"
 };
 
 // Helper function to read cookie value

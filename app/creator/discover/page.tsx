@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { CAMPAIGN_CATEGORY_LABELS } from "@/lib/campaign-category";
 import { apiGet, apiPost } from "@/lib/api/client";
+import { formatMoney, formatMoneyCompact } from "@/lib/currency";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { useJoinedCampaigns } from "@/lib/supabase/clips";
 import { useTranslation } from "@/lib/translations";
@@ -62,6 +63,8 @@ interface Campaign {
   campaign_category?: "ugc" | "clipping" | null;
   cpm_rate?: number | null;
   platforms?: string[] | null;
+  pool_total?: number | null;
+  pool_used?: number | null;
 }
 
 interface RawSearchCampaign {
@@ -77,6 +80,10 @@ interface RawSearchCampaign {
   brand_cpm_rate?: number | null;
   cpm_rate?: number | null;
   platforms?: string[] | null;
+  budget_pool?: number | null;
+  available_pool?: number | null;
+  budget_reserved?: number | null;
+  budget_paid?: number | null;
 }
 
 type CreatorProfileForAi = Profile & {
@@ -179,6 +186,8 @@ export default function DiscoverPage() {
             : c.cpm_rate != null
               ? Number(c.cpm_rate)
               : null,
+        pool_total: c.available_pool ?? c.budget_pool ?? null,
+        pool_used: Number(c.budget_reserved ?? 0) + Number(c.budget_paid ?? 0),
       })) satisfies Campaign[];
 
       if (profile) {
@@ -640,8 +649,8 @@ export default function DiscoverPage() {
                               </span>
                               <p className="text-xl font-bold text-[var(--creator-primary)]">
                                 {campaign.campaign_type === "performance"
-                                  ? `$${Number(campaign.cpm_rate ?? 0).toFixed(2)}`
-                                  : `$${campaign.budget_total.toLocaleString()}`}
+                                  ? formatMoney(Number(campaign.cpm_rate ?? 0))
+                                  : formatMoneyCompact(campaign.budget_total)}
                               </p>
                             </div>
                             <div className="text-right">
@@ -649,6 +658,38 @@ export default function DiscoverPage() {
                               <p className="text-sm font-semibold text-white">{campaign.days_left}d</p>
                             </div>
                           </div>
+                          {campaign.campaign_type === "performance" &&
+                          campaign.pool_total != null &&
+                          campaign.pool_total > 0 ? (
+                            (() => {
+                              const usedPct = Math.min(
+                                Math.max((campaign.pool_used ?? 0) / campaign.pool_total, 0),
+                                1
+                              );
+                              const remaining = Math.max(
+                                campaign.pool_total - (campaign.pool_used ?? 0),
+                                0
+                              );
+                              return (
+                                <div className="mt-3">
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                    <div
+                                      className="h-full rounded-full bg-[var(--creator-primary)]"
+                                      style={{ width: `${Math.round(usedPct * 100)}%` }}
+                                    />
+                                  </div>
+                                  <div className="mt-1.5 flex items-center justify-between text-[10px] text-white/45">
+                                    <span>
+                                      {Math.round(usedPct * 100)}% {t("of pool used")}
+                                    </span>
+                                    <span className="font-semibold text-white/70">
+                                      {formatMoneyCompact(remaining)} {t("left")}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : null}
                         </div>
 
                         <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/5 pt-4">
