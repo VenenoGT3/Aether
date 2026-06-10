@@ -319,36 +319,29 @@ export async function releaseEscrowAction(participationId: string) {
       throw new ExternalServiceError("The payout transfer could not be completed. Please try again.");
     }
 
-    const { error: ledgerErr } = await admin.from("transactions").insert({
-      participation_id: participationId,
-      user_id: user!.user_id,
-      amount,
-      type: "release",
-      status: "succeeded",
-      stripe_payment_intent_id: transferId,
-    });
-    if (ledgerErr) {
+    // Ledger row + participation + campaign completion in ONE transaction —
+    // a failure can no longer leave money state half-updated.
+    const { data: completed, error: completeErr } = await admin.rpc(
+      "complete_escrow_release",
+      {
+        p_participation_id: participationId,
+        p_business_user_id: user!.user_id,
+        p_amount: amount,
+        p_transfer_id: transferId,
+      }
+    );
+    if (completeErr) {
       // 23505 = the partial unique index caught a concurrent release. The
       // transfer is idempotent (stable key), so the money moved exactly once —
-      // the other writer owns the ledger row and the completion updates below.
-      if (ledgerErr.code === "23505") {
+      // the other writer owns the ledger row and the completion updates.
+      if (completeErr.code === "23505") {
         throw new ConflictError("Escrow has already been released for this participation.");
       }
-      throw ledgerErr;
+      throw completeErr;
     }
-
-    await admin
-      .from("participations")
-      .update({
-        status: "completed",
-        actual_payout: amount,
-      })
-      .eq("id", participationId);
-
-    await admin
-      .from("campaigns")
-      .update({ status: "completed" })
-      .eq("id", participation.campaign_id);
+    if (completed !== true) {
+      throw new NotFoundError("Participation agreement not found.");
+    }
 
     return { success: true, transferId };
   } catch (error) {
@@ -579,6 +572,8 @@ export async function getTransactionLedgerAction() {
 
     const supabase = await createClient();
 
+    // RLS scopes rows to the caller. Capped: an unbounded ledger fetch grows
+    // linearly with account age and this action runs on every wallet view.
     const { data: transactions, error } = await supabase
       .from("transactions")
       .select(
@@ -590,9 +585,19 @@ export async function getTransactionLedgerAction() {
         )
       `
       )
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
 
     if (error) throw error;
+
+    // One pass to index released participations — the per-row `.some()` scan
+    // this replaces was O(n²) over the ledger.
+    const releasedParticipations = new Set<string>();
+    transactions?.forEach((tx) => {
+      if (tx.type === "release" && tx.status === "succeeded" && tx.participation_id) {
+        releasedParticipations.add(tx.participation_id as string);
+      }
+    });
 
     // Accumulate in integer cents so a long ledger can't drift the balance.
     let availableCents = 0;
@@ -616,25 +621,13 @@ export async function getTransactionLedgerAction() {
         } else if (tx.type === "payout") {
           availableCents -= amt;
         } else if (tx.type === "escrow") {
-          const hasRelease = transactions.some(
-            (t) =>
-              t.participation_id === tx.participation_id &&
-              t.type === "release" &&
-              t.status === "succeeded"
-          );
-          if (!hasRelease) {
+          if (!releasedParticipations.has(tx.participation_id as string)) {
             pendingCents += amt;
           }
         }
       } else {
         if (tx.type === "escrow") {
-          const hasRelease = transactions.some(
-            (t) =>
-              t.participation_id === tx.participation_id &&
-              t.type === "release" &&
-              t.status === "succeeded"
-          );
-          if (!hasRelease) {
+          if (!releasedParticipations.has(tx.participation_id as string)) {
             pendingCents += amt;
           }
         } else if (tx.type === "release") {
