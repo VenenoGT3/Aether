@@ -50,9 +50,9 @@ export function CreatorPerformanceSummary() {
       <div className="mb-12 relative z-10">
         <PromoCard
           icon={Film}
-          href="/creator/clips"
-          title={t("Earn per view with clipping campaigns")}
-          description={t("Join open campaigns, submit clips, and get paid for the views you generate.")}
+          href="/creator/discover"
+          title={t("Earn per view with UGC and clipping campaigns")}
+          description={t("Join open campaigns, submit original posts or edited clips, and get paid for verified view growth.")}
         />
       </div>
     );
@@ -96,10 +96,10 @@ export function CreatorPerformanceSummary() {
   return (
     <div className="mb-12 relative z-10">
       <SectionHeader
-        eyebrow={t("Performance Clipping")}
+        eyebrow={t("Performance Work")}
         eyebrowIcon={Film}
-        title={t("Clips & Earnings")}
-        action={{ label: t("Open Clips & Earnings"), href: "/creator/clips" }}
+        title={t("Performance Earnings")}
+        action={{ label: t("Find Campaigns"), href: "/creator/discover" }}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -127,14 +127,14 @@ export function CreatorPerformanceSummary() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Active clips */}
+        {/* Active performance submissions */}
         <div className="lg:col-span-2 p-6 apple-card">
           <h3 className="text-sm font-bold mb-4">
-            {t("Active clips")}{" "}
+            {t("Active submissions")}{" "}
             <span className="text-muted-foreground font-normal">({activeClips.length})</span>
           </h3>
           {activeClips.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("No active clips. Submit one from Clips & Earnings.")}</p>
+            <p className="text-xs text-muted-foreground">{t("No active submissions. Join a UGC or clipping campaign from Discover.")}</p>
           ) : (
             <div className="space-y-3">
               {activeClips.slice(0, 4).map((clip) => {
@@ -192,10 +192,10 @@ export function CreatorPerformanceSummary() {
       </div>
 
       <Link
-        href="/creator/clips"
+        href="/creator/discover"
         className="mt-6 flex items-center justify-center gap-1.5 w-full p-4 rounded-2xl bg-primary/10 border border-primary/20 text-primary text-xs font-bold hover:bg-primary/15 transition-colors group"
       >
-        {t("Open Clips & Earnings")}
+        {t("Find performance campaigns")}
         <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
       </Link>
     </div>

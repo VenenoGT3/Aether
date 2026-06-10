@@ -8,6 +8,7 @@ import {
   detectSocialPlatform,
   extractPlatformPostId,
 } from "@/lib/social-post";
+import type { CampaignCategory } from "@/lib/campaign-category";
 import { PLATFORM_LABELS, betaPlatformsLabel, isPlatformInBeta } from "@/lib/beta";
 import { getYoutubeDataApiKey } from "@/lib/env.server";
 import { fetchYouTubeVideoMetadata } from "@/lib/youtube/metadata";
@@ -23,6 +24,15 @@ export type ClipSubmitResult =
   | { ok: true; clip: SubmittedClip }
   | { ok: false; error: string; status: number };
 
+type SubmitClipOptions = {
+  expectedCategory?: CampaignCategory;
+};
+
+const CATEGORY_COPY: Record<CampaignCategory, { singular: string; plural: string }> = {
+  clipping: { singular: "clipping campaign", plural: "clips" },
+  ugc: { singular: "UGC campaign", plural: "UGC posts" },
+};
+
 /**
  * Submit a clip (post URL) for a performance campaign the creator has joined.
  * Requires an active participation; the unique (campaign_id, post_url)
@@ -31,10 +41,14 @@ export type ClipSubmitResult =
  */
 export async function submitClip(
   userId: string,
-  body: ClipSubmitBody
+  body: ClipSubmitBody,
+  options: SubmitClipOptions = {}
 ): Promise<ClipSubmitResult> {
   const traceId = randomUUID();
   const supabase = await createClient();
+  const expectedCopy = options.expectedCategory
+    ? CATEGORY_COPY[options.expectedCategory]
+    : CATEGORY_COPY.clipping;
 
   // The creator must already participate in this campaign.
   const { data: participation, error: partErr } = await supabase
@@ -55,7 +69,7 @@ export async function submitClip(
   if (!participation) {
     return {
       ok: false,
-      error: "Join this campaign before submitting clips.",
+      error: `Join this campaign before submitting ${expectedCopy.plural}.`,
       status: 403,
     };
   }
@@ -78,6 +92,39 @@ export async function submitClip(
     )
     .eq("id", body.campaign_id)
     .maybeSingle();
+
+  if (!campaign) {
+    return {
+      ok: false,
+      error: "Campaign not found.",
+      status: 404,
+    };
+  }
+
+  if (campaign.campaign_type !== "performance") {
+    return {
+      ok: false,
+      error: "This submission flow only supports performance campaigns.",
+      status: 409,
+    };
+  }
+
+  if (
+    options.expectedCategory &&
+    campaign.campaign_category !== options.expectedCategory
+  ) {
+    apiLog("warn", "clip.submit.category_rejected", {
+      traceId,
+      campaignId: body.campaign_id,
+      expected: options.expectedCategory,
+      actual: campaign.campaign_category,
+    });
+    return {
+      ok: false,
+      error: `Choose a ${expectedCopy.singular} for this submission flow.`,
+      status: 409,
+    };
+  }
 
   const platform = detectSocialPlatform(body.post_url, body.platform);
   const externalPostId = extractPlatformPostId(platform, body.post_url);
@@ -146,14 +193,13 @@ export async function submitClip(
     };
   }
 
-  if (campaign) {
-    const usage =
-      campaign.campaign_type === "performance" ? budgetUsage(campaign) : null;
+  {
+    const usage = budgetUsage(campaign);
 
     if (campaign.status !== "open" && campaign.status !== "in_progress") {
       return {
         ok: false,
-        error: "This campaign is closed and is not accepting new clips.",
+        error: `This campaign is closed and is not accepting new ${expectedCopy.plural}.`,
         status: 409,
       };
     }
@@ -166,7 +212,7 @@ export async function submitClip(
       });
       return {
         ok: false,
-        error: "This campaign has used its full budget and is closed to new clips.",
+        error: `This campaign has used its full budget and is closed to new ${expectedCopy.plural}.`,
         status: 409,
       };
     }
@@ -179,13 +225,12 @@ export async function submitClip(
       return {
         ok: false,
         error:
-          "This campaign has used most of its budget and is no longer accepting new clips. Try another campaign.",
+          `This campaign has used most of its budget and is no longer accepting new ${expectedCopy.plural}. Try another campaign.`,
         status: 409,
       };
     }
     const allowedPlatforms = (campaign.platforms as string[] | null) ?? [];
     if (
-      campaign.campaign_type === "performance" &&
       allowedPlatforms.length > 0 &&
       !allowedPlatforms.includes(platform)
     ) {
@@ -288,7 +333,7 @@ export async function submitClip(
         return {
           ok: false,
           error:
-            "This campaign has used most of its budget and is no longer accepting new clips. Try another campaign.",
+            `This campaign has used most of its budget and is no longer accepting new ${expectedCopy.plural}. Try another campaign.`,
           status: 409,
         };
       }
@@ -302,7 +347,7 @@ export async function submitClip(
       if (msg.includes("not configured for clip")) {
         return {
           ok: false,
-          error: "This campaign is not configured for clip submissions.",
+          error: `This campaign is not configured for ${expectedCopy.plural} submissions.`,
           status: 409,
         };
       }

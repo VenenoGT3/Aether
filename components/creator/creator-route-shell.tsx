@@ -10,10 +10,10 @@ import {
   FileText,
   Home,
   LogOut,
+  Scissors,
   Settings2,
   Sparkles,
   UserCog,
-  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -55,9 +55,15 @@ const creatorNavItems = [
     match: (pathname: string) => pathname === "/creator/campaigns",
   },
   {
-    label: "Earnings",
+    label: "UGC",
+    href: "/creator/ugc",
+    icon: Sparkles,
+    match: (pathname: string) => pathname === "/creator/ugc",
+  },
+  {
+    label: "Clipping",
     href: "/creator/clips",
-    icon: Wallet,
+    icon: Scissors,
     match: (pathname: string) => pathname === "/creator/clips",
   },
   {

@@ -141,7 +141,15 @@ export function NavBar() {
                       pathname === "/creator/clips" ? "bg-secondary text-foreground" : ""
                     }`}
                   >
-                    {t("Clips & Earnings")}
+                    {t("Clipping")}
+                  </Link>
+                  <Link
+                    href="/creator/ugc"
+                    className={`px-3 py-1.5 rounded-full transition-all hover:text-foreground ${
+                      pathname === "/creator/ugc" ? "bg-secondary text-foreground" : ""
+                    }`}
+                  >
+                    {t("UGC Posts")}
                   </Link>
                 </>
               )}

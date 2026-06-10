@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { withdrawFundsAction, getTransactionLedgerAction } from "@/lib/stripe/actions";
 import { formatMoney } from "@/lib/currency";
+import { useTranslation } from "@/lib/translations";
 
 interface Transaction {
   id: string;
@@ -41,6 +42,7 @@ interface Transaction {
  */
 
 export default function WalletUI() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [availableBalance, setAvailableBalance] = useState(0);
@@ -204,10 +206,10 @@ export default function WalletUI() {
       <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-secondary/20 border border-border/10 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-2">
           <Lock size={12} className="text-[#FF9500] shrink-0" />
-          {"This wallet covers fixed-fee escrow campaigns. Pay-per-view earnings & payouts live on Clips & Earnings."}
+          {t("This wallet covers fixed-fee escrow campaigns. Pay-per-view earnings and payouts live in the UGC and clipping workspaces.")}
         </span>
         <Link href="/creator/clips" className="font-semibold text-primary hover:underline whitespace-nowrap flex items-center gap-1">
-          Clips & Earnings <ArrowRight size={12} />
+          {t("Open clipping")} <ArrowRight size={12} />
         </Link>
       </div>
 

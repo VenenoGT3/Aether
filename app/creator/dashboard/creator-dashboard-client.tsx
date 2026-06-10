@@ -388,7 +388,7 @@ export function CreatorDashboardClient({
               </div>
               <div className="flex items-center gap-2 border-t border-white/5 pt-3 text-[10px] leading-5">
                 <Clock size={13} className="shrink-0 text-[var(--creator-warning)]" />
-                <span>{t("Earnings clear after the holdback window, then become withdrawable from Clips & Earnings.")}</span>
+                <span>{t("Earnings clear after the holdback window, then become withdrawable from the UGC or clipping workspace.")}</span>
               </div>
             </div>
           </CreatorGlassCard>

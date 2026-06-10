@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import {
@@ -99,6 +100,19 @@ function campaignLogo(campaign: Campaign) {
   if (niche.includes("fitness")) return "FT";
   if (niche.includes("travel")) return "TR";
   return "AE";
+}
+
+function performanceSubmissionHref(campaign: Campaign) {
+  const base = campaign.campaign_category === "ugc" ? "/creator/ugc" : "/creator/clips";
+  return `${base}?campaign=${campaign.id}`;
+}
+
+function performanceSubmitLabel(campaign: Campaign) {
+  return campaign.campaign_category === "ugc" ? "Submit UGC" : "Submit clip";
+}
+
+function performanceJoinLabel(campaign: Campaign) {
+  return campaign.campaign_category === "ugc" ? "Join UGC Brief" : "Join Clipping Brief";
 }
 
 export default function DiscoverPage() {
@@ -267,7 +281,10 @@ export default function DiscoverPage() {
       toast.success(
         res.alreadyJoined
           ? t("You've already joined this campaign.")
-          : t("Joined! Head to Clips & Earnings to submit clips."),
+          : t("Joined! Head to {flow} to submit work.").replace(
+              "{flow}",
+              t(campaign.campaign_category === "ugc" ? "UGC Posts" : "Clips & Earnings")
+            ),
         { description: campaign.title }
       );
     } else {
@@ -422,10 +439,16 @@ export default function DiscoverPage() {
         title={t("Discover")}
         description={t("Browse active brand pools, compare CPM terms, and apply with a real Aether creator profile.")}
         action={
-          <CreatorActionButton href="/creator/clips" variant="secondary">
-            <Zap size={15} className="text-[var(--creator-success)]" />
-            {t("Submit Clips")}
-          </CreatorActionButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <CreatorActionButton href="/creator/ugc" variant="secondary">
+              <FileText size={15} className="text-[var(--creator-warning)]" />
+              {t("UGC Posts")}
+            </CreatorActionButton>
+            <CreatorActionButton href="/creator/clips" variant="secondary">
+              <Scissors size={15} className="text-[var(--creator-success)]" />
+              {t("Clipping")}
+            </CreatorActionButton>
+          </div>
         }
       />
 
@@ -630,10 +653,20 @@ export default function DiscoverPage() {
 
                         <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/5 pt-4">
                           {isApplied || isJoined ? (
-                            <CreatorStatusPill tone="success" className="px-3 py-2">
-                              <Check size={13} />
-                              {isJoined ? t("Joined") : t("Applied")}
-                            </CreatorStatusPill>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <CreatorStatusPill tone="success" className="px-3 py-2">
+                                <Check size={13} />
+                                {isJoined ? t("Joined") : t("Applied")}
+                              </CreatorStatusPill>
+                              {campaign.campaign_type === "performance" ? (
+                                <Link
+                                  href={performanceSubmissionHref(campaign)}
+                                  className="rounded-xl border border-[rgba(77,142,255,0.22)] bg-[rgba(77,142,255,0.10)] px-3 py-2 text-xs font-semibold text-[var(--creator-primary)] transition-colors hover:bg-[rgba(77,142,255,0.16)]"
+                                >
+                                  {t(performanceSubmitLabel(campaign))}
+                                </Link>
+                              ) : null}
+                            </div>
                           ) : campaign.campaign_type === "performance" ? (
                             <Button
                               onClick={() => openApplyModal(campaign)}
@@ -641,7 +674,7 @@ export default function DiscoverPage() {
                               className="creator-gradient-accent h-10 rounded-xl border-0 px-4 text-xs font-semibold text-white hover:brightness-105"
                             >
                               <Zap size={13} />
-                              {t("Join Campaign")}
+                              {t(performanceJoinLabel(campaign))}
                             </Button>
                           ) : (
                             <div className="flex gap-2">
@@ -766,10 +799,20 @@ export default function DiscoverPage() {
       <Dialog open={!!joinModalCampaign} onOpenChange={(open) => !open && setJoinModalCampaign(null)}>
         <DialogContent className="creator-portal creator-glass-high max-w-md gap-5 rounded-2xl border-white/10 p-6 text-white">
           <DialogHeader>
-            <span className="creator-label text-[var(--creator-success)]">{t("Join performance campaign")}</span>
+            <span className="creator-label text-[var(--creator-success)]">
+              {t(
+                joinModalCampaign?.campaign_category === "ugc"
+                  ? "Join UGC campaign"
+                  : "Join clipping campaign"
+              )}
+            </span>
             <DialogTitle className="text-xl font-semibold tracking-tight">{joinModalCampaign?.title}</DialogTitle>
             <DialogDescription className="text-xs text-white/50">
-              {t("Join to start submitting clips. The brand sets the pay-per-view rate.")}
+              {t(
+                joinModalCampaign?.campaign_category === "ugc"
+                  ? "Join to access the creative brief and submit original posts. The brand sets the pay-per-view rate."
+                  : "Join to access the source footage and submit edited clips. The brand sets the pay-per-view rate."
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -805,7 +848,9 @@ export default function DiscoverPage() {
               disabled={joiningId === joinModalCampaign?.id}
               className="creator-gradient-accent rounded-xl border-0 px-5 text-xs font-semibold text-white hover:brightness-105"
             >
-              {joiningId === joinModalCampaign?.id ? t("Joining...") : t("Join Campaign")}
+              {joiningId === joinModalCampaign?.id
+                ? t("Joining...")
+                : t(joinModalCampaign ? performanceJoinLabel(joinModalCampaign) : "Join Campaign")}
             </Button>
           </DialogFooter>
         </DialogContent>

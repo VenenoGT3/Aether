@@ -3,6 +3,7 @@ import { supabase } from "./client";
 import { apiPost } from "@/lib/api/client";
 import { payoutForViews } from "@/lib/earnings";
 import { requestWithdrawalAction } from "@/lib/stripe/actions";
+import type { CampaignCategory } from "@/lib/campaign-category";
 
 export interface WithdrawResult {
   ok: boolean;
@@ -43,6 +44,7 @@ export interface CreatorClip {
   id: string;
   campaign_id: string;
   campaignTitle: string;
+  campaignCategory?: CampaignCategory | null;
   platform: string;
   post_url: string;
   status: ClipStatus;
@@ -160,8 +162,9 @@ export function useJoinedCampaigns() {
   return { joinedIds, loading, join, refresh: load };
 }
 
-/** Creator: list + submit clips. */
-export function useCreatorClips() {
+/** Creator: list + submit performance posts, optionally scoped by category. */
+export function useCreatorClips(options: { category?: CampaignCategory } = {}) {
+  const { category } = options;
   const [clips, setClips] = useState<CreatorClip[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -174,7 +177,7 @@ export function useCreatorClips() {
     const { data } = await supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id(title, cpm_rate)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id(title, cpm_rate, campaign_category)"
       )
       .eq("creator_id", user.id)
       .order("created_at", { ascending: false });
@@ -200,7 +203,9 @@ export function useCreatorClips() {
         campaign_category?: "ugc" | "clipping" | null;
       } | null;
     };
-    const rows = (data ?? []) as unknown as Row[];
+    const rows = ((data ?? []) as unknown as Row[]).filter(
+      (row) => !category || row.campaign?.campaign_category === category
+    );
     setClips(
       rows.map((r) => {
         const views = Number(r.current_views ?? 0);
@@ -209,6 +214,7 @@ export function useCreatorClips() {
           id: r.id,
           campaign_id: r.campaign_id,
           campaignTitle: r.campaign?.title ?? "Campaign",
+          campaignCategory: r.campaign?.campaign_category ?? null,
           platform: r.platform,
           post_url: r.post_url,
           status: r.status,
@@ -226,7 +232,7 @@ export function useCreatorClips() {
       })
     );
     setLoading(false);
-  }, []);
+  }, [category]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount
@@ -244,7 +250,10 @@ export function useCreatorClips() {
   const submitClip = useCallback(
     async (campaignId: string, postUrl: string) => {
       try {
-        await apiPost("/api/clips", { campaign_id: campaignId, post_url: postUrl });
+        await apiPost(category === "ugc" ? "/api/ugc-submissions" : "/api/clips", {
+          campaign_id: campaignId,
+          post_url: postUrl,
+        });
         await load();
         return { ok: true };
       } catch (err) {
@@ -254,7 +263,7 @@ export function useCreatorClips() {
         };
       }
     },
-    [load]
+    [category, load]
   );
 
   return { clips, loading, refresh: load, submitClip };

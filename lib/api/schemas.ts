@@ -196,7 +196,7 @@ export const CampaignFundingBodySchema = z.object({
 export const ClipSubmitBodySchema = z.object({
   campaign_id: uuid,
   post_url: socialPostUrl.refine(isYoutubePostUrl, {
-    message: "Beta clip submissions currently support YouTube Shorts links only.",
+    message: "Beta submissions currently support YouTube Shorts links only.",
   }),
   platform: z.literal("youtube").optional(),
   _hp: honeypot,
