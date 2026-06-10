@@ -115,8 +115,24 @@ export function isDeployedRuntime(): boolean {
   );
 }
 
+/**
+ * Production test login is allowed (gated beta decision) but only behind a
+ * code long enough to resist online brute force — the route rate-limits to
+ * ~12 attempts/min/IP, so a short code is the weak link. Short codes are
+ * treated as not configured, which disables test login on deployed runtimes.
+ */
+const MIN_PRODUCTION_ACCESS_CODE_LENGTH = 16;
+
 export function getTestLoginAccessCode(): string | undefined {
-  return optionalServerSecret("TEST_LOGIN_ACCESS_CODE");
+  const code = optionalServerSecret("TEST_LOGIN_ACCESS_CODE");
+  if (!code) return undefined;
+  if (isProductionDeployment() && code.length < MIN_PRODUCTION_ACCESS_CODE_LENGTH) {
+    console.error(
+      `[Aether] TEST_LOGIN_ACCESS_CODE must be at least ${MIN_PRODUCTION_ACCESS_CODE_LENGTH} characters in production; test login stays disabled.`
+    );
+    return undefined;
+  }
+  return code;
 }
 
 export function isTestLoginAccessCodeRequired(): boolean {

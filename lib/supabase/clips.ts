@@ -174,14 +174,19 @@ export function useCreatorClips(options: { category?: CampaignCategory } = {}) {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
+    // !inner join so the category filter runs in the QUERY — filtering
+    // client-side after the row limit would starve one category's page for
+    // creators whose other-category posts fill the limit.
+    let query = supabase
       .from("clips")
       .select(
-        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id(title, cpm_rate, campaign_category)"
+        "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id!inner(title, cpm_rate, campaign_category)"
       )
-      .eq("creator_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .eq("creator_id", user.id);
+    if (category) {
+      query = query.eq("campaign.campaign_category", category);
+    }
+    const { data } = await query.order("created_at", { ascending: false }).limit(200);
 
     type Row = {
       id: string;
@@ -204,9 +209,7 @@ export function useCreatorClips(options: { category?: CampaignCategory } = {}) {
         campaign_category?: "ugc" | "clipping" | null;
       } | null;
     };
-    const rows = ((data ?? []) as unknown as Row[]).filter(
-      (row) => !category || row.campaign?.campaign_category === category
-    );
+    const rows = (data ?? []) as unknown as Row[];
     setClips(
       rows.map((r) => {
         const views = Number(r.current_views ?? 0);
