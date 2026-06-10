@@ -10,6 +10,7 @@ import {
 } from "@/lib/social-post";
 import type { CampaignCategory } from "@/lib/campaign-category";
 import { PLATFORM_LABELS, betaPlatformsLabel, isPlatformInBeta } from "@/lib/beta";
+import { getDisclosureEnforcement, hasAdDisclosure } from "@/lib/disclosure";
 import { getYoutubeDataApiKey } from "@/lib/env.server";
 import { fetchYouTubeVideoMetadata } from "@/lib/youtube/metadata";
 
@@ -191,6 +192,31 @@ export async function submitClip(
       error: "Connect the YouTube channel that owns this Short before submitting it.",
       status: 403,
     };
+  }
+
+  // EU disclosure (UCPD / AGCM): sponsored content must carry a visible
+  // textual disclosure. The video metadata is already in hand — check the
+  // title + description. Creators can edit the description on the platform
+  // and resubmit, so blocking is recoverable in minutes.
+  const disclosureEnforcement = getDisclosureEnforcement();
+  if (
+    disclosureEnforcement !== "off" &&
+    !hasAdDisclosure(videoMetadata.title, videoMetadata.description)
+  ) {
+    if (disclosureEnforcement === "block") {
+      return {
+        ok: false,
+        error:
+          "EU rules require a visible paid-partnership disclosure. Add a hashtag like #ad or #sponsorizzato to the video title or description, then resubmit.",
+        status: 422,
+      };
+    }
+    apiLog("warn", "clip.submit.no_disclosure", {
+      traceId,
+      campaignId: body.campaign_id,
+      platform,
+      externalPostId,
+    });
   }
 
   {

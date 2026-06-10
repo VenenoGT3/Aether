@@ -1,6 +1,8 @@
 export type YouTubeVideoMetadata = {
   videoId: string;
   channelId: string;
+  title: string;
+  description: string;
   views: number;
   likes: number;
   comments: number;
@@ -24,7 +26,8 @@ export async function fetchYouTubeVideoMetadata(
     part: "snippet,statistics",
     id: videoId,
     key: apiKey,
-    fields: "items(id,snippet(channelId),statistics(viewCount,likeCount,commentCount))",
+    fields:
+      "items(id,snippet(channelId,title,description),statistics(viewCount,likeCount,commentCount))",
   });
 
   const response = await fetch(
@@ -36,7 +39,7 @@ export async function fetchYouTubeVideoMetadata(
   const json = (await response.json()) as {
     items?: Array<{
       id?: string;
-      snippet?: { channelId?: string };
+      snippet?: { channelId?: string; title?: string; description?: string };
       statistics?: {
         viewCount?: string;
         likeCount?: string;
@@ -51,6 +54,8 @@ export async function fetchYouTubeVideoMetadata(
   return {
     videoId: item.id,
     channelId,
+    title: item.snippet?.title ?? "",
+    description: item.snippet?.description ?? "",
     views: num(item.statistics?.viewCount),
     likes: num(item.statistics?.likeCount),
     comments: num(item.statistics?.commentCount),
