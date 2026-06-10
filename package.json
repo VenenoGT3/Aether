@@ -20,6 +20,7 @@
     "test:chaos": "vitest run lib/tests/resilience.test.ts -t chaos",
     "verify:env": "vitest run lib/__tests__/env.test.ts lib/__tests__/secrets.test.ts",
     "preflight": "tsx scripts/preflight.ts",
+    "monitor:health": "tsx scripts/check-production-health.ts",
     "loadtest:health": "k6 run tests/load/load-test-health.js",
     "loadtest:discovery": "k6 run tests/load/load-test-discovery.js",
     "loadtest:clips": "k6 run tests/load/load-test-clip-submit.js",

@@ -222,7 +222,9 @@ export type DbPost = z.infer<typeof PostSchema>;
 // Transactions Schema
 export const TransactionSchema = z.object({
   id: z.string().uuid(),
+  user_id: z.string().uuid().nullable().optional(),
   participation_id: z.string().uuid().nullable().optional(),
+  payout_id: z.string().uuid().nullable().optional(),
   amount: z.number().positive(),
   type: TransactionTypeSchema,
   stripe_payment_intent_id: z.string().nullable().optional(),

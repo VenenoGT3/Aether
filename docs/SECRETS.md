@@ -134,6 +134,7 @@ The view-sync / earnings / payout worker (`npm run worker`, code in `worker/`) r
 | `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` | TikTok Login Kit credentials for token refresh and Display API polling |
 | `SOCIAL_TOKEN_ENCRYPTION_KEY` | Optional in the YouTube-only beta (no tokens are stored). Needed only when TikTok polling is enabled: decrypts creator OAuth tokens written by the `social-oauth` edge function (same value as the function secret). Without it, encrypted tokens are treated as unavailable and polling degrades to last-known views. |
 | `AYRSHARE_API_KEY` | Optional fallback/aggregator for live view tracking |
+| `ALERT_WEBHOOK_URL` | Optional Slack/Discord/PagerDuty-compatible webhook for `[worker][ALERT]` lines |
 
 At least one trusted view provider must be configured or the worker hard-fails.
 TikTok also requires per-creator OAuth tokens in `creator_social_accounts`; those
@@ -161,6 +162,8 @@ Rules:
 1. All vars from `getRequiredEnvVarNames()` must be set — there is no mock/demo fallback.
 2. `STRIPE_WEBHOOK_HANDLER=vercel` is **rejected** when `VERCEL_ENV=production` (Vercel Production deploys only).
 3. `STRIPE_WEBHOOK_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` are required on Vercel only if `STRIPE_WEBHOOK_HANDLER=vercel` (local legacy).
+
+For production monitoring setup, see [PRODUCTION-MONITORING.md](PRODUCTION-MONITORING.md).
 
 ---
 
