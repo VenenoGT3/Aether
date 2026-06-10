@@ -42,7 +42,7 @@ RUN addgroup -S aether && adduser -S aether -G aether
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY worker ./worker
-COPY lib/social-post.ts ./lib/social-post.ts
+COPY lib/beta.ts lib/currency.ts lib/social-post.ts ./lib/
 
 USER aether
 
