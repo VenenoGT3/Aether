@@ -36,6 +36,10 @@ These ship with the merge — the code assumes them:
    - `20260610090000_per_clip_payout_bounds.sql` — per-clip payout cap +
      qualification floor columns, record_clip_earning v3, and the funded
      campaign money-terms lock extended to the new columns.
+   - `20260610130000_atomic_escrow_release.sql` — complete_escrow_release()
+     RPC: ledger row + participation + campaign completion in one
+     transaction (service-role only). releaseEscrowAction now requires it —
+     deploy this migration BEFORE or WITH the app deploy.
 2. **Edge function** — `supabase functions deploy social-oauth --no-verify-jwt`.
    Brings: revoke-at-link (no tokens stored), the `/disconnect` endpoint
    (upstream Google revocation), preview-origin gating, CORS fix.
@@ -55,6 +59,19 @@ These ship with the merge — the code assumes them:
 | E2E CI secrets | Optional. The `e2e` workflow self-skips unless `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` (and ideally `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET`) exist as GitHub repo secrets. |
 
 ## 4. Behavior changes to be aware of (no action, just context)
+
+- **HTTP security headers** now ship on every response (HSTS preload-eligible,
+  nosniff, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy). If any
+  page must ever be iframed, X-Frame-Options needs revisiting. A strict CSP is
+  deliberately NOT included yet (needs nonce wiring) — tracked as follow-up.
+- **Landing page is ISR** (revalidates every 5 min) with a cookie-free anon
+  client — its stats were previously frozen at build time (always null in
+  production) and are now live.
+- **Dashboard realtime reloads are coalesced** (≤1 reload/10s per client from
+  table-wide channels); the user's own actions still refresh immediately.
+- **List queries are bounded** (campaigns 200, dashboard clips 500, creator
+  clips 200, notifications 100, wallet ledger 500 most-recent). True
+  pagination is a UI follow-up if any account legitimately exceeds these.
 
 - Middleware no longer touches Supabase on public pages; auth pages check
   session only. Protected-path behavior is unchanged.
