@@ -17,6 +17,7 @@ npx next build                                      # compiles clean
 - **No new database migrations in this round** (the per-clip bounds and
   atomic-release migrations shipped in the previous merge).
 - No edge-function changes in this round.
+- `npm ci` after merge — this round adds `knip` as a devDependency.
 
 ## 3. Env decisions
 
@@ -39,6 +40,20 @@ npx next build                                      # compiles clean
   "All performance campaigns" — the wallet is shared; the old label implied
   category scope it didn't have.
 
-## 5. After merging
+## 5. Dead-code cleanup (this round)
+
+- Removed 14 superseded files (old summary cards, wallet-ui, theme-toggle,
+  unused barrels, unused ui primitives). Verified zero-reference via knip +
+  grep; tsc/lint/tests/build all green after.
+- `knip` is now wired (`npm run lint:dead`, config in `knip.jsonc`) and runs
+  clean (exit 0).
+- **Backend-ready features awaiting frontend wiring were KEPT, not deleted**
+  (founder decision). See [`docs/pending-frontend-wiring.md`](docs/pending-frontend-wiring.md):
+  weekly challenges, referral rewards card, transactional email (`lib/resend.ts`),
+  and the client feature-flag hook all have live backends but no mounted UI.
+  Each is listed in the `knip.jsonc` ignore block with a pointer; remove it
+  there once connected.
+
+## 6. After merging
 
 Delete this file in the merge commit.
