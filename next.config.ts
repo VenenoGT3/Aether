@@ -14,6 +14,25 @@ const nextConfig: NextConfig = {
   // that must NOT be bundled by the compiler — keep them as native node_modules
   // requires so logging works in route handlers and the Node-runtime proxy.
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          // 2 years, preload-eligible. Vercel terminates TLS; this pins browsers to it.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Nothing on this app is designed to be framed (Stripe runs ITS
+          // iframes inside our pages — that direction is unaffected).
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Deny powerful APIs we never use. `payment` is deliberately NOT
+          // denied — Stripe Elements may use the Payment Request API.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 
 // Wrap with Sentry. Error capture + tracing are driven at RUNTIME by the DSN

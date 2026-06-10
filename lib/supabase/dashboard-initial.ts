@@ -138,6 +138,7 @@ export async function getBusinessDashboardInitialData(): Promise<BusinessDashboa
             )
             .in("campaign_id", campaignIds)
             .order("created_at", { ascending: false })
+            .limit(500)
         : Promise.resolve({ data: [], error: null }),
       loadCampaignMetrics(supabase, campaignIds),
     ]);

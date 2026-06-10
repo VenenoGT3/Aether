@@ -38,7 +38,8 @@ export async function getNotifications(
       .from("notifications")
       .select("*")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     return { data: (data || []) as NotificationItem[], error };
   } catch (err) {

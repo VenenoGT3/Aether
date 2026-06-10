@@ -180,7 +180,8 @@ export function useCreatorClips(options: { category?: CampaignCategory } = {}) {
         "id, campaign_id, platform, post_url, status, current_views, created_at, submitted_at, approval_deadline, auto_approved, quality_status, quality_notes, quality_score, last_synced_at, campaign:campaign_id(title, cpm_rate, campaign_category)"
       )
       .eq("creator_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     type Row = {
       id: string;
