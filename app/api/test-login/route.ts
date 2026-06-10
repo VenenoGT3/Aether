@@ -7,7 +7,6 @@ import {
   getTestLoginAccessCode,
   getAvailableTestLoginRoles,
   getTestLoginCredentials,
-  isProductionDeployment,
   isTestLoginAccessCodeRequired,
   type TestLoginRole,
 } from "@/lib/env.server";
@@ -40,10 +39,6 @@ function accessCodeMatches(provided: string | undefined, configured: string): bo
 }
 
 export async function GET(request: Request): Promise<Response> {
-  if (isProductionDeployment()) {
-    return jsonSuccess({ roles: [], requiresAccessCode: false });
-  }
-
   const guarded = await guardApiGet(request, {
     schema: EmptyQuerySchema,
     rateLimit: "metrics",
@@ -60,10 +55,6 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (isProductionDeployment()) {
-    return jsonError("Not found.", 404);
-  }
-
   const guarded = await guardApiPost(request, {
     schema: TestLoginBodySchema,
     rateLimit: "apply",

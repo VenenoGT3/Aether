@@ -98,16 +98,12 @@ export function getResendApiKey(): string | undefined {
 
 export type TestLoginRole = "business" | "influencer";
 
-/**
- * The live production deployment. Test login must never be reachable here,
- * regardless of ENABLE_TEST_LOGIN — only previews and local builds qualify.
- */
+/** The live production deployment. */
 export function isProductionDeployment(): boolean {
   return process.env.VERCEL_ENV === "production";
 }
 
 export function isTestLoginEnabled(): boolean {
-  if (isProductionDeployment()) return false;
   return process.env.ENABLE_TEST_LOGIN?.trim().toLowerCase() === "true";
 }
 
