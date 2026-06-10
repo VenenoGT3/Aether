@@ -25,6 +25,8 @@ import {
   CreatorSectionHeader,
   CreatorStatusPill,
 } from "@/components/creator/creator-ui";
+import { ReferFriendCard } from "@/components/refer-friend-card";
+import { WeeklyChallengeWidget } from "@/components/weekly-challenge-widget";
 import { Button } from "@/components/ui/button";
 import { apiPost } from "@/lib/api/client";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
@@ -46,8 +48,12 @@ function compact(value: number) {
 
 export function CreatorDashboardClient({
   initialData,
+  showChallenges,
+  showReferrals,
 }: {
   initialData: CreatorDashboardInitialData | null;
+  showChallenges: boolean;
+  showReferrals: boolean;
 }) {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
@@ -392,6 +398,9 @@ export function CreatorDashboardClient({
               </div>
             </div>
           </CreatorGlassCard>
+
+          {showChallenges && <WeeklyChallengeWidget />}
+          {showReferrals && <ReferFriendCard />}
         </div>
       </div>
     </CreatorPageShell>

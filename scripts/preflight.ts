@@ -10,6 +10,8 @@
  * the Next/Sentry module graph.
  */
 
+import { existsSync } from "node:fs";
+
 import {
   getStripeWebhookHandler,
   getRequiredEnvVarNames,
@@ -17,6 +19,13 @@ import {
   validateEnv,
 } from "../lib/env";
 import { resolveFlags, FEATURE_FLAG_NAMES } from "../lib/feature-flags";
+
+// tsx doesn't load Next's env files; mirror it locally so `npm run preflight`
+// validates the same config the dev server sees. Real env always wins
+// (loadEnvFile never overrides), and CI/hosts without the file are unaffected.
+if (typeof process.loadEnvFile === "function" && existsSync(".env.local")) {
+  process.loadEnvFile(".env.local");
+}
 
 const TIMEOUT_MS = 5000;
 

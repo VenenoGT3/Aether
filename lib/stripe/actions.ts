@@ -17,6 +17,7 @@ import {
   AuthorizationError,
 } from "@/lib/campaign-lifecycle";
 import { apiLog } from "@/lib/api/trace-log";
+import { sendPaymentReleasedEmail } from "@/lib/resend";
 import { requestLogger, endRequest } from "@/lib/logger";
 import {
   safeParse,
@@ -341,6 +342,31 @@ export async function releaseEscrowAction(participationId: string) {
     }
     if (completed !== true) {
       throw new NotFoundError("Participation agreement not found.");
+    }
+
+    // Best-effort payout email — the money has moved; never fail the action
+    // over a notification.
+    const influencer = Array.isArray(participation.influencer)
+      ? participation.influencer[0]
+      : participation.influencer;
+    const campaign = Array.isArray(participation.campaign)
+      ? participation.campaign[0]
+      : participation.campaign;
+    const toEmail = (influencer as { email?: string } | null)?.email;
+    if (toEmail) {
+      const brandName = user!.company_name || user!.full_name || "The brand";
+      const result = await sendPaymentReleasedEmail(
+        toEmail,
+        brandName,
+        (campaign as { title?: string } | null)?.title ?? "your campaign",
+        amount
+      );
+      if (!result.success) {
+        apiLog("warn", "email.payment_released_failed", {
+          participationId,
+          error: result.error instanceof Error ? result.error.message : String(result.error),
+        });
+      }
     }
 
     return { success: true, transferId };

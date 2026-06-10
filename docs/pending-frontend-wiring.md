@@ -9,9 +9,16 @@ When you wire one up, also remove its entry from the `ignore` list in
 
 | Feature | Backend that exists | Frontend that's missing | To connect |
 | --- | --- | --- | --- |
-| **Weekly challenges** | `claim_weekly_challenge` RPC, `challenge_claims` table, `FEATURE_ENABLE_CHALLENGES` flag, server actions in [`lib/actions/challenges.ts`](../lib/actions/challenges.ts) | [`components/weekly-challenge-widget.tsx`](../components/weekly-challenge-widget.tsx) is built but mounted on no page | Render `<WeeklyChallengeWidget />` on the creator dashboard (gate on the feature flag). |
-| **Referral rewards** | `referrals` table, `FEATURE_ENABLE_REFERRALS` flag, `getReferralOverviewAction` / `claimReferralBonusAction` in [`lib/actions/referral.ts`](../lib/actions/referral.ts). NOTE: the *apply-a-code-at-signup* half is already live (creator onboarding). | [`components/refer-friend-card.tsx`](../components/refer-friend-card.tsx) (the "your referrals + claim rewards" card) is mounted nowhere | Add the card to the creator dashboard or a rewards tab. It uses [`components/ui/status-badge.tsx`](../components/ui/status-badge.tsx), also kept for this reason. |
-| **Transactional email** | [`lib/resend.ts`](../lib/resend.ts) (sendCampaignMatchEmail, sendApplicationAcceptedEmail, sendPaymentReleasedEmail, sendNewMessageEmail) + `RESEND_API_KEY` | No code path calls any of these senders | Call the relevant sender from the matching server action / webhook (e.g. send the payment-released email from the escrow-release flow). In-app + push notifications already fire; email is additive. |
 | **Client feature-flag hook** | [`lib/use-feature-flags.ts`](../lib/use-feature-flags.ts) (reads flags in the browser) | No client component reads flags via the hook; today flags are resolved server-side only | Use the hook in any client component that needs to show/hide a flagged feature without a server round-trip. |
+| **Remaining email senders** | [`lib/resend.ts`](../lib/resend.ts) — `sendCampaignMatchEmail`, `sendApplicationAcceptedEmail`, `sendNewMessageEmail` | `sendPaymentReleasedEmail` is wired (fires from `releaseEscrowAction`); the other three senders have no trigger point yet | *Application accepted*: fires when the funding webhook flips a participation to `accepted` — that code runs in the Supabase `stripe-webhook` Edge Function (Deno), so the send has to be ported there (with `RESEND_API_KEY` as an Edge Function secret). *New message*: messages are inserted client-side ([`app/campaigns/[id]/page.tsx`](../app/campaigns/[id]/page.tsx)) and emailing every chat message would spam — route sends through a server action and add batching/unread-only logic first. *Campaign match*: no matching engine emits a "match" event yet. |
 
-_Last reviewed: 2026-06-10 (post dead-code cleanup)._
+## Wired (previously listed here)
+
+- **Weekly challenges** + **Referral rewards** — both widgets now mount on the
+  creator dashboard, gated server-side on `enable_challenges` /
+  `enable_referrals` ([`app/creator/dashboard/page.tsx`](../app/creator/dashboard/page.tsx)).
+- **Transactional email (payment released)** — sent best-effort from the
+  escrow-release flow ([`lib/stripe/actions.ts`](../lib/stripe/actions.ts));
+  requires `RESEND_API_KEY` (optional `RESEND_FROM`) or it logs and skips.
+
+_Last reviewed: 2026-06-10 (post account-deletion + widget-wiring round)._

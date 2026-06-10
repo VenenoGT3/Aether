@@ -24,6 +24,7 @@ import {
   CreatorSectionHeader,
   CreatorStatusPill,
 } from "@/components/creator/creator-ui";
+import { DeleteAccountCard } from "@/components/delete-account-card";
 import { apiGet, apiPost } from "@/lib/api/client";
 import { getSupabaseUrl } from "@/lib/env";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
@@ -489,6 +490,8 @@ export default function CreatorSettingsPage() {
               {t("Send password reset email")}
             </Button>
           </CreatorGlassCard>
+
+          <DeleteAccountCard tone="creator" />
         </div>
       </div>
     </CreatorPageShell>

@@ -112,6 +112,7 @@ Validated at build + startup by `lib/env.ts` (`validateEnv`). A missing var fail
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Build-time source-map upload (CI only). |
 | `FEATURE_ENABLE_REFERRALS` / `FEATURE_ENABLE_CHALLENGES` / `FEATURE_ENABLE_FIRST_CLIP_BONUS` | Deploy-time feature-flag overrides (`true`/`false`). See §5. |
 | `XAI_API_KEY` / `XAI_MODEL` | Optional AI campaign-brief generation; defaults to `grok-4.3` when a key is present. |
+| `RESEND_API_KEY` / `RESEND_FROM` | Transactional email (payment-released notice). Best-effort: senders log and skip when unset. `RESEND_FROM` must match the Resend-verified domain. |
 | `STRIPE_WEBHOOK_HANDLER` | `supabase` (default, recommended) or `vercel` (legacy). Must be `supabase` in prod. |
 
 ### Worker (separate host)

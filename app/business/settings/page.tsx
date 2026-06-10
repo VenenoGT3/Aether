@@ -20,6 +20,7 @@ import {
   BusinessSectionHeader,
   BusinessStatusPill,
 } from "@/components/business/business-ui";
+import { DeleteAccountCard } from "@/components/delete-account-card";
 import { startStripeOnboardingAction } from "@/lib/stripe/actions";
 import {
   getClientProfile,
@@ -281,6 +282,8 @@ export default function BusinessSettingsPage() {
               </div>
             </div>
           </BusinessGlassCard>
+
+          <DeleteAccountCard tone="business" />
         </div>
       </div>
     </BusinessPortalShell>

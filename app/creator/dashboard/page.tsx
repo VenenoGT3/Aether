@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getFeatureFlags } from "@/lib/feature-flags.server";
 import { getCreatorDashboardInitialData } from "@/lib/supabase/dashboard-initial";
 import { CreatorDashboardClient } from "./creator-dashboard-client";
 
@@ -18,6 +19,15 @@ export const dynamic = "force-dynamic";
  * follow the same initialData pattern hook by hook.
  */
 export default async function CreatorDashboardPage() {
-  const initialData = await getCreatorDashboardInitialData();
-  return <CreatorDashboardClient initialData={initialData} />;
+  const [initialData, flags] = await Promise.all([
+    getCreatorDashboardInitialData(),
+    getFeatureFlags(),
+  ]);
+  return (
+    <CreatorDashboardClient
+      initialData={initialData}
+      showChallenges={flags.enable_challenges}
+      showReferrals={flags.enable_referrals}
+    />
+  );
 }
