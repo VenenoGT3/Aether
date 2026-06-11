@@ -87,16 +87,42 @@ interface PredictResponse {
     }
 
     // Heuristics Fallback Engine
-    const spent = metrics.budget_spent || 1;
-    const totalBudget = campaign.budget || 2500;
-    const completionRatio = Math.min(1.0, spent / totalBudget);
+    const spent = metrics.budget_spent;
+    const totalBudget = campaign.budget;
+    const hasPerformanceData =
+      spent > 0 ||
+      metrics.views > 0 ||
+      metrics.clicks > 0 ||
+      metrics.conversions > 0 ||
+      metrics.attributed_value > 0;
+
+    if (!hasPerformanceData) {
+      const prediction: PredictResponse = {
+        predictedROI: 0,
+        predictedConversions: 0,
+        predictedClicks: 0,
+        predictedViews: 0,
+        predictedRevenue: 0,
+        pacingStatus: "on_track",
+        analysis:
+          "There is not enough verified performance data to project this campaign yet. Submit and sync live posts before using projection guidance.",
+        recommendations: [
+          "Approve the first eligible creator submission so tracking can begin.",
+          "Run the metrics sync after the post has public view data.",
+          "Review projections again once spend, views, clicks, or conversions are present.",
+        ],
+      };
+      return NextResponse.json({ success: true, prediction, generatedBy: "no_data" });
+    }
+
+    const completionRatio = spent > 0 ? Math.min(1.0, spent / totalBudget) : 0;
     
     // Scale current metrics to 100% completion with a logarithmic diminishing returns / learning rate boost factor
     // Scale factor: if completion ratio is very low, make it conservative.
-    const scalingFactor = completionRatio > 0.05 ? (1.0 / completionRatio) : 20.0;
+    const scalingFactor = completionRatio > 0.05 ? (1.0 / completionRatio) : 1.0;
     
     let pacingStatus: "underperforming" | "on_track" | "overperforming" = "on_track";
-    const currentROI = metrics.attributed_value / spent;
+    const currentROI = spent > 0 ? metrics.attributed_value / spent : 0;
     
     if (currentROI < 1.2) {
       pacingStatus = "underperforming";

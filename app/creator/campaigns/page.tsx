@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Calendar,
   Check,
-  DollarSign,
   FileText,
   FolderLock,
   Layers,
@@ -27,6 +26,7 @@ import {
 } from "@/components/creator/creator-ui";
 import { getClientProfile, supabase } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/translations";
+import { formatMoney } from "@/lib/currency";
 
 interface CampaignParticipation {
   participationId: string;
@@ -57,8 +57,15 @@ interface RawParticipationRow {
   applied_at?: string;
   campaign?: {
     title?: string;
+    business_id?: string;
     deliverables?: Array<{ type?: string }>;
   } | null;
+}
+
+interface BrandProfileRow {
+  user_id: string;
+  company_name?: string | null;
+  full_name?: string | null;
 }
 
 function statusTone(status: CampaignParticipation["status"]): CreatorTone {
@@ -114,17 +121,42 @@ export default function InfluencerCampaignsPage() {
 
       if (error) throw error;
 
+      const rows = (data || []) as RawParticipationRow[];
+      const businessIds = [
+        ...new Set(
+          rows
+            .map((participation) => participation.campaign?.business_id)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
+      const brandProfiles = new Map<string, BrandProfileRow>();
+      if (businessIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("user_id, company_name, full_name")
+          .in("user_id", businessIds);
+        if (profileError) throw profileError;
+        for (const profileRow of (profiles ?? []) as BrandProfileRow[]) {
+          brandProfiles.set(profileRow.user_id, profileRow);
+        }
+      }
+
       setParticipations(
-        ((data || []) as RawParticipationRow[]).map((participation) => ({
-          participationId: participation.id,
-          campaignId: participation.campaign_id,
-          title: participation.campaign?.title || "Campaign",
-          brandName: "Brand",
-          proposedPayout: Number(participation.proposed_payout),
-          status: participation.status,
-          appliedAt: participation.applied_at || new Date().toISOString(),
-          deliverableType: participation.campaign?.deliverables?.[0]?.type || "deliverable",
-        }))
+        rows.map((participation) => {
+          const brandProfile = participation.campaign?.business_id
+            ? brandProfiles.get(participation.campaign.business_id)
+            : null;
+          return {
+            participationId: participation.id,
+            campaignId: participation.campaign_id,
+            title: participation.campaign?.title || t("Untitled campaign"),
+            brandName: brandProfile?.company_name || brandProfile?.full_name || t("Verified brand"),
+            proposedPayout: Number(participation.proposed_payout),
+            status: participation.status,
+            appliedAt: participation.applied_at || "",
+            deliverableType: participation.campaign?.deliverables?.[0]?.type || t("deliverable"),
+          };
+        })
       );
     } catch (error) {
       console.error("Error loading creator campaigns:", error);
@@ -266,9 +298,11 @@ export default function InfluencerCampaignsPage() {
 
                         <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left sm:text-right">
                           <p className="creator-label text-white/35">{t("Proposed payout")}</p>
-                          <p className="mt-1 flex items-center text-xl font-bold text-white sm:justify-end">
-                            <DollarSign size={16} />
-                            {item.proposedPayout.toLocaleString()}
+                          <p className="mt-1 text-xl font-bold text-white sm:text-right">
+                            {formatMoney(item.proposedPayout, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
                           </p>
                         </div>
                       </div>

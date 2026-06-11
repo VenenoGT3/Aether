@@ -415,30 +415,48 @@ export interface ROIProjection {
 export function calculateROIProjection(
   budget: number,
   metrics: CampaignMetrics,
-  engagementRate = 4.8,
-  followers = 48500
+  engagementRate?: number,
+  followers?: number
 ): ROIProjection {
-  const spend = metrics.budget_spent || budget || 1000;
+  const spend = metrics.budget_spent || budget || 0;
   const currentROI = metrics.budget_spent > 0 ? metrics.attributed_value / metrics.budget_spent : 0;
+  const hasObservedPerformance =
+    metrics.clicks > 0 || metrics.conversions > 0 || metrics.attributed_value > 0;
 
-  const averageOrderValue = 85; // AOV
-  let estimatedConversionRate = 0.02; // 2% baseline
-
-  if (metrics.clicks > 0) {
-    estimatedConversionRate = metrics.conversions > 0 ? metrics.conversions / metrics.clicks : 0.015;
+  if (spend <= 0 || !hasObservedPerformance) {
+    return {
+      currentROI: parseFloat(currentROI.toFixed(1)),
+      projectedROI: 0,
+      lowerBound: 0,
+      upperBound: 0,
+      confidence: 0,
+    };
   }
 
-  const expectedTotalClicks = Math.max(
-    metrics.clicks,
-    Math.round(followers * (engagementRate / 100) * 0.12)
-  );
-
+  const completionRatio =
+    budget > 0 && metrics.budget_spent > 0
+      ? Math.min(Math.max(metrics.budget_spent / budget, 0.05), 1)
+      : 1;
+  const scaleFactor = Math.min(20, 1 / completionRatio);
+  const observedConversionRate =
+    metrics.clicks > 0 && metrics.conversions > 0 ? metrics.conversions / metrics.clicks : 0;
+  const observedAov =
+    metrics.conversions > 0 && metrics.attributed_value > 0
+      ? metrics.attributed_value / metrics.conversions
+      : 0;
+  const profileClickEstimate =
+    followers && engagementRate
+      ? Math.round(followers * (engagementRate / 100))
+      : 0;
+  const expectedTotalClicks = Math.max(metrics.clicks * scaleFactor, profileClickEstimate);
   const expectedConversions = Math.max(
-    metrics.conversions,
-    Math.round(expectedTotalClicks * estimatedConversionRate)
+    metrics.conversions * scaleFactor,
+    observedConversionRate > 0 ? expectedTotalClicks * observedConversionRate : 0
   );
-
-  const projectedValue = Math.max(metrics.attributed_value, expectedConversions * averageOrderValue);
+  const projectedValue = Math.max(
+    metrics.attributed_value * scaleFactor,
+    observedAov > 0 ? expectedConversions * observedAov : metrics.attributed_value
+  );
   const projectedROI = projectedValue / spend;
 
   const dataWeight = Math.min(1.0, metrics.conversions / 80);
@@ -454,6 +472,6 @@ export function calculateROIProjection(
     projectedROI: parseFloat(projectedROI.toFixed(1)),
     lowerBound,
     upperBound,
-    confidence: 90,
+    confidence: Math.round(dataWeight * 100),
   };
 }

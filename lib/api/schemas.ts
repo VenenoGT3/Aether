@@ -82,6 +82,7 @@ export const AiDiscoverBodySchema = z.object({
         title: shortText,
         description: optionalMediumText,
         businessName: z.string().trim().max(200).optional(),
+        businessAvatarUrl: z.string().url().max(2048).nullable().optional(),
         budget_total: z.number().nonnegative().max(100_000_000),
         target_niches: z.array(z.string().trim().max(80)).max(20),
         deliverables: z.array(z.unknown()).max(50).optional(),
@@ -95,6 +96,9 @@ export const AiDiscoverBodySchema = z.object({
         campaign_category: z.enum(["ugc", "clipping"]).nullable().optional(),
         cpm_rate: z.number().nonnegative().nullable().optional(),
         budget_pool: z.number().nonnegative().nullable().optional(),
+        pool_total: z.number().nonnegative().nullable().optional(),
+        pool_used: z.number().nonnegative().nullable().optional(),
+        platforms: z.array(z.string().trim().max(50)).max(10).nullable().optional(),
       })
     )
     .min(1)

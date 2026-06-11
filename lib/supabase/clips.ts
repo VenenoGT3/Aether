@@ -92,9 +92,6 @@ export interface ModerationClip {
   fraud_reasons?: string[];
 }
 
-/** Fallback CPM used only if a campaign row is missing its rate. */
-const DEFAULT_CPM = 2.5;
-
 export interface JoinResult {
   ok: boolean;
   alreadyJoined?: boolean;
@@ -213,7 +210,7 @@ export function useCreatorClips(options: { category?: CampaignCategory } = {}) {
     setClips(
       rows.map((r) => {
         const views = Number(r.current_views ?? 0);
-        const cpm = Number(r.campaign?.cpm_rate ?? DEFAULT_CPM);
+        const cpm = Number(r.campaign?.cpm_rate ?? 0);
         return {
           id: r.id,
           campaign_id: r.campaign_id,
@@ -427,7 +424,7 @@ export function useBrandModeration(campaignId?: string) {
       post_url: r.post_url,
       status: r.status,
       current_views: Number(r.current_views ?? 0),
-      creatorCpm: Number(r.campaign?.cpm_rate ?? DEFAULT_CPM),
+      creatorCpm: Number(r.campaign?.cpm_rate ?? 0),
       submitted_at: r.submitted_at ?? r.created_at,
       approval_deadline: r.approval_deadline ?? null,
       fraud_score: r.fraud_score ?? undefined,

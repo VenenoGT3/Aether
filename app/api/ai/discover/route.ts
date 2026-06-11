@@ -40,7 +40,7 @@ Campaigns to evaluate:
 ${campaigns.map(c => `- Campaign [ID: ${c.id}]: Title: "${c.title}", Description: "${c.description}", Niches: ${c.target_niches.join(", ")}, Budget: ${formatMoney(c.budget_total)}`).join("\n")}
 
 For each campaign, calculate a matchScore (integer from 50 to 100) and generate a matchingReason.
-The matchingReason must be a short, compelling smart matching suggestion grounded only in the provided creator/campaign fields (e.g. "Your tech content focus aligns with this launch", "Your 4.8% engagement rate makes you a strong candidate", "Your beauty niche matches this brand brief"). Keep the suggestion under 15 words. Do not claim past ROI, rankings, previous campaign results, or performance metrics not present in the profile.
+The matchingReason must be a short, compelling smart matching suggestion grounded only in the provided creator/campaign fields (e.g. "Your tech content focus aligns with this launch", "Your engagement rate makes you a strong candidate", "Your beauty niche matches this brand brief"). Keep the suggestion under 15 words. Do not claim past ROI, rankings, previous campaign results, or performance metrics not present in the profile.
 
 Please respond with a raw JSON array (and nothing else! Do not wrap in markdown \`\`\`json blocks, do not write any introductory or concluding text) that strictly complies with the following TypeScript interface:
 interface MatchResponse {

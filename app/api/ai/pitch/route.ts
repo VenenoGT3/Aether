@@ -47,19 +47,23 @@ Keep the pitch extremely concise, around 100-120 words. Begin directly with a co
     const campaignTitle = campaign.title || "sponsorship campaign";
     const creatorNiches = Array.isArray(creator.niches) && creator.niches.length > 0
       ? creator.niches.join(" & ")
-      : creator.niche || "Lifestyle & Tech";
-    const followersText = creator.followers ? `${(creator.followers / 1000).toFixed(1)}k` : "48k";
-    const engagementText = creator.engagement ? `${creator.engagement}%` : "4.8%";
+      : creator.niche || "your category";
+    const audienceProof = [
+      creator.followers ? `an audience of ${(creator.followers / 1000).toFixed(1)}k` : null,
+      creator.engagement ? `${creator.engagement}% engagement` : null,
+    ].filter(Boolean).join(" and ");
+    const audienceSentence = audienceProof
+      ? ` Backed by ${audienceProof}, I can turn that fit into focused creator content.`
+      : " I can turn that fit into focused creator content built around the brief.";
 
     let pitch = "";
 
     if (tone === "energetic") {
-      pitch = `Hey team! 👋\n\nI am absolutely thrilled about your "${campaignTitle}" campaign! As a creator in the ${creatorNiches} space, I live and breathe this aesthetic. My audience of ${followersText} is highly active, and with a ${engagementText} engagement rate, they're always eager to see my next recommendation. Your project fits my visual style perfectly, and I've already got some amazing concepts in mind to showcase it. Let's create something unforgettable together! Ready to jump on this and get started.`;
+      pitch = `Hey team,\n\nI am excited about your "${campaignTitle}" campaign. As a creator in the ${creatorNiches} space, I understand how to package this kind of brief into content that feels natural and easy to act on.${audienceSentence} I already have concepts in mind to showcase the offer clearly and keep the content native to the platform. Ready to jump in and get started.`;
     } else if (tone === "creative") {
-      pitch = `Hello brand team,\n\nEvery piece of content I create is a new story, and your campaign "${campaignTitle}" is the perfect backdrop for my next visual narrative. My work in ${creatorNiches} blends aesthetic styling with authentic storytelling. Backed by ${followersText} loyal supporters and a strong ${engagementText} engagement rate, I know exactly how to craft a campaign that feels organic and visually captivating. I'd love to collaborate on this project and bring a unique creative perspective to your brand. Let's build something beautiful!`;
+      pitch = `Hello brand team,\n\nEvery piece of content I create starts with a clear story, and "${campaignTitle}" gives me a strong creative direction to build from. My work in ${creatorNiches} blends visual framing with authentic delivery.${audienceSentence} I would love to bring a distinct creator perspective to the campaign and produce content that feels polished without losing the native feel of the platform.`;
     } else {
-      // Default: professional
-      pitch = `Hi team,\n\nI came across your campaign "${campaignTitle}" and immediately saw a perfect alignment. As a creator specializing in ${creatorNiches}, my content focuses heavily on high-quality, aesthetic workspace setups and technology reviews. With an audience of ${followersText} highly engaged followers (averaging ${engagementText} engagement), I produce polished content that drives real trust. For this campaign, I'd love to deliver premium deliverables that showcase your product in a clean, professional light. Looking forward to discussing how we can collaborate!`;
+      pitch = `Hi team,\n\nI came across your campaign "${campaignTitle}" and saw a clear alignment with my content in ${creatorNiches}.${audienceSentence} For this campaign, I would focus on a clean concept, a strong opening hook, and a delivery style that makes the product easy to understand. I would be glad to collaborate and create content that supports the brief with a professional creator-led execution.`;
     }
 
     return NextResponse.json({ pitch, generatedBy: "fallback_template" });

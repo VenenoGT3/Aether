@@ -16,7 +16,7 @@ import {
   Send, 
   FileCheck2, 
   ArrowLeft,
-  DollarSign,
+  Wallet,
   AlertCircle,
   Clock,
   ExternalLink,
@@ -109,6 +109,7 @@ interface Annotation {
 }
 
 interface Submission {
+  postId: string;
   version: number;
   submittedAt: string;
   postUrl: string;
@@ -279,6 +280,18 @@ interface RawMessage {
   is_read: boolean;
 }
 
+interface AnnotationRow {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author_role: "business" | "influencer" | "admin" | string;
+  text: string;
+  x: number | string;
+  y: number | string;
+  resolved: boolean;
+  created_at: string;
+}
+
 /** Map a DB participation status onto the workspace participant status. */
 function mapParticipantStatus(status: string, hasSubmissions: boolean): Participant["status"] {
   if (status === "completed") return "released";
@@ -375,6 +388,27 @@ function enrichMessage(m: RawMessage, viewer: Profile, otherName: string, otherA
     content: m.content,
     created_at: m.created_at,
     is_read: m.is_read,
+  };
+}
+
+function mapAnnotation(
+  row: AnnotationRow,
+  viewer: Profile,
+  profilesById: Record<string, ProfileLite>
+): Annotation {
+  const profile = profilesById[row.author_id];
+  const authorRole: Annotation["authorRole"] = row.author_role === "influencer" ? "influencer" : "business";
+  const fallbackName = authorRole === "business" ? "Brand" : "Creator";
+
+  return {
+    id: row.id,
+    authorName: row.author_id === viewer.user_id ? viewer.full_name : profile?.full_name || fallbackName,
+    authorRole,
+    text: row.text,
+    x: Number(row.x),
+    y: Number(row.y),
+    resolved: Boolean(row.resolved),
+    createdAt: row.created_at,
   };
 }
 
@@ -689,33 +723,26 @@ export default function CampaignDetailPage() {
     if (!text.trim() || !user || !activeParticipantId) return;
 
     setChatInput("");
-    // eslint-disable-next-line react-hooks/purity -- one-off id generated in an event handler, not during render
-    const messageId = `msg_${Math.random().toString(36).substr(2, 9)}`;
-
-    const myMsg: ChatMessage = {
-      id: messageId,
-      sender_id: user.user_id,
-      sender_name: user.full_name,
-      sender_avatar: user.avatar_url,
-      role: user.role,
-      content: text,
-      created_at: new Date().toISOString(),
-      is_read: false
-    };
-
-    const updatedMsgs = [...chatMessages, myMsg];
-    setChatMessages(updatedMsgs);
 
     // Supabase live insert; the realtime subscription delivers replies.
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("messages")
         .insert({
           participation_id: activeParticipantId,
           sender_id: user.user_id,
           content: text
-        });
+        })
+        .select("id, sender_id, content, created_at, is_read")
+        .single();
       if (error) throw error;
+      if (data) {
+        setChatMessages((prev) =>
+          prev.some((message) => message.id === data.id)
+            ? prev
+            : [...prev, enrichMessage(data as RawMessage, user, "", "")]
+        );
+      }
     } catch (err) {
       toast.error("Failed to deliver message: " + (err instanceof Error ? err.message : String(err)));
     }
@@ -779,7 +806,11 @@ export default function CampaignDetailPage() {
 
     const rows = (parts as ParticipationRow[] | null) ?? [];
 
-    const [clipResult, earningResult] = await Promise.all([
+    const postIds = [
+      ...new Set(rows.flatMap((row) => (row.posts ?? []).map((post) => post.id)).filter(Boolean)),
+    ];
+
+    const [clipResult, earningResult, annotationResult] = await Promise.all([
       supabase
         .from("clips")
         .select(
@@ -794,6 +825,13 @@ export default function CampaignDetailPage() {
         )
         .eq("campaign_id", campaignId)
         .order("accrued_at", { ascending: false }),
+      postIds.length > 0
+        ? supabase
+            .from("post_annotations")
+            .select("id, post_id, author_id, author_role, text, x, y, resolved, created_at")
+            .in("post_id", postIds)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (clipResult.error) {
@@ -802,23 +840,36 @@ export default function CampaignDetailPage() {
     if (earningResult.error) {
       console.error("Failed to load campaign earnings:", earningResult.error);
     }
+    if (annotationResult.error) {
+      console.error("Failed to load post annotations:", annotationResult.error);
+    }
 
     const clipRows = ((clipResult.data ?? []) as CampaignClipRow[]);
     const earningRows = ((earningResult.data ?? []) as CampaignEarningRow[]);
+    const annotationRows = ((annotationResult.data ?? []) as AnnotationRow[]);
+    const annotationsByPost = new Map<string, AnnotationRow[]>();
+    for (const annotation of annotationRows) {
+      annotationsByPost.set(annotation.post_id, [
+        ...(annotationsByPost.get(annotation.post_id) ?? []),
+        annotation,
+      ]);
+    }
 
     // Resolve creator display info (RLS exposes applicant profiles to the brand).
-    const influencerIds = [
+    const profileIds = [
       ...new Set([
+        c.business_id,
         ...rows.map((r) => r.influencer_id),
         ...clipRows.map((clip) => clip.creator_id),
+        ...annotationRows.map((annotation) => annotation.author_id),
       ].filter(Boolean)),
     ];
     const profilesById: Record<string, ProfileLite> = {};
-    if (influencerIds.length > 0) {
+    if (profileIds.length > 0) {
       const { data: profs } = await supabase
         .from("profiles")
         .select("user_id, full_name, avatar_url, social_handles")
-        .in("user_id", influencerIds);
+        .in("user_id", profileIds);
       for (const p of (profs as ProfileLite[] | null) ?? []) {
         profilesById[p.user_id] = p;
       }
@@ -832,6 +883,7 @@ export default function CampaignDetailPage() {
         .slice()
         .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime())
         .map((post, i) => ({
+          postId: post.id,
           version: i + 1,
           submittedAt: post.submitted_at,
           postUrl: post.post_url,
@@ -845,7 +897,9 @@ export default function CampaignDetailPage() {
             ctr: 0,
             roi: 0,
           },
-          annotations: [],
+          annotations: (annotationsByPost.get(post.id) ?? []).map((annotation) =>
+            mapAnnotation(annotation, activeUser, profilesById)
+          ),
         }));
       return {
         id: r.id,
@@ -1012,10 +1066,20 @@ export default function CampaignDetailPage() {
     loadCampaign();
   }, [loadCampaign]);
 
-  // In-memory campaign-state update for ephemeral UI (pin annotations have no
-  // backing table yet). Server-backed mutations re-fetch via loadCampaign().
-  const persistCampaignState = (updatedCampaign: CampaignDetailState) => {
-    setCampaign(updatedCampaign);
+  const savePostAnnotation = async (submission: Submission, text: string, x: number, y: number) => {
+    if (!user) throw new Error("Authentication required.");
+    const { error } = await supabase
+      .from("post_annotations")
+      .insert({
+        post_id: submission.postId,
+        author_id: user.user_id,
+        author_role: user.role,
+        text: text.trim(),
+        x,
+        y,
+      });
+    if (error) throw error;
+    await loadCampaign();
   };
 
   if (loading) {
@@ -1258,7 +1322,7 @@ export default function CampaignDetailPage() {
   };
 
   // BUSINESS: Request changes / Reject Draft
-  const handleRejectDraft = () => {
+  const handleRejectDraft = async () => {
     if (!selectedParticipant || !currentSubmission) return;
     
     // Prompt brand for a change comment
@@ -1269,44 +1333,14 @@ export default function CampaignDetailPage() {
       return;
     }
 
-    // Add a coordinate-less or center pin annotation for instructions
-    const newAnn: Annotation = {
-      id: "ann_" + Math.random().toString(36).substring(7),
-      authorName: user.full_name,
-      authorRole: "business",
-      text: commentText,
-      x: 50,
-      y: 50,
-      resolved: false,
-      createdAt: new Date().toISOString()
-    };
-
-    const updatedParticipants = campaign.participants.map(p => {
-      if (p.id === selectedParticipant.id) {
-        const updatedSubmissions = p.submissions.map(s => {
-          if (s.version === selectedVersionNum) {
-            return { ...s, annotations: [...s.annotations, newAnn] };
-          }
-          return s;
-        });
-        return {
-          ...p,
-          status: "rejected" as const, // or keep in escrowed to let them upload
-          submissions: updatedSubmissions
-        };
-      }
-      return p;
-    });
-
-    const updated = {
-      ...campaign,
-      participants: updatedParticipants
-    };
-
-    persistCampaignState(updated);
-    toast.warning("Change request sent to Creator", {
-      description: "Draft status updated to 'Changes Requested'."
-    });
+    try {
+      await savePostAnnotation(currentSubmission, commentText, 50, 50);
+      toast.warning("Change request saved", {
+        description: "The creator can now see your review feedback on this submission."
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save review feedback.");
+    }
   };
 
   // BUSINESS: Approve and Release payout
@@ -1358,81 +1392,35 @@ export default function CampaignDetailPage() {
   };
 
   // Save the dropped pin comment
-  const handleSavePinComment = (e: React.FormEvent) => {
+  const handleSavePinComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPinComment.trim() || !activeTempPin || !selectedParticipant || !currentSubmission) return;
 
-    const newAnn: Annotation = {
-      id: "ann_" + Math.random().toString(36).substring(7),
-      authorName: user.full_name,
-      authorRole: user.role,
-      text: newPinComment,
-      x: activeTempPin.x,
-      y: activeTempPin.y,
-      resolved: false,
-      createdAt: new Date().toISOString()
-    };
-
-    const updatedParticipants = campaign.participants.map(p => {
-      if (p.id === selectedParticipant.id) {
-        const updatedSubmissions = p.submissions.map(s => {
-          if (s.version === selectedVersionNum) {
-            return {
-              ...s,
-              annotations: [...s.annotations, newAnn]
-            };
-          }
-          return s;
-        });
-        return {
-          ...p,
-          submissions: updatedSubmissions
-        };
-      }
-      return p;
-    });
-
-    const updated = {
-      ...campaign,
-      participants: updatedParticipants
-    };
-
-    persistCampaignState(updated);
-    setNewPinComment("");
-    setActiveTempPin(null);
-    setIsPinningMode(false);
-    toast.success("Feedback pin dropped!");
+    try {
+      await savePostAnnotation(currentSubmission, newPinComment, activeTempPin.x, activeTempPin.y);
+      setNewPinComment("");
+      setActiveTempPin(null);
+      setIsPinningMode(false);
+      toast.success("Feedback pin saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save feedback pin.");
+    }
   };
 
   // Resolve / Unresolve Pin Annotation
-  const handleToggleResolvePin = (pinId: string) => {
+  const handleToggleResolvePin = async (pinId: string) => {
     if (!selectedParticipant || !currentSubmission) return;
-
-    const updatedParticipants = campaign.participants.map(p => {
-      if (p.id === selectedParticipant.id) {
-        const updatedSubmissions = p.submissions.map(s => {
-          if (s.version === selectedVersionNum) {
-            const updatedAnns = s.annotations.map(a => {
-              if (a.id === pinId) {
-                return { ...a, resolved: !a.resolved };
-              }
-              return a;
-            });
-            return { ...s, annotations: updatedAnns };
-          }
-          return s;
-        });
-        return { ...p, submissions: updatedSubmissions };
-      }
-      return p;
-    });
-
-    const updated = {
-      ...campaign,
-      participants: updatedParticipants
-    };
-
-    persistCampaignState(updated);
+    const annotation = currentSubmission.annotations.find((pin) => pin.id === pinId);
+    if (!annotation) return;
+    const { error } = await supabase
+      .from("post_annotations")
+      .update({ resolved: !annotation.resolved })
+      .eq("id", pinId);
+    if (error) {
+      toast.error(error.message || "Could not update feedback pin.");
+      return;
+    }
+    await loadCampaign();
   };
 
   // Render Status Timeline Steps
@@ -1616,7 +1604,7 @@ export default function CampaignDetailPage() {
                   <div className="text-right">
                     <span className="text-[10px] uppercase text-muted-foreground block font-bold">{t("Total Budget")}</span>
                     <span className="text-xl font-extrabold text-foreground flex items-center justify-end">
-                      <DollarSign size={16} />{campaign.budget.toLocaleString()}
+                      {formatMoney(campaign.budget, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </span>
                   </div>
                 </div>
@@ -1625,16 +1613,20 @@ export default function CampaignDetailPage() {
                   <div className="p-4 rounded-2xl bg-[#007AFF]/10 border border-[#007AFF]/15">
                     <span className="text-[10px] uppercase text-[#007AFF] font-bold block mb-1">{t("Escrowed Balance")}</span>
                     <span className="text-lg font-bold text-foreground flex items-center">
-                      <DollarSign size={15} />
-                      {campaign.status !== "open" && campaign.status !== "applied" ? campaign.budget.toLocaleString() : "0"}
+                      {formatMoney(
+                        campaign.status !== "open" && campaign.status !== "applied" ? campaign.budget : 0,
+                        { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+                      )}
                     </span>
                     <p className="text-[9px] text-muted-foreground mt-1">{t("Locked in Stripe Connect escrow ledger.")}</p>
                   </div>
                   <div className="p-4 rounded-2xl bg-[#34C759]/10 border border-[#34C759]/15">
                     <span className="text-[10px] uppercase text-[#34C759] font-bold block mb-1">{t("Released Payouts")}</span>
                     <span className="text-lg font-bold text-foreground flex items-center">
-                      <DollarSign size={15} />
-                      {campaign.status === "released" ? campaign.budget.toLocaleString() : "0"}
+                      {formatMoney(campaign.status === "released" ? campaign.budget : 0, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
                     </span>
                     <p className="text-[9px] text-muted-foreground mt-1">{t("Transferred directly to influencer connected bank account.")}</p>
                   </div>
@@ -1677,8 +1669,8 @@ export default function CampaignDetailPage() {
     const roiProjection = calculateROIProjection(
       campaign.budget,
       metrics,
-      user?.engagement_rate || 4.8,
-      user?.followers || 48500
+      user?.engagement_rate,
+      user?.followers
     );
 
     // Generate Confidence Narrowing Data
@@ -2374,7 +2366,7 @@ export default function CampaignDetailPage() {
                         <h4 className="text-lg font-black tracking-wider mt-1">{user.full_name.split(" ")[0].toUpperCase()}15</h4>
                       </div>
                       <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-md">
-                        <DollarSign size={16} />
+                        <Wallet size={16} />
                       </div>
                     </div>
 
@@ -2449,7 +2441,7 @@ export default function CampaignDetailPage() {
             <div>
               <span className="text-[9px] uppercase text-muted-foreground font-bold block">{t("Total Contract Budget")}</span>
               <span className="text-2xl font-black text-foreground flex items-center justify-start mt-0.5">
-                <DollarSign size={20} />{campaign.budget.toLocaleString()}
+                {formatMoney(campaign.budget, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             </div>
             
@@ -2460,7 +2452,7 @@ export default function CampaignDetailPage() {
                 disabled={actionLoading}
                 className="rounded-2xl bg-[#FF9500] hover:bg-[#e08400] text-white text-xs py-3.5 px-6 cursor-pointer font-bold shadow-sm flex items-center gap-1.5"
               >
-                {t("Accept & Fund Escrow")} <DollarSign size={14} />
+                {t("Accept & Fund Escrow")} <Wallet size={14} />
               </Button>
             )}
           </div>
@@ -2866,7 +2858,7 @@ export default function CampaignDetailPage() {
                 disabled={actionLoading}
                 className="w-full rounded-2xl bg-[#FF9500] hover:bg-[#e08400] text-white text-xs py-3.5 font-bold shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                {t("Accept & Fund Escrow")} <DollarSign size={14} />
+                {t("Accept & Fund Escrow")} <Wallet size={14} />
               </Button>
             </div>
           )}

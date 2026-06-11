@@ -19,6 +19,35 @@ const DISCOVER_TTL_MS = (() => {
   return Number.isFinite(raw) && raw >= 0 ? raw : 30_000;
 })();
 
+interface DiscoveryCampaignRow {
+  id: string;
+  title: string;
+  description: string | null;
+  budget_total: number | string;
+  target_niches: string[];
+  deliverables: unknown;
+  timeline: unknown;
+  campaign_type: "fixed" | "performance" | string;
+  campaign_category: "ugc" | "clipping" | null;
+  brand_cpm_rate: number | string | null;
+  cpm_rate: number | string | null;
+  budget_pool: number | string | null;
+  available_pool: number | string | null;
+  budget_reserved: number | string | null;
+  budget_paid: number | string | null;
+  platforms: string[] | null;
+  category_meta?: Record<string, unknown> | null;
+  content_rules?: Record<string, unknown> | null;
+  business_id: string;
+  created_at: string;
+}
+
+interface BrandPublicProfileRow {
+  business_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 export const POST = () => methodNotAllowed(["GET"]);
 
 export async function GET(request: Request): Promise<Response> {
@@ -49,22 +78,6 @@ async function handleSearch(request: Request): Promise<Response> {
   const supabase = await createClient();
 
   const runQuery = async () => {
-    let query = supabase
-      .from("campaigns")
-      .select(
-        "id, title, description, budget_total, target_niches, status, business_id, created_at, campaign_type, campaign_category, brand_cpm_rate, cpm_rate, budget_pool, available_pool, budget_reserved, budget_paid, platforms",
-        { count: "exact" }
-      )
-      .eq("status", "open")
-      .eq("campaign_type", "performance")
-      .contains("platforms", ["youtube"])
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
-    if (niche) query = query.contains("target_niches", [niche]);
-    if (category) query = query.eq("campaign_category", category);
-
     // Breaker on this READ path only — safe to fail open because discovery is
     // cache-backed (stale data is served while Supabase recovers). Money-path
     // Supabase calls deliberately do NOT use a breaker: the DB is the system of
@@ -76,11 +89,58 @@ async function handleSearch(request: Request): Promise<Response> {
       throw new Error("supabase-read circuit open");
     }
     try {
+      let query = supabase
+        .from("campaigns")
+        .select(
+          "id, title, description, budget_total, target_niches, deliverables, timeline, status, business_id, created_at, campaign_type, campaign_category, brand_cpm_rate, cpm_rate, budget_pool, available_pool, budget_reserved, budget_paid, platforms, category_meta, content_rules",
+          { count: "exact" }
+        )
+        .eq("status", "open")
+        .eq("campaign_type", "performance")
+        .contains("platforms", ["youtube"])
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
+      if (niche) query = query.contains("target_niches", [niche]);
+      if (category) query = query.eq("campaign_category", category);
+
       const { data, error, count } = await query;
-      // Throw so a transient DB error is NOT cached as an empty result.
       if (error) throw new Error(error.message || "campaign search failed");
+
+      const rows = (data ?? []) as DiscoveryCampaignRow[];
+      const businessIds = [
+        ...new Set(rows.map((campaign) => campaign.business_id).filter(Boolean)),
+      ];
+      const brandProfiles = new Map<string, BrandPublicProfileRow>();
+      if (businessIds.length > 0) {
+        const { data: brandRows, error: brandError } = await supabase
+          .from("brand_public_profiles")
+          .select("business_id, display_name, avatar_url")
+          .in("business_id", businessIds);
+
+        // The table is created by the latest migration. Until that migration is
+        // applied in every environment, discovery still returns campaign rows.
+        if (brandError && brandError.code !== "42P01") {
+          throw new Error(brandError.message || "brand profile lookup failed");
+        }
+        for (const brand of (brandRows ?? []) as BrandPublicProfileRow[]) {
+          brandProfiles.set(brand.business_id, brand);
+        }
+      }
+
       breaker.recordSuccess();
-      return { campaigns: data ?? [], total: count ?? 0 };
+      return {
+        campaigns: rows.map((campaign) => {
+          const brand = brandProfiles.get(campaign.business_id);
+          return {
+            ...campaign,
+            businessName: brand?.display_name ?? null,
+            businessAvatarUrl: brand?.avatar_url ?? null,
+          };
+        }),
+        total: count ?? 0,
+      };
     } catch (err) {
       breaker.recordFailure(err);
       throw err;

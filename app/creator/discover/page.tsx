@@ -51,6 +51,7 @@ interface Campaign {
   title: string;
   description: string;
   businessName: string;
+  businessAvatarUrl?: string | null;
   budget_total: number;
   target_niches: string[];
   deliverables: { type: string; quantity: number; description?: string }[];
@@ -85,6 +86,9 @@ interface RawSearchCampaign {
   available_pool?: number | null;
   budget_reserved?: number | null;
   budget_paid?: number | null;
+  businessName?: string | null;
+  businessAvatarUrl?: string | null;
+  category_meta?: Record<string, unknown> | null;
 }
 
 type CreatorProfileForAi = Profile & {
@@ -95,19 +99,31 @@ type CreatorProfileForAi = Profile & {
 };
 
 function daysLeft(timeline?: { end_date: string }) {
-  if (!timeline?.end_date) return 30;
+  if (!timeline?.end_date) return 0;
   const diff = new Date(timeline.end_date).getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / 86_400_000));
 }
 
 function campaignLogo(campaign: Campaign) {
-  const niche = campaign.target_niches[0]?.toLowerCase() || "";
-  if (niche.includes("fashion")) return "FW";
-  if (niche.includes("food")) return "FD";
-  if (niche.includes("beauty")) return "BT";
-  if (niche.includes("fitness")) return "FT";
-  if (niche.includes("travel")) return "TR";
-  return "AE";
+  const source = campaign.businessName || campaign.title;
+  const words = source
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-zA-Z0-9]/g, ""))
+    .filter(Boolean);
+  if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  return (words[0]?.slice(0, 2) || "BR").toUpperCase();
+}
+
+function campaignHeroUrl(campaign: RawSearchCampaign): string {
+  const meta = campaign.category_meta ?? {};
+  const candidates = [
+    meta.hero_image_url,
+    meta.cover_image_url,
+    meta.thumbnail_url,
+    campaign.businessAvatarUrl,
+  ];
+  const found = candidates.find((value): value is string => typeof value === "string" && value.startsWith("http"));
+  return found ?? "";
 }
 
 function performanceSubmissionHref(campaign: Campaign) {
@@ -188,18 +204,15 @@ export default function DiscoverPage() {
         id: c.id,
         title: c.title,
         description: c.description || "",
-        businessName: "Brand",
+        businessName: c.businessName || t("Verified brand"),
+        businessAvatarUrl: c.businessAvatarUrl ?? null,
         budget_total: Number(c.budget_total),
         target_niches: c.target_niches || [],
         deliverables: c.deliverables || [],
         timeline: c.timeline || { start_date: "", end_date: "" },
         payout_speed: c.campaign_type === "performance" ? "Pay per view" : "Instant Escrow",
         days_left: daysLeft(c.timeline),
-        image_url: c.target_niches.includes("Tech")
-          ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80"
-          : c.target_niches.includes("Fashion")
-            ? "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=900&q=80"
-            : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=900&q=80",
+        image_url: campaignHeroUrl(c),
         campaign_type: c.campaign_type,
         campaign_category: c.campaign_category,
         platforms: c.platforms,
@@ -522,10 +535,14 @@ export default function DiscoverPage() {
                     onClick={() => openApplyModal(campaign)}
                     className="creator-glass group relative min-h-64 overflow-hidden rounded-2xl text-left transition-all hover:-translate-y-1 hover:border-white/15"
                   >
-                    <div
-                      className="absolute inset-0 bg-cover bg-center opacity-55 transition-transform duration-700 group-hover:scale-105"
-                      style={{ backgroundImage: `url(${campaign.image_url})` }}
-                    />
+                    {campaign.image_url ? (
+                      <div
+                        className="absolute inset-0 bg-cover bg-center opacity-55 transition-transform duration-700 group-hover:scale-105"
+                        style={{ backgroundImage: `url(${campaign.image_url})` }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(77,142,255,0.32),transparent_34%),linear-gradient(135deg,rgba(11,19,42,0.96),rgba(19,16,42,0.92))]" />
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[rgba(7,13,30,0.96)] via-[rgba(7,13,30,0.68)] to-[rgba(7,13,30,0.10)]" />
                     <div className="relative z-10 flex h-full min-h-64 flex-col justify-between p-5">
                       <div className="flex items-start justify-between gap-3">
@@ -646,13 +663,26 @@ export default function DiscoverPage() {
                       className="creator-glass group flex min-h-[360px] flex-col overflow-hidden rounded-2xl transition-all hover:-translate-y-1 hover:border-white/15"
                     >
                       <div className="relative h-28 overflow-hidden border-b border-white/5">
-                        <div
-                          className="absolute inset-0 bg-cover bg-center opacity-50 transition-transform duration-500 group-hover:scale-105"
-                          style={{ backgroundImage: `url(${campaign.image_url})` }}
-                        />
+                        {campaign.image_url ? (
+                          <div
+                            className="absolute inset-0 bg-cover bg-center opacity-50 transition-transform duration-500 group-hover:scale-105"
+                            style={{ backgroundImage: `url(${campaign.image_url})` }}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(77,142,255,0.28),transparent_36%),linear-gradient(135deg,rgba(13,23,50,0.95),rgba(22,18,48,0.94))]" />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-[rgba(7,13,30,0.96)] to-transparent" />
                         <div className="absolute left-4 top-4 flex size-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-sm font-black text-white">
-                          {campaignLogo(campaign)}
+                          {campaign.businessAvatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- arbitrary external brand avatars are not in next/image config.
+                            <img
+                              src={campaign.businessAvatarUrl}
+                              alt=""
+                              className="size-full rounded-xl object-cover"
+                            />
+                          ) : (
+                            campaignLogo(campaign)
+                          )}
                         </div>
                         <div className="absolute bottom-3 left-4 right-4">
                           <p className="creator-label text-white/35">{campaign.businessName}</p>
