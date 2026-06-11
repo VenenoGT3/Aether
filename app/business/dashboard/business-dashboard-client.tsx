@@ -849,7 +849,7 @@ export function BusinessDashboardClient({
                       axisLine={false}
                       stroke="var(--business-muted)"
                       fontSize={11}
-                      tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+                      tickFormatter={(value) => money(Number(value))}
                     />
                     <Tooltip
                       contentStyle={{

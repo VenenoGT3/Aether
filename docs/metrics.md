@@ -37,8 +37,8 @@ To enable automatic social scraping in production, follow these steps to sign up
 ### Step 2: Pricing & Free Trial
 - **Free Tier:** All new accounts receive **50 free scraping credits** upon email verification.
 - **Pricing Model:** Pay-as-you-go credit-based structure. Most endpoints cost exactly **1 credit per request**.
-  - 1,000 credits = $10.00
-  - 10,000 credits = $75.00
+  - 1,000 credits = €10.00
+  - 10,000 credits = €75.00
   - Credits **never expire**, meaning there are no monthly subscription minimums.
 
 ### Step 3: Retrieve the API Key
@@ -86,7 +86,7 @@ Live ROI calculations are computed dynamically using:
 $$\text{Engagement Rate} = \frac{\text{likes} + \text{comments} + \text{shares} + \text{saves}}{\text{views}} \times 100$$
 $$\text{Attributed Clicks} = \text{views} \times 0.05 \quad (5\% \text{ clickthrough baseline})$$
 $$\text{Attributed Sales} = \text{Attributed Clicks} \times 0.02 \quad (2\% \text{ sales conversion baseline})$$
-$$\text{Attributed Value} = \text{Attributed Sales} \times \$85 \quad (\$85 \text{ Average Order Value (AOV)})$$
+$$\text{Attributed Value} = \text{Attributed Sales} \times €85 \quad (€85 \text{ Average Order Value (AOV)})$$
 $$\text{Live ROI} = \frac{\text{Attributed Value}}{\text{Contract Payout}}$$
 
 All values sync instantly to `participations.performance_data` in the database, allowing both brands and creators to view campaign ROI in real time.

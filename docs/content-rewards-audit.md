@@ -146,9 +146,9 @@ with flag and disqualify thresholds; earnings reversal on blocked clips;
 brand notification on auto-disqualification.
 
 **Money**: 48h holdback then earnings become withdrawable; creator-initiated
-withdrawals (min $10) with fee; Stripe **Connect Express** transfers,
+withdrawals (min €10) with fee; Stripe **Connect Express** transfers,
 idempotency keys, unknown-outcome reconciler, payout ledger with unique
-constraints. **Hardcoded `usd`.**
+constraints. **EUR-first platform currency.**
 
 **Platform**: Next.js 16 + Supabase (RLS everywhere, hardened SECURITY
 DEFINER RPCs) + standalone BullMQ worker + Stripe + edge functions; EN/IT
@@ -169,9 +169,9 @@ campaign discovery (xAI); E2E + 246 unit tests; alert webhook.
 | Submission floor/cap | Per-submission min payout; **per-video max cap** | Per-creator cap + pool caps; **no per-video cap, no min-payout floor** | **Gap** |
 | Flat-fee bonus | Yes (fixed $ per approved submission) | No | **Gap** |
 | Approval flow | AI review → 48h auto-approve → flagged state; rejection reasons + ban button | Manual approve/reject + overdue auto-approve; fraud auto-disqualify | **Partial gap** (no flagged-for-review state, no structured rejection reasons/ban UX) |
-| Earnings cadence | Automatic every 7 days after verification | 48h holdback → **manual** withdrawal (min $10) | **Gap (UX)** — CR feels "I get paid weekly", Aether feels "I must claim" |
-| Withdrawal rails | Whop balance → ACH/instant/crypto/Venmo (fee schedule) | Stripe Connect Express transfer (regulated, KYC'd) | Different philosophies; Aether is the *compliant-in-EU* answer but needs **EUR + SEPA** |
-| Currency | Brand-selectable | **USD hardcoded** | **Gap (critical for EU)** |
+| Earnings cadence | Automatic every 7 days after verification | 48h holdback → **manual** withdrawal (min €10) | **Gap (UX)** — CR feels "I get paid weekly", Aether feels "I must claim" |
+| Withdrawal rails | Whop balance → ACH/instant/crypto/Venmo (fee schedule) | Stripe Connect Express transfer (regulated, KYC'd) | Different philosophies; Aether is the *compliant-in-EU* answer and should add **SEPA polish** |
+| Currency | Brand-selectable | **EUR-first** | **Improved** — multi-currency can come later |
 | Discovery UX | Budget progress bars, participant counts, paid-so-far, verified badges, sort by most-paid-out | Creator discover page + AI matching; no public budget-burn social proof | **Gap** |
 | Campaign requirements | Free-text requirements + asset links + audio rules + tutorial video | Deliverables/content_rules JSON exist; thinner authoring & enforcement UX | **Partial gap** |
 | Multi-account | Multiple linked accounts per platform | Multiple YouTube channels linkable | Parity (YouTube), gap elsewhere |
@@ -195,10 +195,10 @@ campaign discovery (xAI); E2E + 246 unit tests; alert webhook.
    `token-crypto` + `SOCIAL_TOKEN_ENCRYPTION_KEY` path). Instagram requires
    the IG Graph API (Business/Creator accounts) — higher friction, plan as
    phase 2 of this item.
-2. **EUR end-to-end.** Stripe transfers hardcode `usd`
-   ([connect.ts:95](../lib/stripe/connect.ts)); campaign budgets have no
-   currency column. A European platform must price, fund, accrue, and pay in
-   EUR (multi-currency later; EUR first).
+2. **Multi-currency later; EUR first now.** Stripe payment and transfer paths
+   use the shared platform currency helper. Campaign budgets still have no
+   currency column, so the current product assumption is EUR-only until
+   multi-currency accounting is deliberately added.
 3. **Automatic payout cadence.** Keep manual withdrawal, but add a CR-style
    "verified earnings auto-pay weekly" default (the payout-batch worker
    already supports `WORKER_AUTO_PAYOUTS=true` — productize it: per-creator
@@ -281,8 +281,9 @@ campaign discovery (xAI); E2E + 246 unit tests; alert webhook.
 
 ## 6. Fixes to Aether surfaced by this comparison
 
-1. **Currency hardcoding** (`usd` in `lib/stripe/connect.ts`, USD formatting
-   sprinkled in UI) — blocker, see P0-2.
+1. **Currency hardcoding** — resolved for the current EUR-only beta via shared
+   platform currency formatting and Stripe currency helpers; revisit when
+   adding true multi-currency.
 2. **Per-video accounting**: earnings accrue per clip already, but there's no
    per-clip cap or floor — schema + `record_clip_earning` change, see P1-5.
 3. **`account.updated` webhook sets `profiles.onboarded = true`** — under a

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type BadgeTone } from "@/components/ui/status-badge";
 import { useTranslation } from "@/lib/translations";
+import { formatMoney } from "@/lib/currency";
 import {
   getReferralOverviewAction,
   claimReferralBonusAction,
@@ -27,7 +28,7 @@ import type { ReferralOverview, ReferralStatus } from "@/types/referral";
 const appleSpring = { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.8 };
 const ACCENT = "#5856D6"; // purple — referrals
 const money = (n: number) =>
-  `$${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  formatMoney(Number(n || 0), { maximumFractionDigits: 2 });
 
 const STATUS_TONE: Record<ReferralStatus, BadgeTone> = {
   pending: "neutral",

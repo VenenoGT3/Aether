@@ -1,5 +1,7 @@
 import "server-only";
 
+import { formatMoney } from "@/lib/currency";
+
 // Verified sender (launch checklist: align with the Resend-verified domain).
 function fromAddress(): string {
   return process.env.RESEND_FROM?.trim() || "Aether <notifications@aether.co>";
@@ -58,6 +60,7 @@ export async function sendEmail({
 // Transactional Helpers
 export async function sendCampaignMatchEmail(toEmail: string, brandName: string, campaignTitle: string, payout: number) {
   const subject = `New Campaign Match: ${campaignTitle} by ${brandName}`;
+  const formattedPayout = formatMoney(payout);
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1d1d1f; line-height: 1.5;">
       <h2 style="font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px;">New Campaign Match!</h2>
@@ -67,7 +70,7 @@ export async function sendCampaignMatchEmail(toEmail: string, brandName: string,
         <span style="font-size: 10px; font-weight: 700; color: #007aff; text-transform: uppercase; letter-spacing: 1px;">Sponsor</span>
         <h3 style="font-size: 18px; font-weight: 600; margin-top: 4px; margin-bottom: 4px; color: #1d1d1f;">${brandName}</h3>
         <p style="font-size: 16px; font-weight: 700; margin-top: 0; margin-bottom: 16px; color: #1d1d1f;">${campaignTitle}</p>
-        <p style="font-size: 13px; color: #515154; margin: 0;">We identified that your niche profile and target audience overlap extensively with this launch. The brand is offering a secure Stripe escrow payout of <strong>$${payout.toLocaleString()} USD</strong>.</p>
+        <p style="font-size: 13px; color: #515154; margin: 0;">We identified that your niche profile and target audience overlap extensively with this launch. The brand is offering a secure Stripe escrow payout of <strong>${formattedPayout}</strong>.</p>
       </div>
 
       <a href="${appUrl("/creator/discover")}" style="display: inline-block; background-color: #007aff; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Apply to Campaign</a>
@@ -81,6 +84,7 @@ export async function sendCampaignMatchEmail(toEmail: string, brandName: string,
 
 export async function sendApplicationAcceptedEmail(toEmail: string, brandName: string, campaignTitle: string, payout: number) {
   const subject = `Application Accepted & Funded: ${campaignTitle}`;
+  const formattedPayout = formatMoney(payout);
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1d1d1f; line-height: 1.5;">
       <h2 style="font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; color: #34c759;">Application Accepted!</h2>
@@ -90,7 +94,7 @@ export async function sendApplicationAcceptedEmail(toEmail: string, brandName: s
         <span style="font-size: 10px; font-weight: 700; color: #34c759; text-transform: uppercase; letter-spacing: 1px;">Stripe Escrow Secured</span>
         <h3 style="font-size: 18px; font-weight: 600; margin-top: 4px; margin-bottom: 4px; color: #1d1d1f;">${brandName}</h3>
         <p style="font-size: 16px; font-weight: 700; margin-top: 0; margin-bottom: 16px; color: #1d1d1f;">${campaignTitle}</p>
-        <p style="font-size: 13px; color: #515154; margin: 0;">The brand has funded the escrow payout of <strong>$${payout.toLocaleString()} USD</strong>. The funds are locked in Stripe and will release automatically when your draft deliverables are approved.</p>
+        <p style="font-size: 13px; color: #515154; margin: 0;">The brand has funded the escrow payout of <strong>${formattedPayout}</strong>. The funds are locked in Stripe and will release automatically when your draft deliverables are approved.</p>
       </div>
 
       <a href="${appUrl("/creator/campaigns")}" style="display: inline-block; background-color: #34c759; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 30px; border-radius: 24px;">Submit Deliverables</a>
@@ -103,7 +107,8 @@ export async function sendApplicationAcceptedEmail(toEmail: string, brandName: s
 }
 
 export async function sendPaymentReleasedEmail(toEmail: string, brandName: string, campaignTitle: string, payout: number) {
-  const subject = `Stripe Payout Released: $${payout.toLocaleString()} USD`;
+  const formattedPayout = formatMoney(payout);
+  const subject = `Stripe Payout Released: ${formattedPayout}`;
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #1d1d1f; line-height: 1.5;">
       <h2 style="font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; color: #007aff;">Escrow Payout Complete</h2>
@@ -113,7 +118,7 @@ export async function sendPaymentReleasedEmail(toEmail: string, brandName: strin
         <span style="font-size: 10px; font-weight: 700; color: #007aff; text-transform: uppercase; letter-spacing: 1px;">Transaction Successful</span>
         <h3 style="font-size: 18px; font-weight: 600; margin-top: 4px; margin-bottom: 4px; color: #1d1d1f;">${brandName}</h3>
         <p style="font-size: 16px; font-weight: 700; margin-top: 0; margin-bottom: 16px; color: #1d1d1f;">${campaignTitle}</p>
-        <p style="font-size: 18px; font-weight: 850; color: #34c759; margin: 0;">+$${payout.toLocaleString()} USD</p>
+        <p style="font-size: 18px; font-weight: 850; color: #34c759; margin: 0;">+${formattedPayout}</p>
         <p style="font-size: 13px; color: #515154; line-height: 1.5; margin-top: 8px; margin-bottom: 0;">The brand approved your submissions, releasing the funds from escrow. The deposit will appear in your bank account shortly.</p>
       </div>
 

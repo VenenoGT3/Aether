@@ -3,6 +3,7 @@ import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError } from "@/lib/api/response";
 import { AiDiscoverBodySchema } from "@/lib/api/schemas";
 import { generateXaiJson } from "@/lib/ai/xai";
+import { formatMoney } from "@/lib/currency";
 
 interface MatchResponse {
   campaignId: string;
@@ -36,7 +37,7 @@ Creator Profile:
 - Avg Engagement Rate: ${creator.engagement}%
 
 Campaigns to evaluate:
-${campaigns.map(c => `- Campaign [ID: ${c.id}]: Title: "${c.title}", Description: "${c.description}", Niches: ${c.target_niches.join(", ")}, Budget: $${c.budget_total}`).join("\n")}
+${campaigns.map(c => `- Campaign [ID: ${c.id}]: Title: "${c.title}", Description: "${c.description}", Niches: ${c.target_niches.join(", ")}, Budget: ${formatMoney(c.budget_total)}`).join("\n")}
 
 For each campaign, calculate a matchScore (integer from 50 to 100) and generate a matchingReason.
 The matchingReason must be a short, compelling smart matching suggestion grounded only in the provided creator/campaign fields (e.g. "Your tech content focus aligns with this launch", "Your 4.8% engagement rate makes you a strong candidate", "Your beauty niche matches this brand brief"). Keep the suggestion under 15 words. Do not claim past ROI, rankings, previous campaign results, or performance metrics not present in the profile.

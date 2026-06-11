@@ -3,6 +3,7 @@ import { guardApiPost, methodNotAllowed } from "@/lib/api/guard";
 import { jsonError } from "@/lib/api/response";
 import { AiPredictBodySchema } from "@/lib/api/schemas";
 import { generateXaiJson } from "@/lib/ai/xai";
+import { formatMoney } from "@/lib/currency";
 
 interface PredictResponse {
   predictedROI: number;
@@ -28,6 +29,9 @@ export async function POST(request: Request) {
     if (!guarded.ok) return guarded.response;
 
     const { campaign, metrics, creator } = guarded.ctx.data;
+    const formattedTotalBudget = formatMoney(campaign.budget);
+    const formattedSpentBudget = formatMoney(metrics.budget_spent);
+    const formattedAttributedRevenue = formatMoney(metrics.attributed_value);
 
     try {
       const prompt = `You are the AI Performance Predictor & Growth Officer for Aether, a premium Apple-designed influencer marketing platform.
@@ -35,7 +39,7 @@ Your task is to calculate a future performance projection and ROI prediction by 
 
 Campaign Details:
 - Campaign Title: "${campaign.title}"
-- Total Budget: $${campaign.budget}
+- Total Budget: ${formattedTotalBudget}
 - Objectives: ${campaign.brief?.objectives?.join(", ") || "General Brand Awareness & Conversion"}
 
 Creator Metrics (if available):
@@ -44,18 +48,18 @@ Creator Metrics (if available):
 - Niches: ${creator?.niches?.join(", ") || "Unknown"}
 
 Current Performance Metrics:
-- Budget Spent so far: $${metrics.budget_spent}
+- Budget Spent so far: ${formattedSpentBudget}
 - Views / Impressions: ${metrics.views}
 - Clicks: ${metrics.clicks}
 - Conversions: ${metrics.conversions}
-- Attributed Sales Revenue: $${metrics.attributed_value}
+- Attributed Sales Revenue: ${formattedAttributedRevenue}
 
-Please calculate the following projections when the full budget ($${campaign.budget}) is spent:
+Please calculate the following projections when the full budget (${formattedTotalBudget}) is spent:
 1. Predicted ultimate ROI (Attributed Sales / Total Budget)
 2. Predicted ultimate conversions count
 3. Predicted ultimate clicks count
 4. Predicted ultimate views count
-5. Predicted ultimate sales revenue ($)
+5. Predicted ultimate sales revenue (${formattedTotalBudget.replace(/[0-9.,\s]/g, "") || "€"})
 6. Campaign pacing status ("underperforming" | "on_track" | "overperforming" based on current ROI and conversion velocity)
 
 Please respond with a raw JSON object (and nothing else! Do not wrap in markdown \`\`\`json blocks, do not write any introductory or concluding text) that strictly complies with the following TypeScript interface:
@@ -64,7 +68,7 @@ interface PredictResponse {
   predictedConversions: number; // Expected final conversions
   predictedClicks: number; // Expected final clicks
   predictedViews: number; // Expected final views
-  predictedRevenue: number; // Expected final revenue ($)
+  predictedRevenue: number; // Expected final revenue in platform currency
   pacingStatus: "underperforming" | "on_track" | "overperforming";
   analysis: string; // 2-3 sentences explaining the pacing, current ROI efficiency, and expected results.
   recommendations: string[]; // Array of 3 actionable optimization steps for the brand or creator.

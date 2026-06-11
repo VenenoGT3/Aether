@@ -58,7 +58,7 @@ import {
 } from "recharts";
 import confetti from "canvas-confetti";
 import { useCampaignMetrics, calculateROIProjection } from "@/lib/supabase/metrics";
-import { formatMoneyCompact } from "@/lib/currency";
+import { formatMoney, formatMoneyCompact } from "@/lib/currency";
 
 // Custom SVG icons for social platforms
 function InstagramIcon({ className, size = 16 }: { className?: string; size?: number }) {
@@ -1722,7 +1722,7 @@ export default function CampaignDetailPage() {
               </h3>
             </div>
             <p className="text-[9px] text-muted-foreground mt-4 border-t border-border/10 pt-2 font-medium">
-              {t("Attributed")}: ${metrics.attributed_value.toLocaleString()} / {t("Spend")}: ${metrics.budget_spent.toLocaleString()}
+              {t("Attributed")}: {formatMoney(metrics.attributed_value)} / {t("Spend")}: {formatMoney(metrics.budget_spent)}
             </p>
           </div>
 
@@ -1731,7 +1731,7 @@ export default function CampaignDetailPage() {
             <div>
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t("Attributed Revenue")}</span>
               <h3 className="text-3xl font-bold text-foreground mt-4 tracking-tight">
-                ${metrics.attributed_value.toLocaleString()}
+                {formatMoney(metrics.attributed_value)}
               </h3>
             </div>
             <p className="text-[9px] text-[#34C759] mt-4 border-t border-border/10 pt-2 font-semibold flex items-center gap-1">
@@ -1744,11 +1744,11 @@ export default function CampaignDetailPage() {
             <div>
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t("Budget Spent")}</span>
               <h3 className="text-3xl font-bold text-foreground mt-4 tracking-tight">
-                ${metrics.budget_spent.toLocaleString()}
+                {formatMoney(metrics.budget_spent)}
               </h3>
             </div>
             <p className="text-[9px] text-muted-foreground mt-4 border-t border-border/10 pt-2">
-              {t("Contract Value")}: ${campaign.budget.toLocaleString()}
+              {t("Contract Value")}: {formatMoney(campaign.budget)}
             </p>
           </div>
 
@@ -1883,7 +1883,7 @@ export default function CampaignDetailPage() {
                 </div>
                 <div className="p-4 bg-secondary/35 rounded-2xl border border-border/10">
                   <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-1">{t("AI-Projected Sales")}</span>
-                  <span className="text-2xl font-black text-foreground tracking-tight">${aiPrediction.predictedRevenue.toLocaleString()}</span>
+                  <span className="text-2xl font-black text-foreground tracking-tight">{formatMoney(aiPrediction.predictedRevenue)}</span>
                 </div>
                 <div className="p-4 bg-secondary/35 rounded-2xl border border-border/10">
                   <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-1">{t("Predicted Conversions")}</span>
@@ -2652,7 +2652,7 @@ export default function CampaignDetailPage() {
                   <div className="p-3.5 rounded-2xl bg-[#007AFF]/10 border border-[#007AFF]/15 flex items-start gap-2.5 mb-2">
                     <ShieldCheck size={16} className="text-[#007AFF] shrink-0 mt-0.5" />
                     <span className="text-[10px] text-muted-foreground leading-relaxed">
-                      <b className="text-foreground font-bold">{t("Stripe Escrow Verified:")}</b> {t("Payout value of")} <b className="text-foreground">${selectedParticipant.payout.toLocaleString()}</b> {t("is secured in transaction.")}
+                      <b className="text-foreground font-bold">{t("Stripe Escrow Verified:")}</b> {t("Payout value of")} <b className="text-foreground">{formatMoney(selectedParticipant.payout)}</b> {t("is secured in transaction.")}
                     </span>
                   </div>
 
@@ -2857,7 +2857,7 @@ export default function CampaignDetailPage() {
               {/* Proposed payout */}
               <div className="flex justify-between items-center py-2 border-t border-b border-border/10">
                 <span className="text-xs text-muted-foreground font-medium">{t("Proposed Rate")}</span>
-                <span className="text-sm font-bold text-foreground">${selectedParticipant.payout.toLocaleString()}</span>
+                <span className="text-sm font-bold text-foreground">{formatMoney(selectedParticipant.payout)}</span>
               </div>
 
               {/* Accept & Fund */}

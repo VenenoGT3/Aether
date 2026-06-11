@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { getServerUser, createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { centsEqual, centsGte, fromCents, sumMoney, toCents } from "@/lib/money";
+import { formatMoney } from "@/lib/currency";
 import {
   createStripeExpressAccount,
   createEscrowPaymentIntent,
@@ -496,7 +497,7 @@ export async function requestWithdrawalAction() {
     if (!claim?.out_payout_id) {
       return {
         success: false,
-        error: `You need at least $${WITHDRAWAL_MIN} available to withdraw.`,
+        error: `You need at least ${formatMoney(WITHDRAWAL_MIN)} available to withdraw.`,
       };
     }
 

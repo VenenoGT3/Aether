@@ -250,7 +250,7 @@ export async function POST(request: Request) {
             const averageEr = parseFloat((aggregateErSum / siblingPosts.length).toFixed(2));
             const estimatedClicks = Math.round(aggregateViews * 0.05); // 5% click conversion baseline
             const estimatedConversions = Math.round(estimatedClicks * 0.02); // 2% sales conversion baseline
-            const attributedValue = estimatedConversions * 85; // $85 Average Order Value (AOV)
+            const attributedValue = estimatedConversions * 85; // €85 Average Order Value (AOV)
 
             // Update participation summary metrics
             const { error: partUpdateErr } = await supabase

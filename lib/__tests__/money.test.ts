@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { centsEqual, centsGte, fromCents, sumMoney, toCents } from "@/lib/money";
 
 describe("money helpers", () => {
-  it("converts dollars to integer cents, absorbing float artifacts", () => {
+  it("converts major currency units to integer cents, absorbing float artifacts", () => {
     expect(toCents(19.99)).toBe(1999);
     expect(toCents(0.1 + 0.2)).toBe(30);
     expect(toCents(1999.99)).toBe(199999);

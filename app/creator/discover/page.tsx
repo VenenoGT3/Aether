@@ -592,9 +592,9 @@ export default function DiscoverPage() {
                 <div className="flex flex-wrap gap-2">
                   <select value={selectedBudget} onChange={(event) => setSelectedBudget(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
                     <option value="All">{t("All Budgets")}</option>
-                    <option value="low">{t("Under $4,000")}</option>
-                    <option value="mid">{t("$4,000 - $8,000")}</option>
-                    <option value="high">{t("$8,000+")}</option>
+                    <option value="low">{t("Under €4,000")}</option>
+                    <option value="mid">{t("€4,000 - €8,000")}</option>
+                    <option value="high">{t("€8,000+")}</option>
                   </select>
                   <select value={selectedSpeed} onChange={(event) => setSelectedSpeed(event.target.value)} className="creator-input rounded-xl px-3 py-2 text-xs">
                     <option value="All">{t("All Payout Speed")}</option>
@@ -898,7 +898,10 @@ export default function DiscoverPage() {
             <p className="creator-label text-white/40">{t("Payout rate")}</p>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-[var(--creator-success)]">
-                ${Number(joinModalCampaign?.cpm_rate ?? 0).toFixed(2)}
+                {formatMoney(Number(joinModalCampaign?.cpm_rate ?? 0), {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </span>
               <span className="text-xs text-white/45">{t("CPM per 1,000 views")}</span>
             </div>
@@ -909,7 +912,7 @@ export default function DiscoverPage() {
               <Eye size={13} /> {t("Est. per 100k views")}
             </span>
             <span className="font-bold text-[var(--creator-success)]">
-              ${Math.round(Math.max(Number(joinModalCampaign?.cpm_rate ?? 0), 0) * 100).toLocaleString()}
+              {formatMoneyCompact(Math.round(Math.max(Number(joinModalCampaign?.cpm_rate ?? 0), 0) * 100))}
             </span>
           </div>
 

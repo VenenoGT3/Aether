@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatMoney } from "@/lib/currency";
 import type { LandingStats } from "@/lib/supabase/landing-stats";
 import { useTranslation } from "@/lib/translations";
 
@@ -94,14 +95,11 @@ function compact(value: number | null, locale: string, fallback: string): string
   }).format(value);
 }
 
-function money(value: number | null, locale: string, fallback: string): string {
+function money(value: number | null, _locale: string, fallback: string): string {
   if (value === null) return fallback;
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-    notation: value >= 10_000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 10_000 ? 1 : 0,
-  }).format(value);
+  return formatMoney(value, {
+    maximumFractionDigits: value >= 10_000 ? 0 : 1,
+  });
 }
 
 function percentFromViews(views: number | null): number {
@@ -417,7 +415,9 @@ export function AetherLandingPage({ stats }: Props) {
               <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                 {t("Campaign CPM")}
               </span>
-              <span className="mt-1 block font-mono text-xl font-black text-white">$5.10</span>
+              <span className="mt-1 block font-mono text-xl font-black text-white">
+                {money(5.1, formatterLocale, "€5.10")}
+              </span>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-center">
               <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">

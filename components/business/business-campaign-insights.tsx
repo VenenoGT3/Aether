@@ -29,6 +29,7 @@ import {
   type BusinessTone,
 } from "@/components/business/business-ui";
 import { budgetUsage } from "@/lib/campaign-budget";
+import { formatMoney } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/translations";
 
@@ -121,12 +122,10 @@ const activeCampaignStatuses = new Set(["open", "in_progress"]);
 const verifiedClipStatuses = new Set(["approved", "tracking"]);
 
 function money(value: number, digits = 0): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  return formatMoney(value, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).format(value);
+  });
 }
 
 function compactNumber(value: number): string {

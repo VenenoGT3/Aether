@@ -1678,7 +1678,7 @@ export default function NewCampaignWizard() {
               </div>
 
               <textarea
-                placeholder={t("e.g. Launching a new aluminum desk stand for Apple Studio Display. Focus on productivity tech creators with organic desk setup visuals. Budget around $3000...")}
+                placeholder={t("e.g. Launching a new aluminum desk stand for Apple Studio Display. Focus on productivity tech creators with organic desk setup visuals. Budget around €3000...")}
                 value={aiPrompt}
                 onChange={(event) => setAiPrompt(event.target.value)}
                 aria-label={t("AI brief assistant")}

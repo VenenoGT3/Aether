@@ -8,12 +8,13 @@ import { completeCreatorOnboardingAction } from "@/lib/actions/onboarding";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/translations";
 import { CreatorOnboardingWelcome } from "@/components/creator-onboarding-welcome";
+import { formatMoney } from "@/lib/currency";
 import { 
   ArrowRight, 
   ArrowLeft, 
   CheckCircle2, 
   Loader2,
-  DollarSign,
+  Euro,
   Upload,
   Plus,
   Trash2,
@@ -83,6 +84,8 @@ const AVAILABLE_NICHES = [
   "Fitness & Health",
   "Finance & Business"
 ];
+
+const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 });
 
 export default function InfluencerOnboarding() {
   const router = useRouter();
@@ -465,7 +468,7 @@ export default function InfluencerOnboarding() {
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                  <DollarSign size={20} />
+                  <Euro size={20} />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">{t("Set your rate card")}</h2>
@@ -480,7 +483,7 @@ export default function InfluencerOnboarding() {
                     <span className="text-sm font-semibold flex items-center gap-1.5 text-muted-foreground">
                       <InstagramIcon size={15} /> {t("Standard Post")}
                     </span>
-                    <span className="text-base font-bold text-foreground">${ratePost}</span>
+                    <span className="text-base font-bold text-foreground">{money(ratePost)}</span>
                   </div>
                   <input
                     type="range"
@@ -492,8 +495,8 @@ export default function InfluencerOnboarding() {
                     className="w-full h-1 bg-secondary border border-border/20 rounded-full appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
-                    <span>$50</span>
-                    <span>$2,000</span>
+                    <span>{money(50)}</span>
+                    <span>{money(2000)}</span>
                   </div>
                 </div>
 
@@ -503,7 +506,7 @@ export default function InfluencerOnboarding() {
                     <span className="text-sm font-semibold flex items-center gap-1.5 text-muted-foreground">
                       <TikTokIcon size={14} className="mt-0.5" /> {t("Dedicated Video")}
                     </span>
-                    <span className="text-base font-bold text-foreground">${rateVideo}</span>
+                    <span className="text-base font-bold text-foreground">{money(rateVideo)}</span>
                   </div>
                   <input
                     type="range"
@@ -515,8 +518,8 @@ export default function InfluencerOnboarding() {
                     className="w-full h-1 bg-secondary border border-border/20 rounded-full appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
-                    <span>$100</span>
-                    <span>$5,000</span>
+                    <span>{money(100)}</span>
+                    <span>{money(5000)}</span>
                   </div>
                 </div>
 
@@ -526,7 +529,7 @@ export default function InfluencerOnboarding() {
                     <span className="text-sm font-semibold flex items-center gap-1.5 text-muted-foreground">
                       <InstagramIcon size={15} /> {t("IG Story (with link)")}
                     </span>
-                    <span className="text-base font-bold text-foreground">${rateStory}</span>
+                    <span className="text-base font-bold text-foreground">{money(rateStory)}</span>
                   </div>
                   <input
                     type="range"
@@ -538,8 +541,8 @@ export default function InfluencerOnboarding() {
                     className="w-full h-1 bg-secondary border border-border/20 rounded-full appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
-                    <span>$25</span>
-                    <span>$1,000</span>
+                    <span>{money(25)}</span>
+                    <span>{money(1000)}</span>
                   </div>
                 </div>
               </div>

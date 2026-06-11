@@ -42,7 +42,7 @@ export async function getConnectAccount(
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       country: account.country || "US",
-      currency: account.default_currency || "usd",
+      currency: account.default_currency || getStripeCurrency(),
     };
   } catch (error) {
     console.error("Error retrieving Stripe account:", error);

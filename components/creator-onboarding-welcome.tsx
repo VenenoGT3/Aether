@@ -24,7 +24,7 @@ const QUICK_WINS: { icon: LucideIcon; color: string; title: string; desc: string
     icon: Clapperboard,
     color: "#007AFF",
     title: "Post your first clip",
-    desc: "Get a $10 welcome bonus on your first approved clip.",
+    desc: "Get a €10 welcome bonus on your first approved clip.",
   },
   {
     icon: Gift,

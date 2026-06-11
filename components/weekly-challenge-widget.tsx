@@ -6,6 +6,7 @@ import { Trophy, Target, Check, Loader2, Lock, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { formatMoney } from "@/lib/currency";
 import { useTranslation } from "@/lib/translations";
 import {
   getWeeklyChallengeAction,
@@ -16,7 +17,7 @@ import type { WeeklyChallenge } from "@/types/referral";
 const appleSpring = { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.8 };
 const ACCENT = "#FF9500"; // orange — challenge
 const money = (n: number) =>
-  `$${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  formatMoney(Number(n || 0), { maximumFractionDigits: 2 });
 
 export function WeeklyChallengeWidget() {
   const { t } = useTranslation();
