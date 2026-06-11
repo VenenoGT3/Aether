@@ -231,6 +231,33 @@ function PoolProgress({ campaign }: { campaign: PerfCampaign }) {
   );
 }
 
+function SourceFootageCard({ sourceUrl }: { sourceUrl: string }) {
+  const { t } = useTranslation();
+
+  return (
+    <a
+      href={sourceUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex items-center justify-between gap-3 rounded-xl border border-[rgba(77,142,255,0.22)] bg-[rgba(77,142,255,0.08)] p-3 text-left transition-colors hover:bg-[rgba(77,142,255,0.13)]"
+    >
+      <span className="min-w-0">
+        <span className="creator-label block text-[var(--creator-primary)]">
+          {t("Original full video")}
+        </span>
+        <span className="mt-1 block truncate text-xs text-white/60">{sourceUrl}</span>
+        <span className="mt-1 block text-[10px] font-semibold text-white/35">
+          {t("The brand's source material to clip from.")}
+        </span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[rgba(77,142,255,0.18)] bg-[rgba(77,142,255,0.10)] px-2.5 py-2 text-[10px] font-bold text-[var(--creator-primary)] group-hover:underline">
+        {t("Open source footage")}
+        <ExternalLink size={12} />
+      </span>
+    </a>
+  );
+}
+
 function CampaignBriefPanel({
   campaign,
   copy,
@@ -269,17 +296,7 @@ function CampaignBriefPanel({
         </div>
         <div className="space-y-3 text-xs leading-5 text-white/60">
           <PoolProgress campaign={campaign} />
-          {sourceUrl ? (
-            <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-[var(--creator-primary)] hover:underline"
-            >
-              <span className="truncate">{sourceUrl}</span>
-              <ExternalLink size={13} className="shrink-0" />
-            </a>
-          ) : null}
+          {sourceUrl ? <SourceFootageCard sourceUrl={sourceUrl} /> : null}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
               <p className="creator-label text-white/35">{t("Min length")}</p>
@@ -369,6 +386,8 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
   const isJoined = selectedCampaign ? joinedIds.has(selectedCampaign) : false;
   const selected = campaigns.find((c) => c.id === selectedCampaign);
   const selectedOfferedCpm = selected?.cpm_rate ?? null;
+  const selectedSourceUrl =
+    category === "clipping" ? metaText(selected?.category_meta ?? null, "source_url") : "";
 
   const loadCampaigns = useCallback(async () => {
     const { data } = await supabase
@@ -709,6 +728,7 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {selectedSourceUrl ? <SourceFootageCard sourceUrl={selectedSourceUrl} /> : null}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <label className="creator-label block text-white/40">{t(copy.urlLabel)}</label>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import {
@@ -124,6 +125,7 @@ function performanceJoinLabel(campaign: Campaign) {
 
 export default function DiscoverPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const [user, setUser] = useState<Profile | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [appliedCampaignIds, setAppliedCampaignIds] = useState<Set<string>>(new Set());
@@ -294,8 +296,16 @@ export default function DiscoverPage() {
               "{flow}",
               t(campaign.campaign_category === "ugc" ? "UGC Posts" : "Clips & Earnings")
             ),
-        { description: campaign.title }
+        {
+          description:
+            campaign.campaign_type === "performance"
+              ? t("Opening the source kit.")
+              : campaign.title,
+        }
       );
+      if (campaign.campaign_type === "performance") {
+        router.push(performanceSubmissionHref(campaign));
+      }
     } else {
       toast.error(res.error || t("Could not join campaign."));
     }
