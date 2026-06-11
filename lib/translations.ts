@@ -1070,6 +1070,7 @@ export const dictionary: Record<string, string> = {
   "Redirecting to Stripe Connect onboarding...": "Reindirizzamento all'onboarding Stripe Connect...",
   "Redirecting...": "Reindirizzamento...",
   "Failed to start Stripe onboarding.": "Impossibile avviare l'onboarding Stripe.",
+  "Stripe Connect is not enabled for this Stripe account. Open the Stripe Dashboard Connect page, finish Connect setup, then try again.": "Stripe Connect non e abilitato per questo account Stripe. Apri la pagina Connect della Dashboard Stripe, completa la configurazione Connect, poi riprova.",
   "Saving your profile...": "Salvataggio del profilo in corso...",
   "Stripe funding connection required": "Connessione al finanziamento Stripe richiesta",
   "Connect Stripe to fund campaign budget pools and pay approved creator earnings.": "Collega Stripe per finanziare i budget pool delle campagne e pagare i guadagni approvati dei creator.",

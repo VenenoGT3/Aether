@@ -1,6 +1,7 @@
 import { stripeServer } from "./client";
 import { getCircuitBreaker } from "@/lib/circuit-breaker";
 import { getStripeCurrency } from "@/lib/currency";
+import { AppError } from "@/lib/errors";
 
 // All live Stripe API calls go through one breaker: 5 consecutive failures →
 // OPEN 30s. When OPEN, exec() throws a safe "temporarily unavailable" error
@@ -19,6 +20,13 @@ export interface ConnectAccount {
   payoutsEnabled: boolean;
   country: string;
   currency: string;
+}
+
+function isStripeConnectNotEnabledError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("signed up for Connect")
+  );
 }
 
 /** Retrieves the details of a Connected Stripe Account. */
@@ -75,6 +83,12 @@ export async function createStripeExpressAccount(
     };
   } catch (error) {
     console.error("Error creating Express account onboarding session:", error);
+    if (isStripeConnectNotEnabledError(error)) {
+      throw new AppError(
+        "Stripe Connect is not enabled for this Stripe account. Open the Stripe Dashboard Connect page, finish Connect setup, then try again.",
+        { code: "external_service", cause: error }
+      );
+    }
     throw error;
   }
 }
