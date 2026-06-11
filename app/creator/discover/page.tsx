@@ -151,16 +151,37 @@ export default function DiscoverPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const profile = await getClientProfile();
+
+      let profile: Profile | null = null;
+      try {
+        profile = await getClientProfile();
+      } catch (profileError) {
+        console.error("Error loading creator profile:", profileError);
+      }
       setUser(profile);
 
       if (profile?.social_handle) {
         setSocialHandle(profile.social_handle);
       }
 
-      const searchData = await apiGet<{ campaigns: RawSearchCampaign[] }>(
-        "/api/campaigns/search?page=1&limit=50"
-      );
+      let searchData: { campaigns: RawSearchCampaign[] };
+      try {
+        searchData = await apiGet<{ campaigns: RawSearchCampaign[] }>(
+          "/api/campaigns/search?page=1&limit=50"
+        );
+      } catch (campaignError) {
+        console.error("Error loading discover campaigns:", campaignError);
+        const message = campaignError instanceof Error ? campaignError.message : "";
+        if (message.toLowerCase().includes("unauthorized")) {
+          toast.error(t("Your session expired. Please sign in again."));
+          router.replace(`/auth/login?redirectTo=${encodeURIComponent("/creator/discover")}`);
+        } else {
+          toast.error(t("Failed to load campaigns."));
+        }
+        setCampaigns([]);
+        return;
+      }
+
       const rawCamps = (searchData.campaigns || [])
         .filter((c) => (c.platforms ?? []).includes("youtube"))
         .map((c) => ({
@@ -193,11 +214,17 @@ export default function DiscoverPage() {
       })) satisfies Campaign[];
 
       if (profile) {
-        const { data: parts } = await supabase
-          .from("participations")
-          .select("campaign_id")
-          .eq("influencer_id", profile.user_id);
-        setAppliedCampaignIds(new Set<string>((parts || []).map((p) => p.campaign_id)));
+        try {
+          const { data: parts, error: participationsError } = await supabase
+            .from("participations")
+            .select("campaign_id")
+            .eq("influencer_id", profile.user_id);
+          if (participationsError) throw participationsError;
+          setAppliedCampaignIds(new Set<string>((parts || []).map((p) => p.campaign_id)));
+        } catch (participationsError) {
+          console.error("Error loading creator participations:", participationsError);
+          setAppliedCampaignIds(new Set());
+        }
 
         const profileForAi = profile as CreatorProfileForAi;
         const creatorNiches = profileForAi.niches?.length

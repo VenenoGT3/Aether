@@ -104,7 +104,8 @@ async function handleSearch(request: Request): Promise<Response> {
 
     endRequest(log, { statusCode: 200, startTime });
     return jsonSuccess({ campaigns: result.campaigns, page, limit, total: result.total });
-  } catch {
+  } catch (error) {
+    log.error({ err: error }, "campaign_search.failed");
     endRequest(log, { statusCode: 500, startTime });
     return jsonError("Could not load campaigns. Please try again.", 500);
   }
