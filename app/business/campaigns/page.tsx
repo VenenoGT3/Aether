@@ -341,7 +341,7 @@ function CampaignCard({
             {category ? <BusinessStatusPill tone="info">{t(category)}</BusinessStatusPill> : null}
           </div>
           <Link href={detailHref(campaign)}>
-            <h2 className="line-clamp-2 text-xl font-bold tracking-tight text-[var(--business-text)] transition-colors group-hover:text-[var(--business-primary)]">
+            <h2 className="line-clamp-2 text-lg font-semibold tracking-normal text-[var(--business-text)] transition-colors group-hover:text-[var(--business-primary)]">
               {campaign.title}
             </h2>
           </Link>
@@ -371,16 +371,16 @@ function CampaignCard({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Budget pool")}
           </p>
-          <p className="mt-1.5 text-base font-bold text-[var(--business-text)]">{money(pool, 0)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Reward rate")}
           </p>
-          <p className="mt-1.5 text-base font-bold text-[var(--business-text)]">
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
             {isPerformance && rate > 0 ? `${money(rate, 2)} RPM` : t("Fixed")}
           </p>
         </div>
@@ -404,15 +404,15 @@ function CampaignCard({
 
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
-          <p className="font-bold text-[var(--business-text)]">{compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}</p>
+          <p className="font-semibold text-[var(--business-text)]">{compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}</p>
           <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("verified views")}</p>
         </div>
         <div>
-          <p className="font-bold text-[var(--business-text)]">{integerNumber(clipSummary.pending, locale)}</p>
+          <p className="font-semibold text-[var(--business-text)]">{integerNumber(clipSummary.pending, locale)}</p>
           <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("pending clips")}</p>
         </div>
         <div>
-          <p className="font-bold text-[var(--business-text)]">{integerNumber(clipSummary.creators || participationSummary.creators, locale)}</p>
+          <p className="font-semibold text-[var(--business-text)]">{integerNumber(clipSummary.creators || participationSummary.creators, locale)}</p>
           <p className="mt-0.5 text-[10px] text-[var(--business-muted)]">{t("creators")}</p>
         </div>
       </div>
@@ -508,7 +508,7 @@ function CampaignRowItem({
             </BusinessStatusPill>
           </div>
           <Link href={detailHref(campaign)}>
-            <h2 className="truncate text-lg font-bold tracking-tight text-[var(--business-text)] hover:text-[var(--business-primary)]">
+            <h2 className="truncate text-base font-semibold text-[var(--business-text)] hover:text-[var(--business-primary)]">
               {campaign.title}
             </h2>
           </Link>
@@ -518,18 +518,18 @@ function CampaignRowItem({
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Budget pool")}
           </p>
-          <p className="mt-1 text-base font-bold text-[var(--business-text)]">{money(pool, 0)}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">{money(pool, 0)}</p>
           {isPerformance ? <BusinessProgressBar value={used} max={pool || 100} className="mt-2" /> : null}
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--business-muted)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--business-muted)]">
             {t("Performance")}
           </p>
-          <p className="mt-1 text-base font-bold text-[var(--business-text)]">
+          <p className="mt-1 text-sm font-semibold text-[var(--business-text)]">
             {compactNumber(clipSummary.verifiedViews || participationSummary.totalViews, locale)}
           </p>
           <p className="text-[10px] text-[var(--business-muted)]">
@@ -897,9 +897,9 @@ export default function CampaignsPage() {
               onClick={() => setActiveFilter(filter)}
               aria-pressed={activeFilter === filter}
               className={cn(
-                "inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition-colors",
+                "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
                 activeFilter === filter
-                  ? "border-[var(--business-primary)] bg-[rgba(173,198,255,0.18)] text-[var(--business-primary)]"
+                  ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
                   : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
               )}
             >
@@ -918,9 +918,9 @@ export default function CampaignsPage() {
               onClick={() => setSelectedNiche("all")}
               aria-pressed={selectedNiche === "all"}
               className={cn(
-                "shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-colors",
+                "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                 selectedNiche === "all"
-                  ? "border-[var(--business-primary)] bg-[rgba(173,198,255,0.18)] text-[var(--business-primary)]"
+                  ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
                   : "border-white/10 bg-white/[0.04] text-[var(--business-muted)]"
               )}
             >
@@ -933,9 +933,9 @@ export default function CampaignsPage() {
                 onClick={() => setSelectedNiche(niche)}
                 aria-pressed={selectedNiche === niche}
                 className={cn(
-                  "shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-colors",
+                  "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors",
                   selectedNiche === niche
-                    ? "border-[var(--business-primary)] bg-[rgba(173,198,255,0.18)] text-[var(--business-primary)]"
+                    ? "border-[rgba(173,198,255,0.24)] bg-[rgba(173,198,255,0.12)] text-[var(--business-primary)]"
                     : "border-white/10 bg-white/[0.04] text-[var(--business-muted)] hover:text-[var(--business-text)]"
                 )}
               >

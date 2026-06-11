@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
+  Bell,
   Compass,
   FileText,
   Home,
@@ -89,16 +90,14 @@ function CreatorBrandMark() {
   const { t } = useTranslation();
 
   return (
-    <Link href="/creator/dashboard" className="flex w-36 shrink-0 items-center gap-3 sm:w-40">
-      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-[var(--creator-primary)] to-[var(--creator-secondary)] text-sm font-black text-[var(--creator-bg)] shadow-[0_12px_28px_-16px_rgba(159,141,250,0.8)]">
-        AE
+    <Link href="/creator/dashboard" className="flex min-w-0 items-center gap-3">
+      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl creator-gradient-accent text-white shadow-[0_12px_30px_-16px_rgba(77,142,255,0.9)]">
+        <Sparkles size={17} aria-hidden="true" />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold tracking-normal text-white">
-          Aether
-        </span>
-        <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-          {t("Creator workspace")}
+        <span className="block text-sm font-semibold tracking-normal text-white">CreatorHub</span>
+        <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+          {t("Aether rewards")}
         </span>
       </span>
     </Link>
@@ -122,23 +121,21 @@ function CreatorNavLink({
     <Link
       href={href}
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 rounded-lg border border-transparent text-sm font-semibold tracking-normal transition-all",
-        compact ? "min-w-0 flex-1 flex-col gap-1 px-1 py-2 text-[9px] leading-none" : "px-3 py-2",
-        active
-          ? "text-white"
-          : "text-white/55 hover:bg-white/[0.06] hover:text-white"
+        "relative inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all",
+        compact ? "min-w-16 flex-1 flex-col gap-1 px-2 py-2 text-[10px]" : "px-3 py-2",
+        active ? "text-white" : "text-white/55 hover:bg-white/[0.06] hover:text-white"
       )}
       aria-current={active ? "page" : undefined}
     >
       {active ? (
         <motion.span
           layoutId={compact ? "creatorMobileNavActive" : "creatorDesktopNavActive"}
-          className="absolute inset-0 rounded-lg border border-white/10 bg-white/[0.08]"
+          className="absolute inset-0 rounded-xl border border-[rgba(77,142,255,0.22)] bg-[rgba(77,142,255,0.12)]"
           transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
         />
       ) : null}
       <Icon size={compact ? 18 : 16} className="relative z-10" aria-hidden="true" />
-      <span className={cn("relative z-10", !compact && "whitespace-nowrap")}>{label}</span>
+      <span className="relative z-10">{label}</span>
     </Link>
   );
 }
@@ -151,14 +148,14 @@ function CreatorAvatar({ user }: { user: Profile | null }) {
       <span
         role="img"
         aria-label={name}
-        className="block size-9 rounded-lg border border-white/10 bg-center bg-cover"
+        className="block size-9 rounded-full border border-white/15 bg-center bg-cover"
         style={{ backgroundImage: `url(${user.avatar_url})` }}
       />
     );
   }
 
   return (
-    <span className="flex size-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-xs font-bold text-[var(--creator-primary)]">
+    <span className="flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-xs font-bold text-[var(--creator-primary)]">
       {initials(name)}
     </span>
   );
@@ -183,10 +180,7 @@ function CreatorProfileMenu({ user }: { user: Profile | null }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={t("Open creator profile menu")}
-        className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(159,141,250,0.60)]"
-      >
+      <DropdownMenuTrigger className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(77,142,255,0.65)]">
         <CreatorAvatar user={user} />
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -278,14 +272,11 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
         <div className="absolute left-[42%] top-[45%] h-[30vw] w-[30vw] rounded-full bg-[rgba(34,211,238,0.035)] blur-[95px]" />
       </div>
 
-      <header className="sticky top-0 z-[100] border-b border-white/10 bg-[rgba(12,19,36,0.86)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-5">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[rgba(7,13,30,0.82)] backdrop-blur-xl">
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-6">
             <CreatorBrandMark />
-            <nav
-              className="creator-scrollbar-none hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex"
-              aria-label="Creator navigation"
-            >
+            <nav className="hidden items-center gap-1 md:flex" aria-label="Creator navigation">
               {creatorNavItems.map((item) => (
                 <CreatorNavLink
                   key={item.href}
@@ -299,35 +290,26 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <CreatorStatusPill className="hidden max-w-44 truncate whitespace-nowrap 2xl:inline-flex" tone="accent">
+            <CreatorStatusPill className="hidden lg:inline-flex" tone="accent">
               {profileLoaded ? creatorName : t("Loading")}
             </CreatorStatusPill>
-            <Link
-              href="/creator/discover"
-              className="hidden h-9 items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-[linear-gradient(135deg,var(--creator-primary)_0%,var(--creator-secondary)_100%)] px-3 text-sm font-semibold text-[var(--creator-bg)] shadow-[0_8px_28px_-14px_rgba(159,141,250,0.7)] transition-all hover:brightness-105 lg:inline-flex"
-            >
-              <Compass size={15} aria-hidden="true" />
-              <span className="ml-2">{t("Find Campaigns")}</span>
-            </Link>
             <div className="hidden sm:block">
               <LanguageToggle />
             </div>
-            <div>
-              <NotificationCenter />
-            </div>
-            <Link
-              href="/creator/discover"
-              aria-label={t("Find Campaigns")}
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[var(--creator-primary)] sm:hidden"
+            <NotificationCenter />
+            <button
+              type="button"
+              aria-label="Creator alerts"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white/75 sm:hidden"
             >
-              <Compass size={18} aria-hidden="true" />
-            </Link>
+              <Bell size={17} aria-hidden="true" />
+            </button>
             <CreatorProfileMenu user={user} />
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-xs text-white/45 sm:px-6 md:hidden">
+      <div className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-xs text-white/45 sm:px-6 md:hidden">
         <span className="inline-flex min-w-0 items-center gap-2">
           <activeItem.icon size={14} className="shrink-0 text-[var(--creator-primary)]" aria-hidden="true" />
           <span className="truncate font-semibold text-white">{t(activeItem.label)}</span>
@@ -335,10 +317,10 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
         <span className="truncate">{profileLoaded ? creatorName : t("Loading workspace")}</span>
       </div>
 
-      <div className="relative z-10 pb-[calc(env(safe-area-inset-bottom)+6rem)] md:pb-0">{children}</div>
+      <div className="relative z-10">{children}</div>
 
       <nav
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-lg border border-white/10 bg-[rgba(12,19,36,0.92)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
+        className="fixed bottom-3 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-2xl border border-white/10 bg-[rgba(7,13,30,0.9)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
         aria-label="Creator mobile navigation"
       >
         <div className="flex items-center justify-between gap-1">
@@ -354,8 +336,6 @@ export function CreatorRouteShell({ children }: { children: ReactNode }) {
           ))}
         </div>
       </nav>
-
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--creator-primary)]/35 to-transparent" />
     </div>
   );
 }

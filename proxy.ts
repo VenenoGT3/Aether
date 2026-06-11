@@ -130,11 +130,9 @@ async function enforcePageAccess(request: NextRequest): Promise<NextResponse> {
   const userRolePath = userRole === "influencer" ? "creator" : "business";
 
   if (!isLoggedIn && isProtectedPath) {
-    // --- MOCK OVERRIDE FOR LOCAL VISUALIZATION ---
-    // Bypass login redirect
-    // const loginUrl = new URL("/auth/login", request.url);
-    // loginUrl.searchParams.set("redirectTo", pathname);
-    // return NextResponse.redirect(loginUrl);
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("redirectTo", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   if (isLoggedIn && isAuthPath) {

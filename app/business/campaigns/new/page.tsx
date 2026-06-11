@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -117,6 +117,10 @@ function compactNumber(value: number): string {
     notation: value >= 10000 ? "compact" : "standard",
     maximumFractionDigits: value >= 10000 ? 1 : 0,
   }).format(value);
+}
+
+function positiveNumber(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function payoutViews(amount: number, rpm: number): number {
@@ -304,9 +308,50 @@ export default function NewCampaignWizard() {
           requirements: clipRequirements.trim(),
         };
 
-  const readinessCount = step - 1;
-  const readinessTotal = wizardSteps.length - 1;
-  const readinessPct = Math.round((readinessCount / readinessTotal) * 100);
+  const readinessItems = useMemo(
+    () => [
+      {
+        label: "Brief",
+        ready: title.trim().length > 0 && description.trim().length > 0 && niches.length > 0,
+      },
+      {
+        label: "Audience",
+        ready: location.trim().length > 0 && ageRange.trim().length > 0 && positiveNumber(minFollowers) > 0,
+      },
+      {
+        label: "Deliverables",
+        ready: deliverables.length > 0 && deliverables.every((item) => item.quantity > 0 && item.details.trim()),
+      },
+      {
+        label: "Financials",
+        ready:
+          positiveNumber(budgetTotal) > 0 &&
+          (!isPerformance || (positiveNumber(cpmRate) > 0 && platforms.length > 0)),
+      },
+      {
+        label: "Timeline",
+        ready: Boolean(startDate && draftDueDate && endDate),
+      },
+    ],
+    [
+      ageRange,
+      budgetTotal,
+      cpmRate,
+      deliverables,
+      description,
+      endDate,
+      draftDueDate,
+      isPerformance,
+      location,
+      minFollowers,
+      niches.length,
+      platforms.length,
+      startDate,
+      title,
+    ]
+  );
+  const readinessCount = readinessItems.filter((item) => item.ready).length;
+  const readinessPct = Math.round((readinessCount / readinessItems.length) * 100);
 
   useEffect(() => {
     if (niches.length === 0) {
@@ -1453,7 +1498,7 @@ export default function NewCampaignWizard() {
           <BusinessMetricCard
             label={t("Launch readiness")}
             value={`${readinessPct}%`}
-            detail={`${readinessCount}/${readinessTotal} ${t("sections complete")}`}
+            detail={`${readinessCount}/${readinessItems.length} ${t("sections complete")}`}
             icon={Gauge}
             tone={readinessPct === 100 ? "success" : "accent"}
           />

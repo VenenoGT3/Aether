@@ -486,7 +486,7 @@ export default function DiscoverPage() {
                   <Sparkles size={18} className="text-[var(--creator-warning)]" />
                   {t("For You")}
                 </h2>
-                <span className="text-xs font-semibold text-white/60">{t("Based on your media kit")}</span>
+                <span className="text-xs font-semibold text-white/45">{t("Based on your media kit")}</span>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {recommendedCampaigns.map((campaign) => (
@@ -511,7 +511,7 @@ export default function DiscoverPage() {
                         </CreatorStatusPill>
                       </div>
                       <div>
-                        <p className="creator-label text-white/60">{campaign.businessName}</p>
+                        <p className="creator-label text-white/45">{campaign.businessName}</p>
                         <h3 className="mt-1 max-w-xl text-2xl font-semibold leading-tight text-white">
                           {campaign.title}
                         </h3>
@@ -527,7 +527,7 @@ export default function DiscoverPage() {
           <section className="mt-8 space-y-4">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-4">
               <h2 className="text-lg font-semibold text-white">{t("Explore Feed")}</h2>
-              <span className="text-xs font-semibold text-white/60">
+              <span className="text-xs font-semibold text-white/45">
                 {t("Showing {count} campaigns").replace("{count}", filteredCampaigns.length.toString())}
               </span>
             </div>
@@ -535,18 +535,18 @@ export default function DiscoverPage() {
             <CreatorGlassCard>
               <div className="flex flex-col gap-3">
                 <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/60" size={16} />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/35" size={16} />
                   <input
                     type="text"
                     placeholder={t("Search brands, niches, or deliverables...")}
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    className="creator-input w-full rounded-xl py-3 pl-10 pr-4 text-sm placeholder:text-white/60"
+                    className="creator-input w-full rounded-xl py-3 pl-10 pr-4 text-sm placeholder:text-white/30"
                   />
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 creator-scrollbar">
-                  <SlidersHorizontal size={14} className="hidden shrink-0 text-white/60 sm:block" />
+                  <SlidersHorizontal size={14} className="hidden shrink-0 text-white/35 sm:block" />
                   {allNiches.map((niche) => (
                     <button
                       key={niche}
@@ -554,7 +554,7 @@ export default function DiscoverPage() {
                       className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${
                         selectedNiche === niche
                           ? "border-[rgba(77,142,255,0.4)] bg-[var(--creator-primary)] text-white"
-                          : "border-white/10 bg-white/[0.05] text-white/70 hover:text-white"
+                          : "border-white/10 bg-white/[0.05] text-white/55 hover:text-white"
                       }`}
                     >
                       {t(niche)}
@@ -628,7 +628,7 @@ export default function DiscoverPage() {
                           {campaignLogo(campaign)}
                         </div>
                         <div className="absolute bottom-3 left-4 right-4">
-                          <p className="creator-label text-white/60">{campaign.businessName}</p>
+                          <p className="creator-label text-white/35">{campaign.businessName}</p>
                           <h3 className="truncate text-base font-semibold text-white">{campaign.title}</h3>
                         </div>
                       </div>
@@ -651,10 +651,10 @@ export default function DiscoverPage() {
                         <p className="line-clamp-3 min-h-16 text-xs leading-5 text-white/60">{campaign.description}</p>
 
                         <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-                          <p className="creator-label text-white/60">{t("Earnings potential")}</p>
+                          <p className="creator-label text-white/35">{t("Earnings potential")}</p>
                           <div className="mt-2 flex items-end justify-between gap-3">
                             <div>
-                              <span className="text-xs text-white/60">
+                              <span className="text-xs text-white/45">
                                 {campaign.campaign_type === "performance" ? t("CPM") : t("Pool")}
                               </span>
                               <p className="text-xl font-bold text-[var(--creator-primary)]">
@@ -664,7 +664,7 @@ export default function DiscoverPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <span className="text-xs text-white/60">{t("Remaining")}</span>
+                              <span className="text-xs text-white/45">{t("Remaining")}</span>
                               <p className="text-sm font-semibold text-white">{campaign.days_left}d</p>
                             </div>
                           </div>
@@ -763,16 +763,16 @@ export default function DiscoverPage() {
           <DialogHeader>
             <span className="creator-label text-[var(--creator-primary)]">{t("Campaign Application")}</span>
             <DialogTitle className="text-xl font-semibold tracking-tight">{selectedCampaign?.title}</DialogTitle>
-            <DialogDescription className="text-xs text-white/60">
+            <DialogDescription className="text-xs text-white/50">
               {t("Proposed by")} {selectedCampaign?.businessName}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleApplySubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="creator-label block text-white/60">{t("Proposed payout value")}</label>
+              <label className="creator-label block text-white/45">{t("Proposed payout value")}</label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" size={16} />
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" size={16} />
                 <input
                   type="number"
                   required
@@ -784,9 +784,9 @@ export default function DiscoverPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="creator-label block text-white/60">{t("Active social handle")}</label>
+              <label className="creator-label block text-white/45">{t("Active social handle")}</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" size={15} />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35" size={15} />
                 <input
                   type="text"
                   required
@@ -800,7 +800,7 @@ export default function DiscoverPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <label className="creator-label block text-white/60">{t("Pitch message")}</label>
+                <label className="creator-label block text-white/45">{t("Pitch message")}</label>
                 <div className="flex items-center gap-2">
                   <select
                     value={pitchTone}
@@ -868,17 +868,17 @@ export default function DiscoverPage() {
           </DialogHeader>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-            <p className="creator-label text-white/60">{t("Payout rate")}</p>
+            <p className="creator-label text-white/40">{t("Payout rate")}</p>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-[var(--creator-success)]">
                 ${Number(joinModalCampaign?.cpm_rate ?? 0).toFixed(2)}
               </span>
-              <span className="text-xs text-white/60">{t("CPM per 1,000 views")}</span>
+              <span className="text-xs text-white/45">{t("CPM per 1,000 views")}</span>
             </div>
           </div>
 
           <div className="flex items-center justify-between rounded-2xl border border-[rgba(52,211,153,0.16)] bg-[rgba(52,211,153,0.06)] p-4 text-xs">
-            <span className="flex items-center gap-1.5 text-white/70">
+            <span className="flex items-center gap-1.5 text-white/55">
               <Eye size={13} /> {t("Est. per 100k views")}
             </span>
             <span className="font-bold text-[var(--creator-success)]">

@@ -147,12 +147,11 @@ export function BusinessSectionHeader({
 
 type BusinessMetricCardProps = ComponentPropsWithoutRef<"div"> & {
   label: string;
-  value: string | ReactNode;
+  value: string;
   icon?: LucideIcon;
   detail?: string;
   trend?: string;
   tone?: BusinessTone;
-  motivationText?: string;
 };
 
 export function BusinessMetricCard({
@@ -162,14 +161,13 @@ export function BusinessMetricCard({
   detail,
   trend,
   tone = "accent",
-  motivationText,
   className,
   ...props
 }: BusinessMetricCardProps) {
   return (
     <div
-      className={cn("business-glass min-w-0 rounded-2xl p-4 sm:p-5 transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.04]", className)}
-      aria-label={typeof value === "string" ? `${label}: ${value}` : label}
+      className={cn("business-glass min-w-0 rounded-2xl p-4 sm:p-5", className)}
+      aria-label={`${label}: ${value}`}
       {...props}
     >
       <div className="flex items-start justify-between gap-3">
@@ -177,9 +175,9 @@ export function BusinessMetricCard({
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
             {label}
           </p>
-          <div className="mt-3 break-words text-2xl font-semibold tracking-normal text-[var(--business-text)]">
+          <p className="mt-3 break-words text-2xl font-semibold tracking-normal text-[var(--business-text)]">
             {value}
-          </div>
+          </p>
         </div>
         {Icon ? (
           <span
@@ -197,13 +195,6 @@ export function BusinessMetricCard({
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
           {trend ? <span className={cn("font-semibold", toneText[tone])}>{trend}</span> : null}
           {detail ? <span className="text-[var(--business-muted)]">{detail}</span> : null}
-        </div>
-      ) : null}
-      {motivationText ? (
-        <div className="mt-3 animate-in fade-in slide-in-from-bottom-1 duration-500">
-          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium tracking-[0.02em]", toneChip[tone])}>
-            {motivationText}
-          </span>
         </div>
       ) : null}
     </div>

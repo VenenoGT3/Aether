@@ -4,14 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { LanguageToggle } from "@/components/language-toggle";
 import {
   resendSignupConfirmation,
   signInWithGoogleClient,
   signUpClient,
 } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Sparkles, ArrowRight, ArrowLeft, Mail, KeyRound, User, Loader2, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Sparkles, ArrowRight, ArrowLeft, Mail, KeyRound, User, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTranslation } from "@/lib/translations";
 
@@ -153,263 +152,232 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="relative flex min-h-[calc(100vh-4rem)] flex-1 items-center justify-center overflow-hidden bg-[#0c1324] px-4 py-10 text-[#dce1fb] sm:px-6">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(173,198,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(173,198,255,0.045)_1px,transparent_1px)] bg-[size:64px_64px]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_at_top,rgba(77,142,255,0.20),rgba(12,19,36,0.62)_48%,transparent_76%)]" />
-      <div className="pointer-events-none absolute -left-24 top-28 h-72 w-72 rounded-full bg-[#adc6ff]/10 blur-[90px]" />
-      <div className="pointer-events-none absolute -right-20 bottom-16 h-80 w-80 rounded-full bg-[#d0bcff]/10 blur-[100px]" />
+    <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-4rem)] p-6 bg-secondary/10 relative">
+      {/* Background ambient lighting */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-[#007AFF]/5 via-transparent to-[#34C759]/5 pointer-events-none" />
 
+      {/* Back button */}
       <Link
         href="/"
-        className="absolute left-5 top-5 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#c2c6d6] backdrop-blur-xl transition-colors hover:text-white sm:left-6 sm:top-6"
+        className="absolute top-6 left-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft size={14} /> {t("Back to home")}
       </Link>
-      <div className="absolute right-5 top-5 z-10 sm:right-6 sm:top-6">
-        <LanguageToggle />
-      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={appleSpring}
-        className="relative z-10 grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] shadow-[0_30px_100px_-50px_rgba(0,0,0,0.95)] backdrop-blur-2xl md:grid-cols-[0.92fr_1.08fr]"
+        className="w-full max-w-md p-8 rounded-3xl bg-card border border-border/30 shadow-md relative z-10 glass-panel"
       >
-        <div className="relative hidden min-h-[560px] flex-col justify-between overflow-hidden border-r border-white/10 bg-slate-950/70 p-8 md:flex">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_20%,rgba(173,198,255,0.16),transparent_32%),radial-gradient(circle_at_80%_70%,rgba(208,188,255,0.12),transparent_36%)]" />
-          <div className="relative">
-            <span className="mb-6 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#adc6ff] to-[#54a2ff] text-[#07101f] shadow-[0_0_32px_rgba(173,198,255,0.24)]">
-              <Sparkles size={20} />
-            </span>
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#adc6ff]/20 bg-[#adc6ff]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#adc6ff]">
-              <ShieldCheck size={13} />
-              {t("Protected workspace")}
-            </p>
-            <h1 className="max-w-sm font-sans text-4xl font-black leading-tight tracking-tight text-white">
-              {t("Join Aether to scale your performance campaigns.")}
-            </h1>
-          </div>
-          <div className="relative grid gap-3 text-sm text-[#c2c6d6]">
-            {[
-              t("Verified view tracking"),
-              t("Stripe-backed payouts"),
-              t("Brand and creator workspaces"),
-            ].map((item) => (
-              <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <span className="h-2 w-2 rounded-full bg-[#adc6ff]" />
-                <span className="font-semibold">{item}</span>
-              </div>
-            ))}
-          </div>
+        {/* Logo and title */}
+        <div className="flex flex-col items-center text-center mb-6">
+          <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#007AFF] to-[#34C759] shadow-sm flex items-center justify-center mb-4">
+            <Sparkles size={20} className="text-white" />
+          </span>
+          <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
+            {t("Create your account")}
+          </h2>
+          <p className="text-muted-foreground text-sm mt-1.5">
+            {t("Join the premium marketing ecosystem.")}
+          </p>
         </div>
 
-        <div className="p-6 sm:p-8 md:p-10">
-          <div className="mb-8">
-            <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#adc6ff] to-[#54a2ff] text-[#07101f] md:hidden">
-              <Sparkles size={18} />
-            </span>
-            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-[#adc6ff]">
-              {t("Secure sign up")}
-            </p>
-            <h2 className="font-sans text-3xl font-black tracking-tight text-white">
-              {t("Create Account")}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[#c2c6d6]">
-              {t("Join the premium marketing ecosystem.")}
-            </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="mb-5 w-full rounded-2xl py-6 text-sm font-semibold"
+          disabled={loading || googleLoading}
+          onClick={() => void handleGoogleSignUp()}
+        >
+          {googleLoading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" /> {t("Redirecting to Google...")}
+            </>
+          ) : (
+            <>
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-foreground text-xs font-black text-background">
+                G
+              </span>
+              {t("Continue with Google")}
+            </>
+          )}
+        </Button>
+
+        <div className="mb-5 flex items-center gap-3">
+          <span className="h-px flex-1 bg-border/50" />
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            {t("or")}
+          </span>
+          <span className="h-px flex-1 bg-border/50" />
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* iOS Segmented Pill Selector for Roles */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-muted-foreground/85 uppercase tracking-wider block">
+              {t("Join as")}
+            </label>
+            <div className="bg-secondary/60 p-[3px] rounded-2xl flex items-center border border-border/20 text-sm font-semibold select-none relative">
+              <button
+                type="button"
+                onClick={() => setRole("business")}
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer relative z-10 ${
+                  role === "business"
+                    ? "text-foreground font-semibold"
+                    : "text-muted-foreground/80 hover:text-foreground"
+                }`}
+              >
+                {t("Brand / Business")}
+                {role === "business" && (
+                  <motion.div
+                    layoutId="activeAuthRoleTab"
+                    className="absolute inset-0 bg-background rounded-xl shadow-sm z-0 border border-border/10"
+                    transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole("influencer")}
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer relative z-10 ${
+                  role === "influencer"
+                    ? "text-foreground font-semibold"
+                    : "text-muted-foreground/80 hover:text-foreground"
+                }`}
+              >
+                {t("Influencer / Creator")}
+                {role === "influencer" && (
+                  <motion.div
+                    layoutId="activeAuthRoleTab"
+                    className="absolute inset-0 bg-background rounded-xl shadow-sm z-0 border border-border/10"
+                    transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="fullName" className="text-xs font-semibold text-muted-foreground block">
+                {role === "business" ? t("Full Name / Representative") : t("Full Name")}
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                  <User size={16} />
+                </span>
+                <input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder={role === "business" ? "Jane Doe" : "Sarah Jenkins"}
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-xs font-semibold text-muted-foreground block">
+                {t("Email Address")}
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                  <Mail size={16} />
+                </span>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-xs font-semibold text-muted-foreground block">
+                {t("Password")}
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-muted-foreground pointer-events-none">
+                  <KeyRound size={16} />
+                </span>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-secondary/40 border border-border/20 text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-colors"
+                  required
+                />
+              </div>
+            </div>
           </div>
 
           <Button
-            type="button"
-            variant="outline"
-            className="mb-5 h-12 w-full rounded-2xl border-white/10 bg-white/[0.055] text-sm font-black text-white hover:bg-white/[0.09]"
-            disabled={loading || googleLoading}
-            onClick={() => void handleGoogleSignUp()}
+            type="submit"
+            className="w-full rounded-2xl py-6 font-semibold text-sm shadow-sm hover:scale-[1.01] active:scale-[0.99] transition-transform cursor-pointer gap-2 mt-2"
+            disabled={loading}
           >
-            {googleLoading ? (
-              <Loader2 size={16} className="animate-spin" />
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> {t("Creating Account...")}
+              </>
             ) : (
-              <span className="inline-flex size-5 items-center justify-center rounded-full bg-white text-xs font-black text-[#07101f]">
-                G
-              </span>
+              <>
+                {t("Sign Up")} <ArrowRight size={16} />
+              </>
             )}
-            {googleLoading ? t("Redirecting to Google...") : t("Continue with Google")}
           </Button>
 
-          <div className="mb-5 flex items-center gap-3">
-            <span className="h-px flex-1 bg-white/10" />
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c2c6d6]">
-              {t("or")}
-            </span>
-            <span className="h-px flex-1 bg-white/10" />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* iOS Segmented Pill Selector for Roles */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#c2c6d6] block">
-                {t("Join as")}
-              </label>
-              <div className="bg-white/[0.055] p-[3px] rounded-2xl flex items-center border border-white/10 text-sm font-semibold select-none relative">
-                <button
-                  type="button"
-                  onClick={() => setRole("business")}
-                  className={`flex-1 py-2 rounded-xl transition-all cursor-pointer relative z-10 ${
-                    role === "business"
-                      ? "text-[#07101f] font-black"
-                      : "text-[#c2c6d6] hover:text-white"
-                  }`}
-                >
-                  {t("Brand / Business")}
-                  {role === "business" && (
-                    <motion.div
-                      layoutId="activeAuthRoleTab"
-                      className="absolute inset-0 bg-[#adc6ff] rounded-xl shadow-sm z-[-1]"
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                    />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole("influencer")}
-                  className={`flex-1 py-2 rounded-xl transition-all cursor-pointer relative z-10 ${
-                    role === "influencer"
-                      ? "text-[#07101f] font-black"
-                      : "text-[#c2c6d6] hover:text-white"
-                  }`}
-                >
-                  {t("Influencer / Creator")}
-                  {role === "influencer" && (
-                    <motion.div
-                      layoutId="activeAuthRoleTab"
-                      className="absolute inset-0 bg-[#adc6ff] rounded-xl shadow-sm z-[-1]"
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                    />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label htmlFor="fullName" className="block text-xs font-bold text-[#c2c6d6]">
-                  {role === "business" ? t("Full Name / Representative") : t("Full Name")}
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
-                    <User size={16} />
-                  </span>
-                  <input
-                    id="fullName"
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder={role === "business" ? "Jane Doe" : "Sarah Jenkins"}
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/60 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="block text-xs font-bold text-[#c2c6d6]">
-                  {t("Email Address")}
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
-                    <Mail size={16} />
-                  </span>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/60 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="password" className="block text-xs font-bold text-[#c2c6d6]">
-                  {t("Password")}
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#c2c6d6]">
-                    <KeyRound size={16} />
-                  </span>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/60 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="mt-2 h-12 w-full rounded-2xl bg-gradient-to-r from-[#adc6ff] to-[#54a2ff] text-sm font-black text-[#07101f] shadow-[0_0_28px_rgba(173,198,255,0.20)] hover:brightness-105"
-              disabled={loading || googleLoading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> {t("Creating Account...")}
-                </>
-              ) : (
-                <>
-                  {t("Sign Up")} <ArrowRight size={16} />
-                </>
-              )}
-            </Button>
-
-            {pendingEmail && (
-              <div className="rounded-2xl border border-[#adc6ff]/20 bg-[#adc6ff]/10 p-4 text-sm text-[#c2c6d6]">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#adc6ff]" />
-                  <div className="space-y-3">
-                    <div>
-                      <p className="font-bold text-white">{t("Check your inbox")}</p>
-                      <p className="mt-1 text-xs leading-relaxed">
-                        {t("We sent a confirmation link to")}{" "}
-                        <span className="font-bold text-white">{pendingEmail}</span>.{" "}
-                        {t("Use the newest email link before signing in.")}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl border-white/10 bg-white/[0.04] text-xs font-bold text-white hover:bg-white/[0.08]"
-                      disabled={resending}
-                      onClick={() => void handleResendConfirmation()}
-                    >
-                      {resending ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          {t("Resending...")}
-                        </>
-                      ) : (
-                        t("Resend confirmation email")
-                      )}
-                    </Button>
+          {pendingEmail && (
+            <div className="rounded-2xl border border-[#34C759]/20 bg-[#34C759]/10 p-4 text-sm text-muted-foreground">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#34C759]" />
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-foreground">{t("Check your inbox")}</p>
+                    <p className="mt-1 text-xs leading-relaxed">
+                      {t("We sent a confirmation link to")}{" "}
+                      <span className="font-semibold text-foreground">{pendingEmail}</span>.{" "}
+                      {t("Use the newest email link before signing in.")}
+                    </p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl text-xs"
+                    disabled={resending}
+                    onClick={() => void handleResendConfirmation()}
+                  >
+                    {resending ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        {t("Resending...")}
+                      </>
+                    ) : (
+                      t("Resend confirmation email")
+                    )}
+                  </Button>
                 </div>
               </div>
-            )}
-          </form>
+            </div>
+          )}
+        </form>
 
-          <div className="mt-8 text-center text-xs text-[#c2c6d6]">
-            {t("Already have an account?")}{" "}
-            <Link href="/auth/login" className="font-bold text-[#adc6ff] hover:text-white">
-              {t("Sign In")}
-            </Link>
-          </div>
+        <div className="mt-8 text-center text-xs text-muted-foreground">
+          {t("Already have an account?")}{" "}
+          <Link href="/auth/login" className="text-primary font-semibold hover:underline">
+            {t("Sign In")}
+          </Link>
         </div>
       </motion.div>
     </div>

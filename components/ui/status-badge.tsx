@@ -10,12 +10,12 @@ export type BadgeTone =
   | "purple";
 
 const TONES: Record<BadgeTone, string> = {
-  neutral: "bg-white/10 text-white/80 border-white/20",
-  info: "bg-[#4d8eff]/15 text-[#7db0ff] border-[#4d8eff]/25",
-  success: "bg-[#34d399]/15 text-[#6ee7b7] border-[#34d399]/25",
-  warning: "bg-[#f59e0b]/15 text-[#fcd34d] border-[#f59e0b]/25",
-  danger: "bg-[#f87171]/15 text-[#fca5a5] border-[#f87171]/25",
-  purple: "bg-[#9f8dfa]/15 text-[#c4b5fd] border-[#9f8dfa]/25",
+  neutral: "bg-secondary text-muted-foreground border-border/40",
+  info: "bg-[#007AFF]/10 text-[#007AFF] border-[#007AFF]/20",
+  success: "bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20",
+  warning: "bg-[#FF9500]/10 text-[#FF9500] border-[#FF9500]/20",
+  danger: "bg-destructive/10 text-destructive border-destructive/20",
+  purple: "bg-[#5856D6]/10 text-[#5856D6] border-[#5856D6]/20",
 };
 
 /**
@@ -34,7 +34,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border whitespace-nowrap",
+        "inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border whitespace-nowrap",
         TONES[tone],
         className
       )}
