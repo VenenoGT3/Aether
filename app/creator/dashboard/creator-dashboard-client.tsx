@@ -187,6 +187,7 @@ export function CreatorDashboardClient({
   const pendingApplicationsCount = transactions.filter((tx) => tx.status === "pending").length;
   const engagementRate = aggregateMetrics.engagement_rate || Number(user?.engagement_rate ?? 0);
   const isStripeConnected = !!user?.stripe_connect_id && !!user?.stripe_onboarding_completed;
+  const showGrowthWidgets = showChallenges || showReferrals;
 
   const activity = [
     ...clips.slice(0, 3).map((clip) => ({
@@ -287,7 +288,7 @@ export function CreatorDashboardClient({
         />
       </motion.div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
         <div className="space-y-4">
           <CreatorGlassCard className="p-5">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -399,10 +400,15 @@ export function CreatorDashboardClient({
             </div>
           </CreatorGlassCard>
 
-          {showChallenges && <WeeklyChallengeWidget />}
-          {showReferrals && <ReferFriendCard />}
         </div>
       </div>
+
+      {showGrowthWidgets ? (
+        <div className="mt-5 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          {showChallenges ? <WeeklyChallengeWidget /> : null}
+          {showReferrals ? <ReferFriendCard /> : null}
+        </div>
+      ) : null}
     </CreatorPageShell>
   );
 }

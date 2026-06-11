@@ -592,7 +592,7 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
                       animate={{ opacity: 1, y: 0 }}
                       className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"
                     >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,240px)] lg:items-center">
                         <div className="min-w-0 flex-1">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
                             {clip.quality_status === "changes_requested" ? (
@@ -613,7 +613,7 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
                               </CreatorStatusPill>
                             ) : null}
                           </div>
-                          <p className="truncate text-sm font-semibold text-white">{clip.campaignTitle}</p>
+                          <p className="line-clamp-2 text-sm font-semibold leading-5 text-white">{clip.campaignTitle}</p>
                           <a
                             href={clip.post_url}
                             target="_blank"
@@ -632,27 +632,27 @@ export function PerformanceSubmissionFlow({ category }: { category: CampaignCate
                             </div>
                           ) : null}
                         </div>
-                        <div className="grid grid-cols-2 gap-3 sm:w-44">
-                          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
-                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                          <div className="flex min-h-24 flex-col justify-between rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase leading-4 text-white/35">
                               <Eye size={11} /> {t("Views")}
                             </span>
-                            <p className="mt-1 text-sm font-bold text-white">{clip.current_views.toLocaleString()}</p>
+                            <p className="mt-2 text-base font-bold text-white">{clip.current_views.toLocaleString()}</p>
                             {clip.status === "tracking" ? (
-                              <span className="mt-0.5 block text-[9px] text-white/35">
+                              <span className="mt-1 block text-[9px] leading-4 text-white/35">
                                 {verifiedAgoLabel(clip.last_synced_at, t) ?? t("Awaiting first verification")}
                               </span>
                             ) : null}
                           </div>
-                          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
-                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase text-white/35">
+                          <div className="flex min-h-24 flex-col justify-between rounded-xl border border-white/10 bg-white/[0.035] p-3 text-right">
+                            <span className="flex items-center justify-end gap-1 text-[10px] font-semibold uppercase leading-4 text-white/35">
                               <DollarSign size={11} /> {t("Earned")}
                             </span>
-                            <p className="mt-1 text-sm font-bold text-[var(--creator-success)]">
+                            <p className="mt-2 text-base font-bold text-[var(--creator-success)]">
                               {money(clip.estimated_earnings)}
                             </p>
                             {clip.creator_cpm != null ? (
-                              <span className="mt-0.5 block text-[9px] text-white/35">
+                              <span className="mt-1 block text-[9px] leading-4 text-white/35">
                                 @ {formatMoney(Number(clip.creator_cpm))} {t("CPM")}
                               </span>
                             ) : null}

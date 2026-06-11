@@ -76,7 +76,7 @@ export function WeeklyChallengeWidget() {
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={appleSpring}
-      className="apple-card p-6 relative overflow-hidden h-full flex flex-col"
+      className="creator-glass relative flex flex-col overflow-hidden rounded-2xl p-5"
     >
       <div
         className="absolute top-0 right-0 w-[200px] h-[120px] blur-[60px] pointer-events-none"
