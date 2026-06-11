@@ -264,7 +264,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="business-route-shell business-portal min-h-[100svh] overflow-x-clip bg-[linear-gradient(180deg,#0c1324_0%,#10131d_58%,#0b0f18_100%)] text-[var(--business-text)]">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[rgba(12,19,36,0.86)] backdrop-blur-xl">
+      <header className="sticky top-0 z-[100] border-b border-white/10 bg-[rgba(12,19,36,0.86)] backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
           <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-5">
             <BusinessBrandMark />
@@ -324,7 +324,7 @@ export function BusinessRouteShell({ children }: { children: ReactNode }) {
       <div className="relative z-10 pb-[calc(env(safe-area-inset-bottom)+6rem)] md:pb-0">{children}</div>
 
       <nav
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-lg border border-white/10 bg-[rgba(12,19,36,0.92)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[100] w-[calc(100%-1.5rem)] max-w-[460px] -translate-x-1/2 rounded-lg border border-white/10 bg-[rgba(12,19,36,0.92)] p-1.5 shadow-[0_18px_45px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl md:hidden"
         aria-label="Business mobile navigation"
       >
         <div className="flex items-center justify-between gap-1">

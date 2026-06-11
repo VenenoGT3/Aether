@@ -187,14 +187,14 @@ export default function InfluencerCampaignsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors ${
-                activeTab === tab.id ? "text-white" : "text-white/45 hover:text-white"
+              className={`relative rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
+                activeTab === tab.id ? "text-white" : "text-white/60 hover:text-white"
               }`}
             >
               {activeTab === tab.id ? (
                 <motion.span
                   layoutId="creatorContractTab"
-                  className="absolute inset-0 rounded-xl bg-[var(--creator-primary)]"
+                  className="absolute inset-0 rounded-full bg-[var(--creator-primary)]"
                   transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.8 }}
                 />
               ) : null}
@@ -258,15 +258,15 @@ export default function InfluencerCampaignsPage() {
                               </CreatorStatusPill>
                             ) : null}
                           </div>
-                          <h3 className="text-lg font-semibold leading-snug text-white">{item.title}</h3>
-                          <p className="mt-1 text-xs text-white/50">
-                            {t("Brand:")} <span className="font-semibold text-white/80">{item.brandName}</span>
+                          <h3 className="text-xl font-bold tracking-tight leading-snug text-white">{item.title}</h3>
+                          <p className="mt-1 text-xs text-white/60">
+                            {t("Brand:")} <span className="font-bold text-white/90">{item.brandName}</span>
                           </p>
                         </div>
 
                         <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left sm:text-right">
-                          <p className="creator-label text-white/35">{t("Proposed payout")}</p>
-                          <p className="mt-1 flex items-center text-xl font-bold text-white sm:justify-end">
+                          <p className="creator-label text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">{t("Proposed payout")}</p>
+                          <p className="mt-1.5 flex items-center text-xl font-bold text-white sm:justify-end">
                             <DollarSign size={16} />
                             {item.proposedPayout.toLocaleString()}
                           </p>
@@ -276,8 +276,8 @@ export default function InfluencerCampaignsPage() {
                       {!disabled ? (
                         <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="creator-label text-white/35">{t("Contract timeline progress")}</p>
-                            <span className="text-xs font-semibold text-white/70">
+                            <p className="creator-label text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">{t("Contract timeline progress")}</p>
+                            <span className="text-xs font-bold text-white/80">
                               {item.status === "applied" && t("Awaiting brand review")}
                               {item.status === "offered" && t("Review brand offer")}
                               {(item.status === "accepted" || item.status === "escrowed" || item.status === "in_progress") &&
@@ -287,7 +287,7 @@ export default function InfluencerCampaignsPage() {
                             </span>
                           </div>
                           <CreatorProgressBar value={progress} />
-                          <div className="grid grid-cols-4 text-[9px] font-semibold text-white/35">
+                          <div className="grid grid-cols-4 text-[9px] font-semibold text-white/60">
                             <span className={step >= 1 ? "text-[var(--creator-primary)]" : ""}>{t("Applied")}</span>
                             <span className={step >= 2 ? "text-[var(--creator-primary)]" : ""}>{t("Escrow")}</span>
                             <span className={step >= 3 ? "text-[var(--creator-primary)]" : ""}>{t("Draft")}</span>
@@ -296,7 +296,7 @@ export default function InfluencerCampaignsPage() {
                         </div>
                       ) : null}
 
-                      <div className="flex flex-col gap-3 border-t border-white/5 pt-4 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-3 border-t border-white/5 pt-4 text-xs text-white/60 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap gap-4">
                           <span className="flex items-center gap-1.5">
                             <Calendar size={13} />
@@ -312,7 +312,7 @@ export default function InfluencerCampaignsPage() {
                             {t("Deliverable:")} {t(item.deliverableType.replace("_", " "))}
                           </span>
                         </div>
-                        <span className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/50">
+                        <span className="inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/60">
                           <ArrowRight size={15} />
                         </span>
                       </div>
@@ -333,7 +333,7 @@ export default function InfluencerCampaignsPage() {
             </span>
             <div>
               <h2 className="text-sm font-semibold text-white">{t("Deliverable workflow")}</h2>
-              <p className="mt-1 text-xs leading-5 text-white/50">
+              <p className="mt-1 text-xs leading-5 text-white/60">
                 {t("Contracts link into campaign detail pages where creators can review scope, status, and submission requirements.")}
               </p>
             </div>
@@ -346,7 +346,7 @@ export default function InfluencerCampaignsPage() {
             </span>
             <div>
               <h2 className="text-sm font-semibold text-white">{t("Payout safety")}</h2>
-              <p className="mt-1 text-xs leading-5 text-white/50">
+              <p className="mt-1 text-xs leading-5 text-white/60">
                 {t("Performance clips and fixed-fee contracts stay tied to approval states before earnings are released.")}
               </p>
             </div>

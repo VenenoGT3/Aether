@@ -373,7 +373,7 @@ function LoginForm() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/60 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
                     required
                   />
                 </div>
@@ -405,7 +405,7 @@ function LoginForm() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.055] py-3 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/60 focus:border-[#adc6ff]/55 focus:ring-2 focus:ring-[#adc6ff]/15"
                     required
                   />
                 </div>

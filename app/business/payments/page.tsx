@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -33,6 +33,7 @@ import {
   BusinessStatusPill,
   type BusinessTone,
 } from "@/components/business/business-ui";
+import { AnimatedNumber } from "@/components/animated-number";
 import { budgetUsage } from "@/lib/campaign-budget";
 import { campaignCategoryLabel } from "@/lib/campaign-category";
 import { cn } from "@/lib/utils";
@@ -253,7 +254,7 @@ async function loadPlatformTransactions(campaignIds: string[]): Promise<Platform
   return (data ?? []) as PlatformTransaction[];
 }
 
-function StatLine({ label, value }: { label: string; value: string }) {
+function StatLine({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
       <span className="text-xs text-[var(--business-muted)]">{label}</span>
@@ -705,35 +706,39 @@ export default function BusinessPaymentsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <BusinessMetricCard
               label={t("Funded pool")}
-              value={money(treasury.fundedPool)}
+              value={<AnimatedNumber value={treasury.fundedPool} format="currency" />}
               detail={`${money(treasury.creatorPool)} ${t("creator-available")}`}
               trend={`${treasury.performanceCampaigns.length} ${t("performance campaigns")}`}
               icon={Wallet}
               tone="accent"
+              motivationText={treasury.fundedPool > 0 ? t("Capital deployed") : undefined}
             />
             <BusinessMetricCard
               label={t("Remaining pool")}
-              value={money(treasury.remainingPool)}
+              value={<AnimatedNumber value={treasury.remainingPool} format="currency" />}
               detail={`${Math.round(100 - treasury.usedPct)}% ${t("remaining")}`}
               trend={`${Math.round(treasury.usedPct)}% ${t("used")}`}
               icon={CircleDollarSign}
               tone={treasury.usedPct >= 90 ? "warning" : "success"}
+              motivationText={treasury.usedPct < 90 && treasury.remainingPool > 0 ? t("Ready to scale") : undefined}
             />
             <BusinessMetricCard
               label={t("Reserved earnings")}
-              value={money(treasury.reservedPool)}
+              value={<AnimatedNumber value={treasury.reservedPool} format="currency" />}
               detail={`${money(treasury.earningsByStatus.approved, 2)} ${t("approved")}`}
               trend={`${money(treasury.earningsByStatus.accrued, 2)} ${t("holdback")}`}
               icon={Clock}
               tone="warning"
+              motivationText={treasury.reservedPool > 0 ? t("Creators active") : undefined}
             />
             <BusinessMetricCard
               label={t("Paid to creators")}
-              value={money(treasury.paidPool)}
+              value={<AnimatedNumber value={treasury.paidPool} format="currency" />}
               detail={`${money(treasury.platformFees, 2)} ${t("platform fees")}`}
               trend={`${compactNumber(treasury.verifiedViews)} ${t("verified views")}`}
               icon={CheckCircle2}
               tone="success"
+              motivationText={treasury.paidPool > 0 ? t("Great momentum") : undefined}
             />
           </div>
 
@@ -745,49 +750,49 @@ export default function BusinessPaymentsPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--business-muted)]">
                       {t("Pool utilization")}
                     </p>
-                    <h2 className="mt-2 text-xl font-semibold tracking-normal text-[var(--business-text)]">
-                      {money(treasury.usedPool)} {t("committed")} / {money(treasury.creatorPool)}
+                    <h2 className="mt-2 text-xl font-semibold tracking-normal text-[var(--business-text)] flex items-center gap-1.5 flex-wrap">
+                      <AnimatedNumber value={treasury.usedPool} format="currency" /> {t("committed")} / <AnimatedNumber value={treasury.creatorPool} format="currency" />
                     </h2>
                   </div>
                   <BusinessStatusPill tone={treasury.usedPct >= 90 ? "warning" : "accent"}>
-                    {Math.round(treasury.usedPct)}% {t("used")}
+                    <AnimatedNumber value={Math.round(treasury.usedPct)} />% {t("used")}
                   </BusinessStatusPill>
                 </div>
 
-                <div className="relative">
-                  <div className="h-4 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
+                <div className="relative py-2">
+                  <div className="h-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
                     <motion.div
-                      className="h-full bg-[var(--business-success)]"
+                      className="h-full bg-gradient-to-r from-[var(--business-success)] to-[rgba(52,211,153,0.8)] shadow-[0_0_15px_rgba(52,211,153,0.5)]"
                       initial={{ width: 0 }}
                       animate={{
                         width: `${treasury.creatorPool > 0 ? Math.min((treasury.paidPool / treasury.creatorPool) * 100, 100) : 0}%`,
                       }}
-                      transition={{ type: "spring", stiffness: 120, damping: 22 }}
+                      transition={{ type: "spring", stiffness: 100, damping: 20 }}
                     />
                     <motion.div
-                      className="-mt-4 h-full bg-[var(--business-warning)]"
+                      className="-mt-6 h-full bg-gradient-to-r from-[var(--business-warning)] to-[rgba(251,191,36,0.8)] shadow-[0_0_15px_rgba(251,191,36,0.5)]"
                       initial={{ width: 0 }}
                       animate={{
                         width: `${treasury.creatorPool > 0 ? Math.min((treasury.reservedPool / treasury.creatorPool) * 100, 100) : 0}%`,
                       }}
-                      transition={{ type: "spring", stiffness: 120, damping: 22, delay: 0.05 }}
+                      transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
                       style={{
                         marginLeft: `${treasury.creatorPool > 0 ? Math.min((treasury.paidPool / treasury.creatorPool) * 100, 100) : 0}%`,
                       }}
                     />
                   </div>
                   <span
-                    className="absolute -top-1 -bottom-1 w-px bg-[var(--business-warning)]/70"
+                    className="absolute -top-1 -bottom-1 w-[2px] rounded-full bg-[var(--business-warning)] shadow-[0_0_10px_rgba(251,191,36,0.9)]"
                     style={{ left: "90%" }}
                     aria-hidden="true"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <StatLine label={t("Paid")} value={money(treasury.paidPool, 2)} />
-                  <StatLine label={t("Reserved")} value={money(treasury.reservedPool, 2)} />
-                  <StatLine label={t("Remaining")} value={money(treasury.remainingPool, 2)} />
-                  <StatLine label={t("Platform fees")} value={money(treasury.platformFees, 2)} />
+                  <StatLine label={t("Paid")} value={<AnimatedNumber value={treasury.paidPool} format="currency" decimals={2} />} />
+                  <StatLine label={t("Reserved")} value={<AnimatedNumber value={treasury.reservedPool} format="currency" decimals={2} />} />
+                  <StatLine label={t("Remaining")} value={<AnimatedNumber value={treasury.remainingPool} format="currency" decimals={2} />} />
+                  <StatLine label={t("Platform fees")} value={<AnimatedNumber value={treasury.platformFees} format="currency" decimals={2} />} />
                 </div>
               </div>
             </BusinessGlassCard>

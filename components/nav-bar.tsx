@@ -66,7 +66,7 @@ export function NavBar() {
   if (isAuthPage || isBusinessRoute || isCreatorRoute) return null;
 
   return (
-    <header className="sticky top-0 z-50 w-full glass-nav">
+    <header className="sticky top-0 z-[100] w-full glass-nav">
       <div className="mx-auto max-w-7xl px-4 md:px-8 h-16 flex items-center justify-between">
         {/* Logo Section */}
         <div className="flex items-center gap-4 md:gap-8">

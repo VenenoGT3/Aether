@@ -287,20 +287,20 @@
 /* Business frontend design system: scoped extraction from VenenoGT3/Frontend-Business.
    These classes are inert until a business route opts into the .business-portal scope. */
 .business-portal {
-  --business-bg: #0c1324;
-  --business-surface: #191f31;
-  --business-surface-high: #23293c;
-  --business-surface-highest: #2e3447;
+  --business-bg: #070a13;
+  --business-surface: #101524;
+  --business-surface-high: #1a2034;
+  --business-surface-highest: #232a42;
   --business-primary: #adc6ff;
   --business-secondary: #d0bcff;
   --business-accent: #4d8eff;
-  --business-text: #dce1fb;
-  --business-muted: #c2c6d6;
+  --business-text: #ffffff;
+  --business-muted: #94a3b8;
   --business-success: #34d399;
   --business-warning: #fbbf24;
   --business-danger: #f87171;
-  --business-border: rgba(255, 255, 255, 0.1);
-  --business-shadow: 0 18px 60px -28px rgba(0, 0, 0, 0.85);
+  --business-border: rgba(255, 255, 255, 0.12);
+  --business-shadow: 0 18px 60px -28px rgba(0, 0, 0, 0.95);
   background: var(--business-bg);
   color: var(--business-text);
   font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -319,29 +319,29 @@
 }
 
 .business-portal .business-glass {
-  background: rgba(25, 31, 49, 0.45);
+  background: rgba(16, 21, 36, 0.55);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.04), var(--business-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06), var(--business-shadow);
 }
 
 .business-portal .business-glass-heavy {
-  background: rgba(21, 27, 45, 0.86);
+  background: rgba(16, 21, 36, 0.86);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.08), var(--business-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1), var(--business-shadow);
 }
 
 .business-portal .business-glass-elevated {
-  background: rgba(35, 41, 60, 0.62);
+  background: rgba(26, 32, 52, 0.62);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.06),
-    0 14px 36px -18px rgba(0, 0, 0, 0.7);
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 14px 36px -18px rgba(0, 0, 0, 0.8);
 }
 
 .business-portal .business-input {
@@ -426,18 +426,18 @@ body:has(.business-route-shell) > main {
 /* Creator frontend design system: scoped extraction from VenenoGT3/Fronted-Aether.
    These classes are inert until a creator route opts into the .creator-portal scope. */
 .creator-portal {
-  --creator-bg: #070d1e;
-  --creator-surface: #0f172a;
-  --creator-surface-high: #1e293b;
+  --creator-bg: #050811;
+  --creator-surface: #0e1526;
+  --creator-surface-high: #1a223a;
   --creator-primary: #4d8eff;
   --creator-violet: #9f8dfa;
   --creator-cyan: #22d3ee;
-  --creator-text: #f8fafc;
-  --creator-muted: rgba(248, 250, 252, 0.6);
+  --creator-text: #ffffff;
+  --creator-muted: #94a3b8;
   --creator-success: #34d399;
   --creator-warning: #f59e0b;
   --creator-danger: #f87171;
-  --creator-shadow: 0 18px 60px -28px rgba(0, 0, 0, 0.85);
+  --creator-shadow: 0 18px 60px -28px rgba(0, 0, 0, 0.95);
   color: var(--creator-text);
   font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -456,17 +456,17 @@ body:has(.business-route-shell) > main {
 }
 
 .creator-portal .creator-glass {
-  background: rgba(15, 23, 42, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), var(--creator-shadow);
+  background: rgba(14, 21, 38, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), var(--creator-shadow);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
 
 .creator-portal .creator-glass-high {
-  background: rgba(30, 41, 59, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1), var(--creator-shadow);
+  background: rgba(26, 34, 58, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.12), var(--creator-shadow);
   -webkit-backdrop-filter: blur(32px);
   backdrop-filter: blur(32px);
 }

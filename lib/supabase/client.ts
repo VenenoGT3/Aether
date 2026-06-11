@@ -190,6 +190,31 @@ export async function signOutClient() {
 }
 
 export async function getClientProfile(): Promise<Profile | null> {
+  // --- MOCK OVERRIDE FOR LOCAL VISUALIZATION ---
+  if (typeof window !== "undefined") {
+    const isBusiness = window.location.pathname.includes('/business');
+    return {
+      user_id: 'mock-user-123',
+      email: isBusiness ? 'brand@example.com' : 'creator@example.com',
+      role: isBusiness ? 'business' : 'influencer',
+      full_name: isBusiness ? 'Aura Aesthetics' : 'Alex Mercer',
+      social_handle: isBusiness ? '@aura' : '@alexmercer',
+      avatar_url: isBusiness 
+        ? 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=120&h=120&q=80'
+        : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
+      onboarded: true,
+      bio: 'Mock profile for local visualization.',
+      followers: 50000,
+      engagement_rate: 4.5,
+      niche: 'Fashion',
+      social_links: { instagram: '@alexmercer' },
+      portfolio: [],
+      stripe_connect_id: 'acct_mock123',
+      stripe_onboarding_completed: true
+    };
+  }
+  // ---------------------------------------------
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -2380,7 +2380,7 @@ export default function CampaignDetailPage() {
 
                     <div className="flex justify-between items-end mt-6 pt-3 border-t border-white/15">
                       <div>
-                        <span className="text-[7px] text-white/50 uppercase block font-bold leading-none">{t("Promotion Discount")}</span>
+                        <span className="text-[7px] text-white/60 uppercase block font-bold leading-none">{t("Promotion Discount")}</span>
                         <span className="text-[10px] font-extrabold mt-0.5 block leading-none">{t("15% off site-wide")}</span>
                       </div>
                       
@@ -2940,7 +2940,7 @@ export default function CampaignDetailPage() {
                       >
                         <ExternalLink size={22} />
                         <span className="font-semibold">{t("Live post submitted")}</span>
-                        <span className="text-[10px] text-white/50 break-all line-clamp-2">{currentSubmission.postUrl}</span>
+                        <span className="text-[10px] text-white/60 break-all line-clamp-2">{currentSubmission.postUrl}</span>
                       </a>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">

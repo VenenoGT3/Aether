@@ -676,7 +676,12 @@ export default function BrandModerationPage() {
                 </div>
 
                 {selectedYouTubeId ? (
-                  <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+                  <div className={cn(
+                    "overflow-hidden rounded-2xl border border-white/10 bg-black",
+                    (selectedClip.platform === "tiktok" || selectedClip.platform === "instagram" || selectedClip.post_url?.includes("shorts/") || selectedClip.campaignCategory === "ugc" || selectedClip.campaignCategory === "clipping")
+                      ? "aspect-[9/16] mx-auto w-full max-w-[360px]"
+                      : "aspect-video w-full"
+                  )}>
                     <iframe
                       src={`https://www.youtube.com/embed/${selectedYouTubeId}`}
                       title={t("Clip preview")}
